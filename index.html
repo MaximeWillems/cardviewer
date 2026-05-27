@@ -193,6 +193,49 @@
     background: var(--surface2);
   }
 
+  .image-placeholder {
+    width: 100%;
+    aspect-ratio: 3/4;
+    background:
+      linear-gradient(135deg, rgba(255,255,255,0.05), rgba(255,255,255,0)),
+      var(--surface2);
+    color: var(--muted);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 1rem;
+    text-align: center;
+  }
+
+  .placeholder-mark {
+    width: 48px;
+    height: 48px;
+    border: 1px solid rgba(255,255,255,0.14);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: rgba(255,255,255,0.52);
+    font-family: 'Syne', sans-serif;
+    font-size: 20px;
+    font-weight: 800;
+  }
+
+  .placeholder-title {
+    color: var(--text);
+    font-family: 'Syne', sans-serif;
+    font-size: 13px;
+    font-weight: 700;
+    line-height: 1.2;
+  }
+
+  .placeholder-text {
+    font-size: 11px;
+    line-height: 1.3;
+  }
+
   .card-body {
     padding: 10px 12px;
   }
@@ -295,6 +338,28 @@
     width: 100%;
     max-height: min(84vh, 780px);
     object-fit: contain;
+  }
+
+  .modal-placeholder {
+    width: min(420px, 100%);
+    max-width: 100%;
+    aspect-ratio: 3/4;
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 14px;
+  }
+
+  .modal-placeholder .placeholder-mark {
+    width: 72px;
+    height: 72px;
+    font-size: 30px;
+  }
+
+  .modal-placeholder .placeholder-title {
+    font-size: 20px;
+  }
+
+  .modal-placeholder .placeholder-text {
+    font-size: 13px;
   }
 
   .modal-info {
@@ -482,7 +547,7 @@
   <div class="modal" id="modal">
     <button class="modal-close" id="modal-close" aria-label="Fermer">✕</button>
     <div class="modal-image-wrap">
-      <img class="modal-img" id="modal-img" src="" alt="">
+      <div id="modal-media"></div>
     </div>
     <div class="modal-info" id="modal-info"></div>
   </div>
@@ -573,6 +638,33 @@ function sortCards(cards) {
       || collator.compare(a.name || '', b.name || '')
       || collator.compare(a.id || '', b.id || '');
   });
+}
+
+function escapeHtml(value = '') {
+  return String(value).replace(/[&<>"']/g, char => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;'
+  }[char]));
+}
+
+function imagePlaceholder(name, isModal = false) {
+  return `
+    <div class="image-placeholder ${isModal ? 'modal-placeholder' : ''}">
+      <div class="placeholder-mark">?</div>
+      <div class="placeholder-title">${escapeHtml(name || 'Carte')}</div>
+      <div class="placeholder-text">Image indisponible</div>
+    </div>`;
+}
+
+function handleImageError(img) {
+  const name = img.alt || 'Carte';
+  const isModal = img.classList.contains('modal-img');
+  const wrapper = document.createElement('div');
+  wrapper.innerHTML = imagePlaceholder(name, isModal).trim();
+  img.replaceWith(wrapper.firstElementChild);
 }
 
 function populateTypeFilter() {
@@ -694,10 +786,12 @@ function renderCards(cards, append = false) {
     div.className = 'card';
     div.innerHTML = `
       ${getBadge(c.rarity)}
-      <img class="card-img" src="${img}" alt="${name}" loading="lazy" onerror="this.style.opacity='0.3'">
+      ${img
+        ? `<img class="card-img" src="${img}" alt="${escapeHtml(name)}" loading="lazy" onerror="handleImageError(this)">`
+        : imagePlaceholder(name)}
       <div class="card-body">
-        <div class="card-name">${name}</div>
-        <div class="card-meta">${set}</div>
+        <div class="card-name">${escapeHtml(name)}</div>
+        <div class="card-meta">${escapeHtml(set)}</div>
       </div>`;
     div.addEventListener('click', () => openModal(c));
     frag.appendChild(div);
@@ -851,21 +945,22 @@ async function openModal(card, index = filtered.findIndex(c => c.id === card.id)
   const hp     = card.hp || '—';
   const position = currentModalIndex >= 0 ? `${currentModalIndex + 1} / ${filtered.length}` : '';
 
-  document.getElementById('modal-img').src = img;
-  document.getElementById('modal-img').alt = card.name || '';
+  document.getElementById('modal-media').innerHTML = img
+    ? `<img class="modal-img" id="modal-img" src="${img}" alt="${escapeHtml(card.name || '')}" onerror="handleImageError(this)">`
+    : imagePlaceholder(card.name || 'Carte', true);
   document.getElementById('modal-info').innerHTML = `
     <div class="modal-position">${position}</div>
-    <div class="modal-name">${card.name || '—'}</div>
+    <div class="modal-name">${escapeHtml(card.name || '—')}</div>
     <div style="margin:0.5rem 0 1rem;">
       ${getBadge(rarity)}
-      <span style="font-size:13px;color:var(--muted);margin-left:4px">${rarity}</span>
+      <span style="font-size:13px;color:var(--muted);margin-left:4px">${escapeHtml(rarity)}</span>
     </div>
-    <div class="modal-row"><span class="key">Extension</span><span class="val">${set}</span></div>
-    <div class="modal-row"><span class="key">Série</span><span class="val">${series}</span></div>
-    <div class="modal-row"><span class="key">Numéro</span><span class="val">${num}</span></div>
-    <div class="modal-row"><span class="key">Illustrateur</span><span class="val">${illus}</span></div>
-    <div class="modal-row"><span class="key">Type(s)</span><span class="val">${types}</span></div>
-    <div class="modal-row"><span class="key">PV</span><span class="val">${hp}</span></div>
+    <div class="modal-row"><span class="key">Extension</span><span class="val">${escapeHtml(set)}</span></div>
+    <div class="modal-row"><span class="key">Série</span><span class="val">${escapeHtml(series)}</span></div>
+    <div class="modal-row"><span class="key">Numéro</span><span class="val">${escapeHtml(num)}</span></div>
+    <div class="modal-row"><span class="key">Illustrateur</span><span class="val">${escapeHtml(illus)}</span></div>
+    <div class="modal-row"><span class="key">Type(s)</span><span class="val">${escapeHtml(types)}</span></div>
+    <div class="modal-row"><span class="key">PV</span><span class="val">${escapeHtml(hp)}</span></div>
   `;
   modalOverlay.classList.add('open');
 }
