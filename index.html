@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Pokédex Illustrations</title>
+<title>Encyclopédie des illustrations de cartes Pokémon</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
 <style>
@@ -43,15 +43,20 @@
   .logo {
     font-family: 'Syne', sans-serif;
     font-weight: 800;
-    font-size: 1.6rem;
-    letter-spacing: -0.02em;
+    font-size: clamp(2rem, 4vw, 4.25rem);
+    line-height: 0.95;
+    max-width: 920px;
   }
-  .logo span { color: var(--accent); }
+  .logo span {
+    color: var(--accent);
+    display: block;
+  }
 
   .tagline {
-    font-size: 13px;
+    font-size: 14px;
     color: var(--muted);
     font-weight: 300;
+    margin-top: 0.75rem;
   }
 
   .controls {
@@ -420,8 +425,8 @@
 
 <header>
   <div>
-    <div class="logo">illus<span>dex</span></div>
-    <div class="tagline">Toutes les cartes Illustration Rare & Special Illustration Rare</div>
+    <h1 class="logo">Encyclopédie des illustrations <span>de cartes Pokémon</span></h1>
+    <div class="tagline">Illustration Rare, Illustration spéciale rare et alt arts</div>
   </div>
 </header>
 
