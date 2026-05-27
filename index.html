@@ -1,0 +1,892 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pokédex Illustrations</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0d0d0f;
+    --surface: #16161a;
+    --surface2: #1e1e24;
+    --border: rgba(255,255,255,0.07);
+    --accent: #c8f060;
+    --accent2: #60f0c8;
+    --text: #f0f0ee;
+    --muted: #888890;
+    --radius: 12px;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 15px;
+    min-height: 100vh;
+  }
+
+  header {
+    padding: 2.5rem 2rem 0;
+    max-width: 1200px;
+    margin: 0 auto;
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 1rem;
+  }
+
+  .logo {
+    font-family: 'Syne', sans-serif;
+    font-weight: 800;
+    font-size: 1.6rem;
+    letter-spacing: -0.02em;
+  }
+  .logo span { color: var(--accent); }
+
+  .tagline {
+    font-size: 13px;
+    color: var(--muted);
+    font-weight: 300;
+  }
+
+  .controls {
+    max-width: 1200px;
+    margin: 1.5rem auto 0;
+    padding: 0 2rem;
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+
+  .search-wrap {
+    position: relative;
+    flex: 1;
+    min-width: 200px;
+    max-width: 360px;
+  }
+
+  .search-wrap svg {
+    position: absolute;
+    left: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--muted);
+    pointer-events: none;
+  }
+
+  input[type="text"] {
+    width: 100%;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    color: var(--text);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 14px;
+    padding: 10px 14px 10px 38px;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+  input[type="text"]:focus { border-color: var(--accent); }
+  input[type="text"]::placeholder { color: var(--muted); }
+
+  select {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    color: var(--text);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 14px;
+    padding: 10px 14px;
+    outline: none;
+    cursor: pointer;
+    transition: border-color 0.2s;
+    appearance: none;
+    -webkit-appearance: none;
+    padding-right: 32px;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23888890' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 10px center;
+  }
+  select:focus { border-color: var(--accent); }
+
+  .rarity-pills {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+
+  .pill {
+    padding: 7px 14px;
+    border-radius: 100px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--muted);
+    transition: all 0.18s;
+    white-space: nowrap;
+    font-family: 'DM Sans', sans-serif;
+  }
+  .pill:hover { border-color: rgba(255,255,255,0.2); color: var(--text); }
+  .pill.active-ir  { background: rgba(200,240,96,0.12); border-color: var(--accent); color: var(--accent); }
+  .pill.active-sir { background: rgba(96,240,200,0.12); border-color: var(--accent2); color: var(--accent2); }
+  .pill.active-alt { background: rgba(240,160,96,0.12); border-color: #f0a060; color: #f0a060; }
+  .pill.active-all { background: rgba(255,255,255,0.07); border-color: rgba(255,255,255,0.3); color: var(--text); }
+
+  .stats-bar {
+    max-width: 1200px;
+    margin: 1.2rem auto 0;
+    padding: 0 2rem;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+  .stat-count {
+    font-family: 'Syne', sans-serif;
+    font-size: 1.4rem;
+    font-weight: 700;
+  }
+  .stat-label { font-size: 13px; color: var(--muted); }
+  .divider { width: 1px; height: 24px; background: var(--border); }
+
+  #grid {
+    max-width: 1200px;
+    margin: 1.5rem auto 4rem;
+    padding: 0 2rem;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+    gap: 14px;
+  }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+    cursor: pointer;
+    transition: transform 0.2s, border-color 0.2s, box-shadow 0.2s;
+    position: relative;
+  }
+  .card:hover {
+    transform: translateY(-4px);
+    border-color: rgba(255,255,255,0.15);
+    box-shadow: 0 12px 40px rgba(0,0,0,0.5);
+  }
+
+  .card-img {
+    width: 100%;
+    aspect-ratio: 3/4;
+    object-fit: cover;
+    display: block;
+    background: var(--surface2);
+  }
+
+  .card-body {
+    padding: 10px 12px;
+  }
+
+  .card-name {
+    font-family: 'Syne', sans-serif;
+    font-size: 13px;
+    font-weight: 700;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .card-meta {
+    font-size: 11px;
+    color: var(--muted);
+    margin-top: 3px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .card-badge {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    font-size: 10px;
+    font-weight: 600;
+    padding: 3px 7px;
+    border-radius: 100px;
+    font-family: 'Syne', sans-serif;
+    letter-spacing: 0.04em;
+  }
+  .badge-ir  { background: rgba(200,240,96,0.2);  color: var(--accent);  border: 1px solid rgba(200,240,96,0.35); }
+  .badge-sir { background: rgba(96,240,200,0.2);  color: var(--accent2); border: 1px solid rgba(96,240,200,0.35); }
+  .badge-alt { background: rgba(240,160,96,0.2); color: #f0a060; border: 1px solid rgba(240,160,96,0.35); }
+
+  .skeleton {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+    animation: pulse 1.4s ease-in-out infinite;
+  }
+  .skeleton-img  { width: 100%; aspect-ratio: 3/4; background: var(--surface2); }
+  .skeleton-line { height: 12px; background: var(--surface2); border-radius: 4px; margin: 10px 12px 4px; }
+  .skeleton-line.short { width: 60%; margin-bottom: 10px; }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50%       { opacity: 0.5; }
+  }
+
+  #empty {
+    grid-column: 1/-1;
+    text-align: center;
+    padding: 4rem 2rem;
+    color: var(--muted);
+    display: none;
+  }
+  #empty svg { display: block; margin: 0 auto 1rem; opacity: 0.3; }
+
+  .modal-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.75);
+    backdrop-filter: blur(6px);
+    z-index: 100;
+    align-items: center;
+    justify-content: center;
+    padding: 1.5rem 5rem;
+  }
+  .modal-overlay.open { display: flex; }
+
+  .modal {
+    background: var(--surface);
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 20px;
+    max-width: min(1100px, calc(100vw - 10rem));
+    width: 100%;
+    overflow: hidden;
+    display: grid;
+    grid-template-columns: minmax(320px, 620px) minmax(300px, 380px);
+    max-height: 94vh;
+    position: relative;
+  }
+
+  .modal-image-wrap {
+    background: var(--surface2);
+    min-height: min(78vh, 760px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1.5rem;
+    position: relative;
+  }
+
+  .modal-img {
+    width: 100%;
+    max-height: min(84vh, 780px);
+    object-fit: contain;
+  }
+
+  .modal-info {
+    padding: 1.75rem 1.75rem 1.5rem;
+    overflow-y: auto;
+  }
+
+  .modal-name {
+    font-family: 'Syne', sans-serif;
+    font-size: 1.4rem;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+  }
+
+  .modal-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 14px;
+  }
+  .modal-row:last-child { border-bottom: none; }
+  .modal-row .key   { color: var(--muted); }
+  .modal-row .val   { font-weight: 500; text-align: right; }
+
+  .modal-close {
+    position: absolute;
+    top: 1rem;
+    right: 1rem;
+    width: 36px;
+    height: 36px;
+    background: rgba(0,0,0,0.5);
+    border: none;
+    border-radius: 50%;
+    color: var(--text);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    z-index: 2;
+  }
+
+  .modal-nav {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 64px;
+    height: 64px;
+    border: 1px solid rgba(255,255,255,0.18);
+    border-radius: 50%;
+    background: rgba(22,22,26,0.88);
+    color: var(--text);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 42px;
+    line-height: 1;
+    z-index: 101;
+  }
+  .modal-nav:hover { border-color: rgba(255,255,255,0.38); background: var(--surface2); }
+  .modal-prev { left: calc(50% - min(550px, calc((100vw - 10rem) / 2)) - 5rem); }
+  .modal-next { right: calc(50% - min(550px, calc((100vw - 10rem) / 2)) - 5rem); }
+
+  .modal-position {
+    color: var(--muted);
+    font-size: 12px;
+    margin-bottom: 0.55rem;
+  }
+
+  @media (max-width: 760px) {
+    .modal-overlay { padding: 0.75rem; }
+    .modal {
+      grid-template-columns: 1fr;
+      max-width: 100%;
+      max-height: 96vh;
+    }
+    .modal-image-wrap {
+      min-height: auto;
+      height: 62vh;
+      padding: 1rem;
+    }
+    .modal-img { max-height: 58vh; }
+    .modal-info { padding: 1.1rem 1.25rem 1.25rem; }
+    .modal-nav {
+      width: 52px;
+      height: 52px;
+      font-size: 34px;
+    }
+    .modal-prev { left: 1rem; }
+    .modal-next { right: 1rem; }
+  }
+
+  .load-more-wrap {
+    max-width: 1200px;
+    margin: 0 auto 3rem;
+    padding: 0 2rem;
+    display: flex;
+    justify-content: center;
+  }
+  #load-more {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    color: var(--text);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 14px;
+    padding: 12px 32px;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: none;
+  }
+  #load-more:hover { border-color: rgba(255,255,255,0.2); background: var(--surface2); }
+
+  .error-msg {
+    max-width: 1200px;
+    margin: 2rem auto;
+    padding: 0 2rem;
+    font-size: 13px;
+    color: #f08080;
+    text-align: center;
+    display: none;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <div class="logo">illus<span>dex</span></div>
+    <div class="tagline">Toutes les cartes Illustration Rare & Special Illustration Rare</div>
+  </div>
+</header>
+
+<div class="controls">
+  <div class="search-wrap">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+    <input type="text" id="search" placeholder="Chercher un Pokémon…" autocomplete="off">
+  </div>
+
+  <div class="rarity-pills">
+    <button class="pill active-all" data-rarity="all">Toutes</button>
+    <button class="pill" data-rarity="ir">✦ Illustration Rare</button>
+    <button class="pill" data-rarity="sir">✦✦ Illustration spéciale rare</button>
+    <button class="pill" data-rarity="alt">Alt arts / Ultra Rare</button>
+  </div>
+
+  <select id="type-filter" aria-label="Filtrer par type">
+    <option value="all">Tous les types</option>
+  </select>
+
+  <select id="artist-filter" aria-label="Filtrer par artiste">
+    <option value="all">Tous les artistes</option>
+  </select>
+
+  <select id="sort" aria-label="Trier les cartes">
+    <option value="pokedex">Pokédex</option>
+    <option value="name-asc">A-Z</option>
+    <option value="name-desc">Z-A</option>
+    <option value="set">Extension</option>
+    <option value="rarity">Rareté</option>
+  </select>
+</div>
+
+<div class="stats-bar">
+  <span class="stat-count" id="count">–</span>
+  <span class="stat-label">cartes trouvées</span>
+  <div class="divider"></div>
+  <span class="stat-label" id="source-label">via TCGdex API</span>
+</div>
+
+<div class="error-msg" id="error-msg">
+  Impossible de charger les données. Vérifiez votre connexion ou réessayez.
+</div>
+
+<div id="grid"></div>
+
+<div class="load-more-wrap">
+  <button id="load-more">Charger plus</button>
+</div>
+
+<div class="modal-overlay" id="modal-overlay">
+  <button class="modal-nav modal-prev" id="modal-prev" aria-label="Carte précédente">‹</button>
+  <div class="modal" id="modal">
+    <button class="modal-close" id="modal-close" aria-label="Fermer">✕</button>
+    <div class="modal-image-wrap">
+      <img class="modal-img" id="modal-img" src="" alt="">
+    </div>
+    <div class="modal-info" id="modal-info"></div>
+  </div>
+  <button class="modal-nav modal-next" id="modal-next" aria-label="Carte suivante">›</button>
+</div>
+
+<script>
+const API = 'https://api.tcgdex.net/v2/fr';
+const PAGE_SIZE = 24;
+const RARITIES = [
+  { label: 'Illustration rare', kind: 'ir' },
+  { label: 'Illustration spéciale rare', kind: 'sir' },
+  { label: 'Ultra Rare', kind: 'alt' },
+];
+
+let allCards = [];
+let filtered = [];
+let displayed = 0;
+let selectedRarities = new Set(RARITIES.map(r => r.kind));
+let searchQuery = '';
+let currentType = 'all';
+let currentArtist = 'all';
+let currentSort = 'pokedex';
+let currentModalIndex = -1;
+
+const grid       = document.getElementById('grid');
+const countEl    = document.getElementById('count');
+const loadMoreBtn= document.getElementById('load-more');
+const errorMsg   = document.getElementById('error-msg');
+const sourceLabel= document.getElementById('source-label');
+const typeFilter = document.getElementById('type-filter');
+const artistFilter = document.getElementById('artist-filter');
+const sortSelect = document.getElementById('sort');
+const modalOverlay = document.getElementById('modal-overlay');
+
+function getBadge(rarity) {
+  if (!rarity) return '';
+  const r = rarity.toLowerCase();
+  if (r.includes('special illustration') || r.includes('illustration spéciale') || r.includes('sar') || r.includes('sir'))
+    return '<span class="card-badge badge-sir">SIR</span>';
+  if (r.includes('illustration'))
+    return '<span class="card-badge badge-ir">IR</span>';
+  if (r.includes('ultra rare'))
+    return '<span class="card-badge badge-alt">ALT</span>';
+  return '';
+}
+
+function isSIR(rarity) {
+  if (!rarity) return false;
+  const r = rarity.toLowerCase();
+  return r.includes('special illustration') || r.includes('illustration spéciale') || r.includes('sar') || r.includes('sir');
+}
+
+function isIR(rarity) {
+  if (!rarity) return false;
+  const r = rarity.toLowerCase();
+  return r.includes('illustration') && !r.includes('special') && !r.includes('spéciale');
+}
+
+function isAlt(rarity) {
+  return rarity?.toLowerCase().includes('ultra rare') || false;
+}
+
+function getDexNumber(card) {
+  return Array.isArray(card.dexId) && card.dexId.length ? Math.min(...card.dexId) : Number.MAX_SAFE_INTEGER;
+}
+
+function getSetName(card) {
+  return card.set?.name || '';
+}
+
+function sortCards(cards) {
+  const collator = new Intl.Collator('fr', { sensitivity: 'base', numeric: true });
+  return [...cards].sort((a, b) => {
+    if (currentSort === 'name-asc') return collator.compare(a.name || '', b.name || '');
+    if (currentSort === 'name-desc') return collator.compare(b.name || '', a.name || '');
+    if (currentSort === 'set') {
+      return collator.compare(getSetName(a), getSetName(b))
+        || collator.compare(a.localId || '', b.localId || '')
+        || collator.compare(a.name || '', b.name || '');
+    }
+    if (currentSort === 'rarity') {
+      return collator.compare(a.rarity || '', b.rarity || '')
+        || getDexNumber(a) - getDexNumber(b)
+        || collator.compare(a.name || '', b.name || '');
+    }
+    return getDexNumber(a) - getDexNumber(b)
+      || collator.compare(a.name || '', b.name || '')
+      || collator.compare(a.id || '', b.id || '');
+  });
+}
+
+function populateTypeFilter() {
+  const selected = typeFilter.value;
+  const types = [...new Set(allCards.flatMap(c => Array.isArray(c.types) ? c.types : []))]
+    .sort((a, b) => a.localeCompare(b, 'fr', { sensitivity: 'base' }));
+
+  typeFilter.innerHTML = '<option value="all">Tous les types</option>';
+  types.forEach(type => {
+    const option = document.createElement('option');
+    option.value = type;
+    option.textContent = type;
+    typeFilter.appendChild(option);
+  });
+  typeFilter.value = types.includes(selected) ? selected : 'all';
+  currentType = typeFilter.value;
+}
+
+function getActiveRarityKinds() {
+  return RARITIES.map(r => r.kind).filter(kind => selectedRarities.has(kind));
+}
+
+function matchesSelectedRarities(card) {
+  const active = getActiveRarityKinds();
+  if (active.length === RARITIES.length) return true;
+  return active.includes(card.rarityKind);
+}
+
+function updateRarityButtons() {
+  const active = getActiveRarityKinds();
+  document.querySelectorAll('.pill').forEach(btn => {
+    const rarity = btn.dataset.rarity;
+    btn.className = 'pill';
+    if (rarity === 'all' && active.length === RARITIES.length) btn.classList.add('active-all');
+    if (rarity !== 'all' && selectedRarities.has(rarity)) btn.classList.add(`active-${rarity}`);
+  });
+}
+
+function populateArtistFilter(cards = allCards) {
+  const selected = artistFilter.value;
+  const counts = cards.reduce((acc, card) => {
+    if (card.illustrator) acc.set(card.illustrator, (acc.get(card.illustrator) || 0) + 1);
+    return acc;
+  }, new Map());
+
+  const artists = [...counts.entries()].sort((a, b) =>
+    b[1] - a[1] || a[0].localeCompare(b[0], 'fr', { sensitivity: 'base' })
+  );
+
+  artistFilter.innerHTML = '<option value="all">Tous les artistes</option>';
+  artists.forEach(([artist, count]) => {
+    const option = document.createElement('option');
+    option.value = artist;
+    option.textContent = `${artist} (${count})`;
+    artistFilter.appendChild(option);
+  });
+  artistFilter.value = selected === 'all' || counts.has(selected) ? selected : 'all';
+  currentArtist = artistFilter.value;
+}
+
+async function fetchCardDetails(card) {
+  const res = await fetch(`${API}/cards/${encodeURIComponent(card.id)}`);
+  if (!res.ok) return card;
+  const details = await res.json();
+  return { ...card, ...details, rarity: card.rarity || details.rarity, detailsLoaded: true };
+}
+
+async function hydrateCards(cards, concurrency = 12) {
+  const hydrated = new Array(cards.length);
+  let next = 0;
+
+  async function worker() {
+    while (next < cards.length) {
+      const index = next++;
+      try {
+        hydrated[index] = await fetchCardDetails(cards[index]);
+      } catch(e) {
+        hydrated[index] = cards[index];
+      }
+    }
+  }
+
+  await Promise.all(Array.from({ length: concurrency }, worker));
+  return hydrated;
+}
+
+async function fetchCardsByRarity({ label, kind }) {
+  const pageSize = 500;
+  const pages = [];
+
+  for (let page = 1; ; page++) {
+    const res = await fetch(`${API}/cards?rarity=${encodeURIComponent(label)}&pagination:page=${page}&pagination:itemsPerPage=${pageSize}`);
+    const cards = res.ok ? await res.json() : [];
+    pages.push(...cards.map(card => ({ ...card, rarity: label, rarityKind: kind })));
+    if (cards.length < pageSize) break;
+  }
+
+  return pages;
+}
+
+function renderCards(cards, append = false) {
+  if (!append) grid.innerHTML = '';
+
+  if (cards.length === 0 && !append) {
+    grid.innerHTML = `<div id="empty" style="display:block; grid-column:1/-1; text-align:center; padding:4rem 2rem; color:var(--muted);">
+      <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="display:block;margin:0 auto 1rem;opacity:0.3"><circle cx="12" cy="12" r="10"/><path d="M8 15s1.5 2 4 2 4-2 4-2M9 9h.01M15 9h.01"/></svg>
+      Aucune carte trouvée
+    </div>`;
+    return;
+  }
+
+  const frag = document.createDocumentFragment();
+  cards.forEach(c => {
+    const img  = c.image ? c.image + '/low.webp' : '';
+    const name = c.name || '—';
+    const dex  = getDexNumber(c) === Number.MAX_SAFE_INTEGER ? '' : `#${String(getDexNumber(c)).padStart(4, '0')} · `;
+    const set  = `${dex}${c.set?.name || c.rarity || ''}`;
+    const div  = document.createElement('div');
+    div.className = 'card';
+    div.innerHTML = `
+      ${getBadge(c.rarity)}
+      <img class="card-img" src="${img}" alt="${name}" loading="lazy" onerror="this.style.opacity='0.3'">
+      <div class="card-body">
+        <div class="card-name">${name}</div>
+        <div class="card-meta">${set}</div>
+      </div>`;
+    div.addEventListener('click', () => openModal(c));
+    frag.appendChild(div);
+  });
+  grid.appendChild(frag);
+}
+
+function showSkeletons(n = 12) {
+  grid.innerHTML = '';
+  for (let i = 0; i < n; i++) {
+    const s = document.createElement('div');
+    s.className = 'skeleton';
+    s.innerHTML = '<div class="skeleton-img"></div><div class="skeleton-line"></div><div class="skeleton-line short"></div>';
+    grid.appendChild(s);
+  }
+}
+
+function getBaseFilteredCards() {
+  const q = searchQuery.toLowerCase().trim();
+  return allCards.filter(c => {
+    const nameMatch = !q || (c.name || '').toLowerCase().includes(q);
+    const rarityMatch = matchesSelectedRarities(c);
+    const typeMatch = currentType === 'all' || (Array.isArray(c.types) && c.types.includes(currentType));
+    return nameMatch && rarityMatch && typeMatch;
+  });
+}
+
+function applyFilters(refreshArtists = false) {
+  const baseFiltered = getBaseFilteredCards();
+  if (refreshArtists) populateArtistFilter(baseFiltered);
+
+  filtered = baseFiltered.filter(c => currentArtist === 'all' || c.illustrator === currentArtist);
+  filtered = sortCards(filtered);
+  displayed = 0;
+  countEl.textContent = filtered.length;
+  const slice = filtered.slice(0, PAGE_SIZE);
+  displayed = slice.length;
+  renderCards(slice);
+  loadMoreBtn.style.display = displayed < filtered.length ? 'block' : 'none';
+}
+
+async function fetchCards() {
+  showSkeletons();
+  sourceLabel.textContent = 'chargement des cartes…';
+  try {
+    const results = await Promise.all(
+      RARITIES.map(rarity => fetchCardsByRarity(rarity).catch(() => []))
+    );
+
+    allCards = results.flat();
+
+    if (allCards.length === 0) {
+      throw new Error('empty');
+    }
+
+    countEl.textContent = allCards.length;
+    sourceLabel.textContent = 'tri Pokédex en préparation…';
+    allCards = await hydrateCards(allCards);
+    populateTypeFilter();
+    updateRarityButtons();
+    applyFilters(true);
+    errorMsg.style.display = 'none';
+    sourceLabel.textContent = 'via TCGdex API';
+  } catch(e) {
+    grid.innerHTML = '';
+    errorMsg.style.display = 'block';
+    countEl.textContent = '0';
+    sourceLabel.textContent = 'via TCGdex API';
+  }
+}
+
+document.getElementById('search').addEventListener('input', e => {
+  searchQuery = e.target.value;
+  applyFilters(true);
+});
+
+document.querySelectorAll('.pill').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const r = btn.dataset.rarity;
+    if (r === 'all') {
+      selectedRarities = new Set(RARITIES.map(rarity => rarity.kind));
+    } else if (selectedRarities.has(r)) {
+      selectedRarities.delete(r);
+      if (selectedRarities.size === 0) selectedRarities.add(r);
+    } else {
+      selectedRarities.add(r);
+    }
+    updateRarityButtons();
+    applyFilters(true);
+  });
+});
+
+loadMoreBtn.addEventListener('click', () => {
+  const slice = filtered.slice(displayed, displayed + PAGE_SIZE);
+  displayed += slice.length;
+  renderCards(slice, true);
+  loadMoreBtn.style.display = displayed < filtered.length ? 'block' : 'none';
+});
+
+typeFilter.addEventListener('change', e => {
+  currentType = e.target.value;
+  applyFilters(true);
+});
+
+artistFilter.addEventListener('change', e => {
+  currentArtist = e.target.value;
+  applyFilters();
+});
+
+sortSelect.addEventListener('change', e => {
+  currentSort = e.target.value;
+  applyFilters();
+});
+
+function closeModal() {
+  modalOverlay.classList.remove('open');
+  currentModalIndex = -1;
+}
+
+function getModalCard(offset) {
+  if (!filtered.length || currentModalIndex < 0) return null;
+  const nextIndex = (currentModalIndex + offset + filtered.length) % filtered.length;
+  currentModalIndex = nextIndex;
+  return filtered[nextIndex];
+}
+
+function showAdjacentCard(offset) {
+  const card = getModalCard(offset);
+  if (card) openModal(card, currentModalIndex);
+}
+
+async function openModal(card, index = filtered.findIndex(c => c.id === card.id)) {
+  currentModalIndex = index >= 0 ? index : currentModalIndex;
+  try {
+    if (!card.detailsLoaded) {
+    const res = await fetch(`${API}/cards/${encodeURIComponent(card.id)}`);
+    if (res.ok) {
+      const details = await res.json();
+      card = { ...card, ...details, rarity: card.rarity || details.rarity };
+    }
+    }
+  } catch(e) {}
+
+  const img    = card.image ? card.image + '/high.webp' : '';
+  const rarity = card.rarity || '—';
+  const set    = card.set?.name || '—';
+  const series = card.set?.serie?.name || '—';
+  const illus  = card.illustrator || '—';
+  const num    = card.localId || card.id || '—';
+  const types  = Array.isArray(card.types) ? card.types.join(', ') : (card.types || '—');
+  const hp     = card.hp || '—';
+  const position = currentModalIndex >= 0 ? `${currentModalIndex + 1} / ${filtered.length}` : '';
+
+  document.getElementById('modal-img').src = img;
+  document.getElementById('modal-img').alt = card.name || '';
+  document.getElementById('modal-info').innerHTML = `
+    <div class="modal-position">${position}</div>
+    <div class="modal-name">${card.name || '—'}</div>
+    <div style="margin:0.5rem 0 1rem;">
+      ${getBadge(rarity)}
+      <span style="font-size:13px;color:var(--muted);margin-left:4px">${rarity}</span>
+    </div>
+    <div class="modal-row"><span class="key">Extension</span><span class="val">${set}</span></div>
+    <div class="modal-row"><span class="key">Série</span><span class="val">${series}</span></div>
+    <div class="modal-row"><span class="key">Numéro</span><span class="val">${num}</span></div>
+    <div class="modal-row"><span class="key">Illustrateur</span><span class="val">${illus}</span></div>
+    <div class="modal-row"><span class="key">Type(s)</span><span class="val">${types}</span></div>
+    <div class="modal-row"><span class="key">PV</span><span class="val">${hp}</span></div>
+  `;
+  modalOverlay.classList.add('open');
+}
+
+modalOverlay.addEventListener('click', e => {
+  if (e.target === e.currentTarget) closeModal();
+});
+document.getElementById('modal-close').addEventListener('click', () => {
+  closeModal();
+});
+document.getElementById('modal-prev').addEventListener('click', e => {
+  e.stopPropagation();
+  showAdjacentCard(-1);
+});
+document.getElementById('modal-next').addEventListener('click', e => {
+  e.stopPropagation();
+  showAdjacentCard(1);
+});
+document.addEventListener('keydown', e => {
+  if (!modalOverlay.classList.contains('open')) return;
+  if (e.key === 'Escape') closeModal();
+  if (e.key === 'ArrowLeft') showAdjacentCard(-1);
+  if (e.key === 'ArrowRight') showAdjacentCard(1);
+});
+
+fetchCards();
+</script>
+</body>
+</html>
