@@ -522,6 +522,8 @@
     <option value="name-desc">Z-A</option>
     <option value="set">Extension</option>
     <option value="rarity">Rareté</option>
+    <option value="artist-count">Artistes les + prolifiques</option>
+    <option value="artist-name">Artiste A-Z</option>
   </select>
 </div>
 
@@ -572,6 +574,7 @@ let currentType = 'all';
 let currentArtist = 'all';
 let currentSort = 'pokedex';
 let currentModalIndex = -1;
+let currentArtistCounts = new Map();
 
 const grid       = document.getElementById('grid');
 const countEl    = document.getElementById('count');
@@ -631,6 +634,17 @@ function sortCards(cards) {
     }
     if (currentSort === 'rarity') {
       return collator.compare(a.rarity || '', b.rarity || '')
+        || getDexNumber(a) - getDexNumber(b)
+        || collator.compare(a.name || '', b.name || '');
+    }
+    if (currentSort === 'artist-count') {
+      return (currentArtistCounts.get(b.illustrator) || 0) - (currentArtistCounts.get(a.illustrator) || 0)
+        || collator.compare(a.illustrator || '', b.illustrator || '')
+        || getDexNumber(a) - getDexNumber(b)
+        || collator.compare(a.name || '', b.name || '');
+    }
+    if (currentSort === 'artist-name') {
+      return collator.compare(a.illustrator || '', b.illustrator || '')
         || getDexNumber(a) - getDexNumber(b)
         || collator.compare(a.name || '', b.name || '');
     }
@@ -709,6 +723,7 @@ function populateArtistFilter(cards = allCards) {
     if (card.illustrator) acc.set(card.illustrator, (acc.get(card.illustrator) || 0) + 1);
     return acc;
   }, new Map());
+  currentArtistCounts = counts;
 
   const artists = [...counts.entries()].sort((a, b) =>
     b[1] - a[1] || a[0].localeCompare(b[0], 'fr', { sensitivity: 'base' })
