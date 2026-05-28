@@ -683,6 +683,12 @@ function sortCards(cards) {
 
 function getSectionKey(card) {
   if (currentSort === 'artist-count' || currentSort === 'artist-name') return card.illustrator || 'Artiste inconnu';
+  if (currentSort === 'set') return getSetName(card) || 'Extension inconnue';
+  if (currentSort === 'rarity') return card.rarity || 'Rareté inconnue';
+  if (currentSort === 'pokedex') {
+    const dex = getDexNumber(card);
+    return dex === Number.MAX_SAFE_INTEGER ? 'Pokédex inconnu' : `#${String(dex).padStart(4, '0')}`;
+  }
   if (currentSort === 'name-asc' || currentSort === 'name-desc') {
     const first = (card.name || '#').trim().charAt(0).toUpperCase();
     return first.match(/[A-ZÀ-ÖØ-Ý]/) ? first : '#';
@@ -692,16 +698,21 @@ function getSectionKey(card) {
 
 function getSectionLabel(key) {
   if (!key) return '';
+  const countCards = () => filtered.filter(card => getSectionKey(card) === key).length;
   if (currentSort === 'artist-count' || currentSort === 'artist-name') {
     const count = currentArtistCounts.get(key) || filtered.filter(card => (card.illustrator || 'Artiste inconnu') === key).length;
     return { title: key, count: `${count} carte${count > 1 ? 's' : ''}` };
   }
-  const count = filtered.filter(card => getSectionKey(card) === key).length;
+  if (currentSort === 'pokedex') {
+    const count = countCards();
+    return { title: `Pokédex ${key}`, count: `${count} carte${count > 1 ? 's' : ''}` };
+  }
+  const count = countCards();
   return { title: key, count: `${count} carte${count > 1 ? 's' : ''}` };
 }
 
 function shouldShowSections() {
-  return ['name-asc', 'name-desc', 'artist-count', 'artist-name'].includes(currentSort);
+  return ['pokedex', 'name-asc', 'name-desc', 'set', 'rarity', 'artist-count', 'artist-name'].includes(currentSort);
 }
 
 function escapeHtml(value = '') {
