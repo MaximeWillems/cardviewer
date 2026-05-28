@@ -170,6 +170,33 @@
     gap: 14px;
   }
 
+  .section-heading {
+    grid-column: 1 / -1;
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    margin: 1rem 0 0.15rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid var(--border);
+  }
+
+  .section-heading:first-child {
+    margin-top: 0;
+    padding-top: 0;
+    border-top: none;
+  }
+
+  .section-title {
+    font-family: 'Syne', sans-serif;
+    font-size: 1.05rem;
+    font-weight: 800;
+  }
+
+  .section-count {
+    color: var(--muted);
+    font-size: 12px;
+  }
+
   .card {
     background: var(--surface);
     border: 1px solid var(--border);
@@ -654,6 +681,29 @@ function sortCards(cards) {
   });
 }
 
+function getSectionKey(card) {
+  if (currentSort === 'artist-count' || currentSort === 'artist-name') return card.illustrator || 'Artiste inconnu';
+  if (currentSort === 'name-asc' || currentSort === 'name-desc') {
+    const first = (card.name || '#').trim().charAt(0).toUpperCase();
+    return first.match(/[A-ZÀ-ÖØ-Ý]/) ? first : '#';
+  }
+  return '';
+}
+
+function getSectionLabel(key) {
+  if (!key) return '';
+  if (currentSort === 'artist-count' || currentSort === 'artist-name') {
+    const count = currentArtistCounts.get(key) || filtered.filter(card => (card.illustrator || 'Artiste inconnu') === key).length;
+    return { title: key, count: `${count} carte${count > 1 ? 's' : ''}` };
+  }
+  const count = filtered.filter(card => getSectionKey(card) === key).length;
+  return { title: key, count: `${count} carte${count > 1 ? 's' : ''}` };
+}
+
+function shouldShowSections() {
+  return ['name-asc', 'name-desc', 'artist-count', 'artist-name'].includes(currentSort);
+}
+
 function escapeHtml(value = '') {
   return String(value).replace(/[&<>"']/g, char => ({
     '&': '&amp;',
@@ -780,7 +830,7 @@ async function fetchCardsByRarity({ label, kind }) {
   return pages;
 }
 
-function renderCards(cards, append = false) {
+function renderCards(cards, append = false, startIndex = 0) {
   if (!append) grid.innerHTML = '';
 
   if (cards.length === 0 && !append) {
@@ -792,7 +842,20 @@ function renderCards(cards, append = false) {
   }
 
   const frag = document.createDocumentFragment();
-  cards.forEach(c => {
+  cards.forEach((c, index) => {
+    const globalIndex = startIndex + index;
+    const sectionKey = getSectionKey(c);
+    const previousKey = globalIndex > 0 ? getSectionKey(filtered[globalIndex - 1]) : '';
+    if (shouldShowSections() && sectionKey && sectionKey !== previousKey) {
+      const section = getSectionLabel(sectionKey);
+      const heading = document.createElement('div');
+      heading.className = 'section-heading';
+      heading.innerHTML = `
+        <div class="section-title">${escapeHtml(section.title)}</div>
+        <div class="section-count">${escapeHtml(section.count)}</div>`;
+      frag.appendChild(heading);
+    }
+
     const img  = c.image ? c.image + '/low.webp' : '';
     const name = c.name || '—';
     const dex  = getDexNumber(c) === Number.MAX_SAFE_INTEGER ? '' : `#${String(getDexNumber(c)).padStart(4, '0')} · `;
@@ -844,7 +907,7 @@ function applyFilters(refreshArtists = false) {
   countEl.textContent = filtered.length;
   const slice = filtered.slice(0, PAGE_SIZE);
   displayed = slice.length;
-  renderCards(slice);
+  renderCards(slice, false, 0);
   loadMoreBtn.style.display = displayed < filtered.length ? 'block' : 'none';
 }
 
@@ -902,7 +965,7 @@ document.querySelectorAll('.pill').forEach(btn => {
 loadMoreBtn.addEventListener('click', () => {
   const slice = filtered.slice(displayed, displayed + PAGE_SIZE);
   displayed += slice.length;
-  renderCards(slice, true);
+  renderCards(slice, true, displayed - slice.length);
   loadMoreBtn.style.display = displayed < filtered.length ? 'block' : 'none';
 });
 
