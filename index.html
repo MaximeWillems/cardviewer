@@ -511,6 +511,114 @@
     text-align: center;
     display: none;
   }
+
+  .card-actions {
+    position: absolute;
+    bottom: 44px;
+    left: 0;
+    right: 0;
+    display: flex;
+    gap: 0;
+    opacity: 0;
+    transition: opacity 0.18s;
+    pointer-events: none;
+  }
+  .card:hover .card-actions { opacity: 1; pointer-events: all; }
+  .card.owned .card-actions,
+  .card.wanted .card-actions { opacity: 1; pointer-events: all; }
+
+  .card-action-btn {
+    flex: 1;
+    padding: 6px 0;
+    font-size: 11px;
+    font-family: 'Syne', sans-serif;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    border: none;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+    background: rgba(13,13,15,0.85);
+    color: var(--muted);
+  }
+  .card-action-btn:first-child { border-radius: 0; }
+  .card-action-btn:last-child  { border-radius: 0; }
+  .card-action-btn:hover { color: var(--text); background: rgba(30,30,36,0.95); }
+
+  .card-action-btn.active-owned  { background: rgba(200,240,96,0.18); color: var(--accent); }
+  .card-action-btn.active-wanted { background: rgba(96,160,240,0.18); color: #60a0f0; }
+
+  .card.owned  { border-color: rgba(200,240,96,0.4); }
+  .card.wanted { border-color: rgba(96,160,240,0.4); }
+  .card.owned.wanted { border-color: rgba(200,240,96,0.4); }
+
+  .card-status-dot {
+    position: absolute;
+    bottom: 8px;
+    right: 8px;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    display: none;
+  }
+  .card.owned  .card-status-dot { display: block; background: var(--accent); }
+  .card.wanted .card-status-dot { display: block; background: #60a0f0; }
+  .card.owned.wanted .card-status-dot { display: block; background: linear-gradient(135deg, var(--accent) 50%, #60a0f0 50%); }
+
+  .collection-bar {
+    max-width: 1200px;
+    margin: 0.6rem auto 0;
+    padding: 0 2rem;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+
+  .coll-filter-btn {
+    padding: 5px 13px;
+    border-radius: 100px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--muted);
+    font-family: 'DM Sans', sans-serif;
+    transition: all 0.18s;
+    white-space: nowrap;
+  }
+  .coll-filter-btn:hover { color: var(--text); border-color: rgba(255,255,255,0.2); }
+  .coll-filter-btn.active-owned  { background: rgba(200,240,96,0.12); border-color: var(--accent); color: var(--accent); }
+  .coll-filter-btn.active-wanted { background: rgba(96,160,240,0.12); border-color: #60a0f0; color: #60a0f0; }
+
+  .coll-stat {
+    font-size: 12px;
+    color: var(--muted);
+  }
+  .coll-stat b { color: var(--text); font-weight: 600; }
+
+  .modal-collection-btns {
+    display: flex;
+    gap: 8px;
+    margin: 1rem 0 0.5rem;
+  }
+  .modal-coll-btn {
+    flex: 1;
+    padding: 9px 12px;
+    border-radius: var(--radius);
+    font-size: 13px;
+    font-weight: 600;
+    font-family: 'Syne', sans-serif;
+    cursor: pointer;
+    border: 1px solid var(--border);
+    background: var(--surface2);
+    color: var(--muted);
+    transition: all 0.18s;
+    letter-spacing: 0.02em;
+  }
+  .modal-coll-btn:hover { color: var(--text); border-color: rgba(255,255,255,0.2); }
+  .modal-coll-btn.active-owned  { background: rgba(200,240,96,0.14); border-color: var(--accent); color: var(--accent); }
+  .modal-coll-btn.active-wanted { background: rgba(96,160,240,0.14); border-color: #60a0f0; color: #60a0f0; }
 </style>
 </head>
 <body>
@@ -525,7 +633,7 @@
 <div class="controls">
   <div class="search-wrap">
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
-    <input type="text" id="search" placeholder="Chercher un Pokémon…" autocomplete="off">
+    <input type="text" id="search" placeholder="Pokémon ou artiste…" autocomplete="off">
   </div>
 
   <div class="rarity-pills">
@@ -559,6 +667,12 @@
   <span class="stat-label">cartes trouvées</span>
   <div class="divider"></div>
   <span class="stat-label" id="source-label">via TCGdex API</span>
+</div>
+
+<div class="collection-bar">
+  <button class="coll-filter-btn" id="filter-owned">✦ En collection</button>
+  <button class="coll-filter-btn" id="filter-wanted">✦ À obtenir</button>
+  <span class="coll-stat" id="coll-stat"></span>
 </div>
 
 <div class="error-msg" id="error-msg">
@@ -602,6 +716,35 @@ let currentArtist = 'all';
 let currentSort = 'pokedex';
 let currentModalIndex = -1;
 let currentArtistCounts = new Map();
+let collectionFilter = 'all'; // 'all' | 'owned' | 'wanted'
+
+const LS_OWNED  = 'illusdex_owned';
+const LS_WANTED = 'illusdex_wanted';
+let ownedSet  = new Set(JSON.parse(localStorage.getItem(LS_OWNED)  || '[]'));
+let wantedSet = new Set(JSON.parse(localStorage.getItem(LS_WANTED) || '[]'));
+
+function saveOwned()  { localStorage.setItem(LS_OWNED,  JSON.stringify([...ownedSet])); }
+function saveWanted() { localStorage.setItem(LS_WANTED, JSON.stringify([...wantedSet])); }
+
+function toggleOwned(id) {
+  if (ownedSet.has(id)) { ownedSet.delete(id); } else { ownedSet.add(id); wantedSet.delete(id); saveWanted(); }
+  saveOwned(); updateCollStat();
+}
+function toggleWanted(id) {
+  if (wantedSet.has(id)) { wantedSet.delete(id); } else { wantedSet.add(id); ownedSet.delete(id); saveOwned(); }
+  saveWanted(); updateCollStat();
+}
+
+function updateCollStat() {
+  const el = document.getElementById('coll-stat');
+  if (!el) return;
+  const o = ownedSet.size, w = wantedSet.size;
+  el.innerHTML = o || w
+    ? `<b>${o}</b> en collection · <b>${w}</b> à obtenir`
+    : '';
+  document.getElementById('filter-owned').className  = 'coll-filter-btn' + (collectionFilter === 'owned'  ? ' active-owned'  : '');
+  document.getElementById('filter-wanted').className = 'coll-filter-btn' + (collectionFilter === 'wanted' ? ' active-wanted' : '');
+}
 
 const grid       = document.getElementById('grid');
 const countEl    = document.getElementById('count');
@@ -871,17 +1014,47 @@ function renderCards(cards, append = false, startIndex = 0) {
     const name = c.name || '—';
     const dex  = getDexNumber(c) === Number.MAX_SAFE_INTEGER ? '' : `#${String(getDexNumber(c)).padStart(4, '0')} · `;
     const set  = `${dex}${c.set?.name || c.rarity || ''}`;
+    const isOwned  = ownedSet.has(c.id);
+    const isWanted = wantedSet.has(c.id);
     const div  = document.createElement('div');
-    div.className = 'card';
+    div.className = 'card' + (isOwned ? ' owned' : '') + (isWanted ? ' wanted' : '');
+    div.dataset.id = c.id;
     div.innerHTML = `
       ${getBadge(c.rarity)}
       ${img
         ? `<img class="card-img" src="${img}" alt="${escapeHtml(name)}" loading="lazy" onerror="handleImageError(this)">`
         : imagePlaceholder(name)}
+      <div class="card-actions">
+        <button class="card-action-btn ${isOwned ? 'active-owned' : ''}" data-action="owned" title="En collection">✦ Obtenue</button>
+        <button class="card-action-btn ${isWanted ? 'active-wanted' : ''}" data-action="wanted" title="À obtenir">⊕ Souhaitée</button>
+      </div>
+      <div class="card-status-dot"></div>
       <div class="card-body">
         <div class="card-name">${escapeHtml(name)}</div>
         <div class="card-meta">${escapeHtml(set)}</div>
       </div>`;
+    div.querySelector('[data-action="owned"]').addEventListener('click', e => {
+      e.stopPropagation();
+      toggleOwned(c.id);
+      const newOwned  = ownedSet.has(c.id);
+      const newWanted = wantedSet.has(c.id);
+      div.classList.toggle('owned',  newOwned);
+      div.classList.toggle('wanted', newWanted);
+      e.currentTarget.className = 'card-action-btn' + (newOwned ? ' active-owned' : '');
+      div.querySelector('[data-action="wanted"]').className = 'card-action-btn' + (newWanted ? ' active-wanted' : '');
+      if (collectionFilter !== 'all') applyFilters();
+    });
+    div.querySelector('[data-action="wanted"]').addEventListener('click', e => {
+      e.stopPropagation();
+      toggleWanted(c.id);
+      const newOwned  = ownedSet.has(c.id);
+      const newWanted = wantedSet.has(c.id);
+      div.classList.toggle('owned',  newOwned);
+      div.classList.toggle('wanted', newWanted);
+      div.querySelector('[data-action="owned"]').className  = 'card-action-btn' + (newOwned  ? ' active-owned'  : '');
+      e.currentTarget.className = 'card-action-btn' + (newWanted ? ' active-wanted' : '');
+      if (collectionFilter !== 'all') applyFilters();
+    });
     div.addEventListener('click', () => openModal(c));
     frag.appendChild(div);
   });
@@ -901,10 +1074,13 @@ function showSkeletons(n = 12) {
 function getBaseFilteredCards() {
   const q = searchQuery.toLowerCase().trim();
   return allCards.filter(c => {
-    const nameMatch = !q || (c.name || '').toLowerCase().includes(q);
+    const nameMatch  = !q || (c.name || '').toLowerCase().includes(q) || (c.illustrator || '').toLowerCase().includes(q);
     const rarityMatch = matchesSelectedRarities(c);
-    const typeMatch = currentType === 'all' || (Array.isArray(c.types) && c.types.includes(currentType));
-    return nameMatch && rarityMatch && typeMatch;
+    const typeMatch  = currentType === 'all' || (Array.isArray(c.types) && c.types.includes(currentType));
+    const collMatch  = collectionFilter === 'all'
+      || (collectionFilter === 'owned'  && ownedSet.has(c.id))
+      || (collectionFilter === 'wanted' && wantedSet.has(c.id));
+    return nameMatch && rarityMatch && typeMatch && collMatch;
   });
 }
 
@@ -1040,9 +1216,13 @@ async function openModal(card, index = filtered.findIndex(c => c.id === card.id)
   document.getElementById('modal-info').innerHTML = `
     <div class="modal-position">${position}</div>
     <div class="modal-name">${escapeHtml(card.name || '—')}</div>
-    <div style="margin:0.5rem 0 1rem;">
+    <div style="margin:0.5rem 0 0.75rem;">
       ${getBadge(rarity)}
       <span style="font-size:13px;color:var(--muted);margin-left:4px">${escapeHtml(rarity)}</span>
+    </div>
+    <div class="modal-collection-btns">
+      <button class="modal-coll-btn ${ownedSet.has(card.id) ? 'active-owned' : ''}" id="modal-btn-owned">✦ En collection</button>
+      <button class="modal-coll-btn ${wantedSet.has(card.id) ? 'active-wanted' : ''}" id="modal-btn-wanted">⊕ À obtenir</button>
     </div>
     <div class="modal-row"><span class="key">Extension</span><span class="val">${escapeHtml(set)}</span></div>
     <div class="modal-row"><span class="key">Série</span><span class="val">${escapeHtml(series)}</span></div>
@@ -1051,6 +1231,33 @@ async function openModal(card, index = filtered.findIndex(c => c.id === card.id)
     <div class="modal-row"><span class="key">Type(s)</span><span class="val">${escapeHtml(types)}</span></div>
     <div class="modal-row"><span class="key">PV</span><span class="val">${escapeHtml(hp)}</span></div>
   `;
+
+  const syncModalBtns = (id) => {
+    const bo = document.getElementById('modal-btn-owned');
+    const bw = document.getElementById('modal-btn-wanted');
+    if (!bo || !bw) return;
+    bo.className = 'modal-coll-btn' + (ownedSet.has(id)  ? ' active-owned'  : '');
+    bw.className = 'modal-coll-btn' + (wantedSet.has(id) ? ' active-wanted' : '');
+    const gridCard = document.querySelector(`.card[data-id="${id}"]`);
+    if (gridCard) {
+      gridCard.classList.toggle('owned',  ownedSet.has(id));
+      gridCard.classList.toggle('wanted', wantedSet.has(id));
+      const ab = gridCard.querySelector('[data-action="owned"]');
+      const wb = gridCard.querySelector('[data-action="wanted"]');
+      if (ab) ab.className = 'card-action-btn' + (ownedSet.has(id)  ? ' active-owned'  : '');
+      if (wb) wb.className = 'card-action-btn' + (wantedSet.has(id) ? ' active-wanted' : '');
+    }
+  };
+
+  document.getElementById('modal-btn-owned').addEventListener('click', () => {
+    toggleOwned(card.id); syncModalBtns(card.id);
+    if (collectionFilter !== 'all') applyFilters();
+  });
+  document.getElementById('modal-btn-wanted').addEventListener('click', () => {
+    toggleWanted(card.id); syncModalBtns(card.id);
+    if (collectionFilter !== 'all') applyFilters();
+  });
+
   modalOverlay.classList.add('open');
 }
 
@@ -1075,7 +1282,19 @@ document.addEventListener('keydown', e => {
   if (e.key === 'ArrowRight') showAdjacentCard(1);
 });
 
+document.getElementById('filter-owned').addEventListener('click', () => {
+  collectionFilter = collectionFilter === 'owned' ? 'all' : 'owned';
+  applyFilters(true);
+  updateCollStat();
+});
+document.getElementById('filter-wanted').addEventListener('click', () => {
+  collectionFilter = collectionFilter === 'wanted' ? 'all' : 'wanted';
+  applyFilters(true);
+  updateCollStat();
+});
+
 fetchCards();
+updateCollStat();
 </script>
 </body>
 </html>
