@@ -596,8 +596,8 @@ const RARITIES = [
   { label: 'Promo', kind: 'promo' },
 ];
 
-// Sets promos à charger (Scarlet & Violet, Sword & Shield, Sun & Moon, XY, BW)
-const PROMO_SERIES = ['svp', 'swshp', 'smp', 'xyp', 'bwp'];
+// IDs de sets promos connus dans TCGdex (svp = Scarlet & Violet Promos, swshp = S&S Promos, etc.)
+const PROMO_SET_IDS = ['svp', 'swshp', 'smp', 'xyp', 'bwp'];
 
 let allCards = [];
 let filtered = [];
@@ -838,15 +838,35 @@ async function hydrateCards(cards, concurrency = 12) {
 async function fetchCardsByRarity({ label, kind }) {
   const pageSize = 500;
   const pages = [];
-
   for (let page = 1; ; page++) {
     const res = await fetch(`${API}/cards?rarity=${encodeURIComponent(label)}&pagination:page=${page}&pagination:itemsPerPage=${pageSize}`);
     const cards = res.ok ? await res.json() : [];
     pages.push(...cards.map(card => ({ ...card, rarity: label, rarityKind: kind })));
     if (cards.length < pageSize) break;
   }
-
   return pages;
+}
+
+async function fetchPromoCards() {
+  const allPromos = [];
+  await Promise.all(PROMO_SET_IDS.map(async (setId) => {
+    try {
+      const res = await fetch(`${API}/sets/${setId}`);
+      if (!res.ok) return;
+      const setData = await res.json();
+      const cards = setData.cards || [];
+      cards.forEach(card => {
+        if (!card.image) return;
+        allPromos.push({
+          ...card,
+          set: { id: setData.id, name: setData.name, serie: setData.serie || null },
+          rarity: 'Promo',
+          rarityKind: 'promo',
+        });
+      });
+    } catch(e) {}
+  }));
+  return allPromos;
 }
 
 function renderCards(cards, append = false, startIndex = 0) {
@@ -930,52 +950,18 @@ function applyFilters(refreshArtists = false) {
   loadMoreBtn.style.display = displayed < filtered.length ? 'block' : 'none';
 }
 
-async function fetchPromoCards() {
-  const allPromos = [];
-  for (const serieId of PROMO_SERIES) {
-    try {
-      const serieRes = await fetch(`${API}/series/${serieId}`);
-      if (!serieRes.ok) continue;
-      const serie = await serieRes.json();
-      const sets = serie.sets || [];
-
-      await Promise.all(sets.map(async (setRef) => {
-        try {
-          const setRes = await fetch(`${API}/sets/${setRef.id}`);
-          if (!setRes.ok) return;
-          const setData = await setRes.json();
-          const cards = setData.cards || [];
-          cards.forEach(card => {
-            if (card.image) {
-              allPromos.push({
-                ...card,
-                set: { id: setData.id, name: setData.name, serie: { id: serieId, name: serie.name } },
-                rarity: 'Promo',
-                rarityKind: 'promo',
-              });
-            }
-          });
-        } catch(e) {}
-      }));
-    } catch(e) {}
-  }
-  return allPromos;
-}
-
 async function fetchCards() {
   showSkeletons();
   sourceLabel.textContent = 'chargement des cartes…';
   try {
     const [rarityResults, promoCards] = await Promise.all([
-      Promise.all(RARITIES.filter(r => r.kind !== 'promo').map(rarity => fetchCardsByRarity(rarity).catch(() => []))),
+      Promise.all(RARITIES.filter(r => r.kind !== 'promo').map(r => fetchCardsByRarity(r).catch(() => []))),
       fetchPromoCards().catch(() => []),
     ]);
 
     allCards = [...rarityResults.flat(), ...promoCards];
 
-    if (allCards.length === 0) {
-      throw new Error('empty');
-    }
+    if (allCards.length === 0) throw new Error('empty');
 
     countEl.textContent = allCards.length;
     sourceLabel.textContent = 'tri Pokédex en préparation…';
