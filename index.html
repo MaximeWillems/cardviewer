@@ -610,6 +610,88 @@
   .modal-coll-btn:hover { color: var(--text); border-color: rgba(255,255,255,0.2); }
   .modal-coll-btn.active-owned  { background: rgba(200,240,96,0.14); border-color: var(--accent); color: var(--accent); }
   .modal-coll-btn.active-wanted { background: rgba(96,160,240,0.14); border-color: #60a0f0; color: #60a0f0; }
+
+  /* ── Prix Cardmarket ───────────────────────────────── */
+  .price-block {
+    margin: 1rem 0 0.25rem;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 12px 14px 10px;
+  }
+  .price-block-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 10px;
+  }
+  .price-source {
+    font-size: 11px;
+    font-weight: 700;
+    font-family: 'Syne', sans-serif;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  .price-updated {
+    font-size: 10px;
+    color: var(--muted);
+    opacity: 0.65;
+  }
+  .price-main {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 8px;
+    flex-wrap: wrap;
+  }
+  .price-tile {
+    flex: 1;
+    min-width: 72px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px 10px;
+    text-align: center;
+  }
+  .price-tile-label {
+    font-size: 10px;
+    color: var(--muted);
+    margin-bottom: 3px;
+    font-weight: 500;
+  }
+  .price-tile-value {
+    font-family: 'Syne', sans-serif;
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--text);
+  }
+  .price-tile.highlight .price-tile-value { color: var(--accent); }
+  .price-history {
+    display: flex;
+    gap: 6px;
+    font-size: 12px;
+    justify-content: space-between;
+    flex-wrap: wrap;
+  }
+  .price-hist-item { color: var(--muted); }
+  .price-hist-item b { color: var(--text); font-weight: 600; }
+  .price-loading {
+    text-align: center;
+    color: var(--muted);
+    font-size: 13px;
+    padding: 12px 0 4px;
+    animation: pulse 1.4s infinite;
+  }
+  .price-na {
+    text-align: center;
+    color: var(--muted);
+    font-size: 12px;
+    padding: 10px 0 4px;
+    font-style: italic;
+  }
+  .price-trend-up   { color: #7af07a; }
+  .price-trend-down { color: #f07a7a; }
+  /* ── fin Prix ──────────────────────────────────────── */
 </style>
 </head>
 <body>
@@ -1200,6 +1282,84 @@ function showAdjacentCard(offset) {
   if (card) openModal(card, currentModalIndex);
 }
 
+
+function fmtEur(val) {
+  if (val == null || isNaN(val)) return '—';
+  return new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(val);
+}
+
+function trendArrow(trend, avg30) {
+  if (trend == null || avg30 == null) return '';
+  const diff = ((trend - avg30) / avg30) * 100;
+  if (Math.abs(diff) < 2) return '';
+  return diff > 0
+    ? `<span class="price-trend-up"> ▲ ${diff.toFixed(1)}%</span>`
+    : `<span class="price-trend-down"> ▼ ${Math.abs(diff).toFixed(1)}%</span>`;
+}
+
+async function renderCardPrice(card) {
+  const el = document.getElementById('price-block');
+  if (!el) return;
+
+  // Use already-loaded pricing if available
+  let pricing = card.pricing;
+
+  // Otherwise fetch the full card detail (already done in openModal, but just in case)
+  if (!pricing) {
+    try {
+      const res = await fetch(`${API}/cards/${encodeURIComponent(card.id)}`);
+      if (res.ok) {
+        const data = await res.json();
+        pricing = data.pricing;
+      }
+    } catch(e) {}
+  }
+
+  if (!el.isConnected) return; // modal closed already
+
+  const cm = pricing?.cardmarket;
+
+  if (!cm) {
+    el.innerHTML = '<div class="price-na">Prix non disponible sur Cardmarket</div>';
+    return;
+  }
+
+  const updatedStr = cm.updated
+    ? new Date(cm.updated).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' })
+    : '';
+
+  // Choose holo if both exist and differ
+  const hasHolo = cm['trend-holo'] != null;
+  const trend  = hasHolo ? cm['trend-holo']  : cm.trend;
+  const low    = hasHolo ? cm['low-holo']    : cm.low;
+  const avg30  = hasHolo ? cm['avg30-holo']  : cm.avg30;
+  const avg7   = hasHolo ? cm['avg7-holo']   : cm.avg7;
+  const avg1   = hasHolo ? cm['avg1-holo']   : cm.avg1;
+
+  el.innerHTML = `
+    <div class="price-block-header">
+      <span class="price-source">Cardmarket (EUR)</span>
+      ${updatedStr ? `<span class="price-updated">màj ${updatedStr}</span>` : ''}
+    </div>
+    <div class="price-main">
+      <div class="price-tile highlight">
+        <div class="price-tile-label">Tendance</div>
+        <div class="price-tile-value">${fmtEur(trend)}${trendArrow(trend, avg30)}</div>
+      </div>
+      <div class="price-tile">
+        <div class="price-tile-label">Prix bas</div>
+        <div class="price-tile-value">${fmtEur(low)}</div>
+      </div>
+    </div>
+    <div class="price-history">
+      <span class="price-hist-item">24h <b>${fmtEur(avg1)}</b></span>
+      <span class="price-hist-item">7j <b>${fmtEur(avg7)}</b></span>
+      <span class="price-hist-item">30j <b>${fmtEur(avg30)}</b></span>
+      ${hasHolo ? '<span class="price-hist-item" style="color:var(--accent2);font-size:10px">Holo</span>' : ''}
+    </div>
+  `;
+}
+
 async function openModal(card, index = filtered.findIndex(c => c.id === card.id)) {
   currentModalIndex = index >= 0 ? index : currentModalIndex;
   try {
@@ -1236,6 +1396,9 @@ async function openModal(card, index = filtered.findIndex(c => c.id === card.id)
       <button class="modal-coll-btn ${ownedSet.has(card.id) ? 'active-owned' : ''}" id="modal-btn-owned">✦ En collection</button>
       <button class="modal-coll-btn ${wantedSet.has(card.id) ? 'active-wanted' : ''}" id="modal-btn-wanted">⊕ À obtenir</button>
     </div>
+    <div class="price-block" id="price-block">
+      <div class="price-loading">Chargement du prix…</div>
+    </div>
     <div class="modal-row"><span class="key">Extension</span><span class="val">${escapeHtml(set)}</span></div>
     <div class="modal-row"><span class="key">Série</span><span class="val">${escapeHtml(series)}</span></div>
     <div class="modal-row"><span class="key">Numéro</span><span class="val">${escapeHtml(num)}</span></div>
@@ -1243,6 +1406,9 @@ async function openModal(card, index = filtered.findIndex(c => c.id === card.id)
     <div class="modal-row"><span class="key">Type(s)</span><span class="val">${escapeHtml(types)}</span></div>
     <div class="modal-row"><span class="key">PV</span><span class="val">${escapeHtml(hp)}</span></div>
   `;
+
+  // Fetch & render Cardmarket pricing (EUR)
+  renderCardPrice(card);
 
   const syncModalBtns = (id) => {
     const bo = document.getElementById('modal-btn-owned');
