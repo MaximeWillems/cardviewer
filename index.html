@@ -1349,16 +1349,16 @@ const TCGDEX_TO_CM_CODE = {
 };
 
 function buildCardmarketSearchUrl(card) {
-  // Use the EN card name (from card.name which is already EN in our API calls)
-  const name = (card.name || '').trim();
-  // Get set code: try mapping, fallback to set id uppercased
+  // Prefer EN name (fetched async), fallback to whatever name we have
+  const name = (card.nameEn || card.name || '').trim();
   const setId = card.set?.id || '';
   const setCode = TCGDEX_TO_CM_CODE[setId] || setId.toUpperCase();
   const localId = card.localId || '';
 
-  // Build search query: "Gastly TEF 177"
+  // "Team Rocket's Houndoom DRI 191" → Cardmarket finds it immediately
   const query = [name, setCode, localId].filter(Boolean).join(' ');
-  return 'https://www.cardmarket.com/fr/Pokemon/Products/Search?searchString=' + encodeURIComponent(query);
+  // language=2 = French cards filter
+  return 'https://www.cardmarket.com/fr/Pokemon/Products/Search?searchString=' + encodeURIComponent(query) + '&language=2';
 }
 
 function buildCmButton(card) {
@@ -1375,10 +1375,19 @@ async function renderCardPrice(card) {
   // Use already-loaded pricing if available
   let pricing = card.pricing;
 
-  // Otherwise fetch the full card detail (already done in openModal, but just in case)
-  if (!pricing) {
+  // Always fetch EN version to get EN card name (for Cardmarket) + pricing if missing
+  if (!card.nameEn) {
     try {
-      const res = await fetch(`${API}/cards/${encodeURIComponent(card.id)}`);
+      const res = await fetch(`https://api.tcgdex.net/v2/en/cards/${encodeURIComponent(card.id)}`);
+      if (res.ok) {
+        const data = await res.json();
+        card.nameEn = data.name || card.name;
+        if (!pricing) pricing = data.pricing;
+      }
+    } catch(e) {}
+  } else if (!pricing) {
+    try {
+      const res = await fetch(`https://api.tcgdex.net/v2/en/cards/${encodeURIComponent(card.id)}`);
       if (res.ok) {
         const data = await res.json();
         pricing = data.pricing;
