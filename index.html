@@ -1446,7 +1446,8 @@ function buildCardmarketUrl(card) {
     return 'https://www.cardmarket.com/fr/Pokemon/Products/Singles/'
       + setMeta.slug
       + '?searchString=' + encodeURIComponent(name)
-      + '&language=2';
+      + '&language=2'
+      + '&sortBy=collectorsnumber_desc';
   }
 
   // Fallback: global search with name + set code + number
