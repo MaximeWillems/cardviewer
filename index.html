@@ -858,6 +858,14 @@
     <option value="rarity">Rareté</option>
     <option value="artist-count">Artistes les + prolifiques</option>
     <option value="artist-name">Artiste A-Z</option>
+    <optgroup label="── Prix saisis ──">
+      <option value="price-asc">Prix croissant</option>
+      <option value="price-desc">Prix décroissant</option>
+    </optgroup>
+    <optgroup label="── Prix marché ──">
+      <option value="market-asc">Prix marché croissant</option>
+      <option value="market-desc">Prix marché décroissant</option>
+    </optgroup>
   </select>
 </div>
 
@@ -873,6 +881,7 @@
   <button class="coll-filter-btn" id="filter-owned">✦ En collection</button>
   <button class="coll-filter-btn" id="filter-wanted">⊕ À obtenir</button>
   <span class="coll-stat" id="coll-stat"></span>
+  <button class="coll-filter-btn" id="btn-export" style="margin-left:auto">↗ Exporter la vue</button>
 </div>
 
 <div class="error-msg" id="error-msg">
@@ -1024,6 +1033,23 @@ function isAlt(rarity) {
   return rarity?.toLowerCase().includes('ultra rare') || false;
 }
 
+
+function getUserPriceValue(card) {
+  // Prefer owned price, then wanted price
+  for (const type of ['owned', 'wanted']) {
+    const d = getPriceData(card.id, type);
+    if (d.val && !isNaN(parseFloat(d.val))) return parseFloat(d.val);
+    if (d.min && !isNaN(parseFloat(d.min))) return parseFloat(d.min);
+  }
+  return Infinity;
+}
+
+function getMarketPriceValue(card) {
+  // card.apiPrice is set when the modal is opened (see renderCardPrice)
+  if (card.apiPrice != null && !isNaN(card.apiPrice)) return card.apiPrice;
+  return Infinity;
+}
+
 function getDexNumber(card) {
   return Array.isArray(card.dexId) && card.dexId.length ? Math.min(...card.dexId) : Number.MAX_SAFE_INTEGER;
 }
@@ -1058,6 +1084,10 @@ function sortCards(cards) {
         || getDexNumber(a) - getDexNumber(b)
         || collator.compare(a.name || '', b.name || '');
     }
+    if (currentSort === 'price-asc')    return getUserPriceValue(a) - getUserPriceValue(b) || collator.compare(a.name || '', b.name || '');
+    if (currentSort === 'price-desc')   return getUserPriceValue(b) - getUserPriceValue(a) || collator.compare(a.name || '', b.name || '');
+    if (currentSort === 'market-asc')   return getMarketPriceValue(a) - getMarketPriceValue(b) || collator.compare(a.name || '', b.name || '');
+    if (currentSort === 'market-desc')  return getMarketPriceValue(b) - getMarketPriceValue(a) || collator.compare(a.name || '', b.name || '');
     return getDexNumber(a) - getDexNumber(b)
       || collator.compare(a.name || '', b.name || '')
       || collator.compare(a.id || '', b.id || '');
@@ -1075,6 +1105,24 @@ function getSectionKey(card) {
   if (currentSort === 'name-asc' || currentSort === 'name-desc') {
     const first = (card.name || '#').trim().charAt(0).toUpperCase();
     return first.match(/[A-ZÀ-ÖØ-Ý]/) ? first : '#';
+  }
+  if (currentSort === 'price-asc' || currentSort === 'price-desc') {
+    const v = getUserPriceValue(card);
+    if (v === Infinity) return 'Sans prix saisi';
+    if (v < 5)  return '< 5 €';
+    if (v < 15) return '5 € – 15 €';
+    if (v < 30) return '15 € – 30 €';
+    if (v < 60) return '30 € – 60 €';
+    return '60 € +';
+  }
+  if (currentSort === 'market-asc' || currentSort === 'market-desc') {
+    const v = getMarketPriceValue(card);
+    if (v === Infinity) return 'Prix non consulté';
+    if (v < 5)  return '< 5 €';
+    if (v < 15) return '5 € – 15 €';
+    if (v < 30) return '15 € – 30 €';
+    if (v < 60) return '30 € – 60 €';
+    return '60 € +';
   }
   return '';
 }
@@ -1682,6 +1730,20 @@ async function renderCardPrice(card) {
   const avg7   = hasHolo ? cm['avg7-holo']   : cm.avg7;
   const avg1   = hasHolo ? cm['avg1-holo']   : cm.avg1;
 
+  // Store on card for price-sort + auto-fill user price if not set
+  if (trend != null && !isNaN(trend)) {
+    card.apiPrice = trend;
+    // Auto-fill owned or wanted price if not already set by user
+    for (const type of ['owned', 'wanted']) {
+      if ((type === 'owned' && ownedSet.has(card.id)) || (type === 'wanted' && wantedSet.has(card.id))) {
+        const existing = getPriceData(card.id, type);
+        if (!existing.val && !existing.min && !existing.max) {
+          setPriceData(card.id, type, { val: trend.toFixed(2), min: '', max: '' });
+        }
+      }
+    }
+  }
+
   el.innerHTML = `
     <div class="price-block-header">
       <span class="price-source">Cardmarket (EUR)</span>
@@ -1891,6 +1953,116 @@ function showToast(msg, type = 'ok') {
   if (_toastTimer) clearTimeout(_toastTimer);
   _toastTimer = setTimeout(() => { el.className = ''; }, 2200);
 }
+
+
+function generateExport() {
+  const cards = filtered; // current filtered + sorted view
+  if (!cards.length) { showToast('Aucune carte à exporter', 'info'); return; }
+
+  const rows = cards.map(c => {
+    const img    = c.image ? c.image + '/high.webp' : '';
+    const name   = c.name || '—';
+    const set    = c.set?.name || '';
+    const rarity = c.rarity || '';
+    const num    = c.localId || '';
+    const illus  = c.illustrator || '';
+    const ownedLabel  = ownedSet.has(c.id)  ? getPriceLabel(c.id, 'owned')  : '';
+    const wantedLabel = wantedSet.has(c.id) ? getPriceLabel(c.id, 'wanted') : '';
+    const apiLabel    = c.apiPrice != null ? fmtEur(c.apiPrice) : '';
+    const statusClass = ownedSet.has(c.id) ? 'owned' : wantedSet.has(c.id) ? 'wanted' : '';
+    const badgeHtml   = rarity.toLowerCase().includes('special illustration') ? '<span class="b sir">SIR</span>'
+                      : rarity.toLowerCase().includes('illustration')          ? '<span class="b ir">IR</span>'
+                      : c.rarityKind === 'promo'                               ? '<span class="b promo">PROMO</span>'
+                      : rarity.toLowerCase().includes('ultra rare')            ? '<span class="b alt">ALT</span>'
+                      : '';
+    const priceHtml = [
+      ownedLabel  ? `<span class="p own">${ownedLabel}</span>`   : '',
+      wantedLabel ? `<span class="p want">${wantedLabel}</span>` : '',
+      (!ownedLabel && !wantedLabel && apiLabel) ? `<span class="p api">${apiLabel}</span>` : '',
+    ].filter(Boolean).join('');
+
+    return `
+      <div class="card ${statusClass}">
+        ${img ? `<img src="${img}" alt="" loading="lazy">` : '<div class="no-img">?</div>'}
+        <div class="info">
+          ${badgeHtml}
+          <div class="name">${name}</div>
+          <div class="meta">${set}${num ? ' #'+num : ''}</div>
+          ${illus ? `<div class="artist">${illus}</div>` : ''}
+          ${priceHtml ? `<div class="prices">${priceHtml}</div>` : ''}
+        </div>
+      </div>`;
+  }).join('');
+
+  const title = document.title || 'Illusdex';
+  const filterDesc = (() => {
+    const parts = [];
+    if (collectionFilter === 'owned')  parts.push('En collection');
+    if (collectionFilter === 'wanted') parts.push('À obtenir');
+    if (collectionFilter === 'both')   parts.push('En collection + À obtenir');
+    return parts.join(' · ') || 'Toutes les cartes';
+  })();
+
+  const html = `<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>${title} — Export</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=DM+Sans:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:#0d0d0f;color:#f0f0ee;font-family:'DM Sans',sans-serif;padding:1.5rem}
+  h1{font-family:'Syne',sans-serif;font-size:1.4rem;font-weight:800;margin-bottom:.25rem}
+  .sub{font-size:12px;color:#888;margin-bottom:1.5rem}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:10px}
+  .card{background:#16161a;border:1px solid rgba(255,255,255,.07);border-radius:10px;overflow:hidden;break-inside:avoid}
+  .card.owned{border-color:rgba(200,240,96,.45)}
+  .card.wanted{border-color:rgba(96,160,240,.45)}
+  .card img{width:100%;aspect-ratio:3/4;object-fit:cover;display:block}
+  .no-img{width:100%;aspect-ratio:3/4;background:#1e1e24;display:flex;align-items:center;justify-content:center;font-size:2rem;color:#444}
+  .info{padding:6px 8px 8px;position:relative}
+  .name{font-family:'Syne',sans-serif;font-size:11px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:16px}
+  .meta{font-size:9px;color:#888;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .artist{font-size:9px;color:#666;margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .b{position:absolute;top:5px;left:6px;font-size:8px;font-weight:700;padding:2px 5px;border-radius:100px;font-family:'Syne',sans-serif}
+  .b.ir   {background:rgba(200,240,96,.2);color:#c8f060;border:1px solid rgba(200,240,96,.35)}
+  .b.sir  {background:rgba(96,240,200,.2);color:#60f0c8;border:1px solid rgba(96,240,200,.35)}
+  .b.alt  {background:rgba(240,160,96,.2);color:#f0a060;border:1px solid rgba(240,160,96,.35)}
+  .b.promo{background:rgba(200,140,255,.2);color:#c88cff;border:1px solid rgba(200,140,255,.35)}
+  .prices{display:flex;gap:4px;flex-wrap:wrap;margin-top:4px}
+  .p{font-size:9px;font-weight:700;font-family:'Syne',sans-serif;padding:1px 5px;border-radius:100px}
+  .p.own {background:rgba(200,240,96,.12);color:#c8f060}
+  .p.want{background:rgba(96,160,240,.12);color:#60a0f0}
+  .p.api {background:rgba(255,255,255,.06);color:#aaa}
+  @media print{
+    body{padding:.5cm;background:#fff!important;color:#000!important}
+    .card{border:1px solid #ddd!important;background:#fff!important}
+    .name,.meta,.artist{color:#000!important}
+    .sub{color:#666!important}
+  }
+</style>
+</head>
+<body>
+<h1>Illusdex — Export</h1>
+<div class="sub">${filterDesc} · ${cards.length} cartes · ${new Date().toLocaleDateString('fr-FR')}</div>
+<div class="grid">${rows}</div>
+<script>
+// Auto-retry lazy images that fail (CORS / not yet loaded)
+document.querySelectorAll('img[loading="lazy"]').forEach(img => {
+  img.onerror = () => { img.style.opacity = '.2'; };
+});
+<\/script>
+</body></html>`;
+
+  const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+  const url  = URL.createObjectURL(blob);
+  window.open(url, '_blank');
+  showToast(`↗ Export ouvert (${cards.length} cartes)`, 'info');
+}
+
+document.getElementById('btn-export').addEventListener('click', generateExport);
 
 fetchCards();
 updateCollStat();
