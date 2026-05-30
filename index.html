@@ -2000,11 +2000,8 @@ function showToast(msg, type = 'ok') {
 }
 
 
-function generateExport() {
-  const cards = filtered; // current filtered + sorted view
-  if (!cards.length) { showToast('Aucune carte à exporter', 'info'); return; }
-
-  const rows = cards.map(c => {
+function buildExportRows(cards) {
+  return cards.map(c => {
     const img    = c.image ? c.image + '/high.webp' : '';
     const name   = c.name || '—';
     const set    = c.set?.name || '';
@@ -2026,49 +2023,66 @@ function generateExport() {
       (!ownedLabel && !wantedLabel && apiLabel) ? `<span class="p api">${apiLabel}</span>` : '',
     ].filter(Boolean).join('');
 
-    return `
-      <div class="card ${statusClass}">
-        ${img ? `<img src="${img}" alt="" loading="lazy">` : '<div class="no-img">?</div>'}
-        <div class="info">
-          ${badgeHtml}
-          <div class="name">${name}</div>
-          <div class="meta">${set}${num ? ' #'+num : ''}</div>
-          ${illus ? `<div class="artist">${illus}</div>` : ''}
-          ${priceHtml ? `<div class="prices">${priceHtml}</div>` : ''}
-        </div>
-      </div>`;
+    return `<div class="card ${statusClass}" data-img="${img}">
+      ${img ? `<img src="${img}" alt="" crossorigin="anonymous">` : '<div class="no-img">?</div>'}
+      <div class="info">
+        ${badgeHtml}
+        <div class="name">${name}</div>
+        <div class="meta">${set}${num ? ' #'+num : ''}</div>
+        ${illus ? `<div class="artist">${illus}</div>` : ''}
+        ${priceHtml ? `<div class="prices">${priceHtml}</div>` : ''}
+      </div>
+    </div>`;
   }).join('');
+}
 
-  const title = document.title || 'Illusdex';
-  const filterDesc = (() => {
-    const parts = [];
-    if (collectionFilter === 'owned')  parts.push('En collection');
-    if (collectionFilter === 'wanted') parts.push('À obtenir');
-    if (collectionFilter === 'both')   parts.push('En collection + À obtenir');
-    return parts.join(' · ') || 'Toutes les cartes';
-  })();
+function getFilterDesc() {
+  const parts = [];
+  if (collectionFilter === 'owned')  parts.push('En collection');
+  if (collectionFilter === 'wanted') parts.push('À obtenir');
+  if (collectionFilter === 'both')   parts.push('En collection + À obtenir');
+  return parts.join(' · ') || 'Toutes les cartes';
+}
+
+function generateExport() {
+  const cards = filtered;
+  if (!cards.length) { showToast('Aucune carte à exporter', 'info'); return; }
+
+  const rows       = buildExportRows(cards);
+  const filterDesc = getFilterDesc();
 
   const html = `<!DOCTYPE html>
 <html lang="fr">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>${title} — Export</title>
+<title>Illusdex — Export</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=DM+Sans:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"><\/script>
 <style>
   *{box-sizing:border-box;margin:0;padding:0}
   body{background:#0d0d0f;color:#f0f0ee;font-family:'DM Sans',sans-serif;padding:1.5rem}
-  h1{font-family:'Syne',sans-serif;font-size:1.4rem;font-weight:800;margin-bottom:.25rem}
-  .sub{font-size:12px;color:#888;margin-bottom:1.5rem}
-  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:10px}
+  .toolbar{display:flex;align-items:center;gap:12px;margin-bottom:1.25rem;flex-wrap:wrap}
+  h1{font-family:'Syne',sans-serif;font-size:1.3rem;font-weight:800}
+  .sub{font-size:11px;color:#888}
+  .btn{padding:8px 16px;border-radius:8px;border:1px solid rgba(255,255,255,.15);background:#1e1e24;color:#f0f0ee;font-family:'Syne',sans-serif;font-size:12px;font-weight:700;cursor:pointer;transition:all .18s;white-space:nowrap}
+  .btn:hover{background:#2a2a32;border-color:rgba(255,255,255,.3)}
+  .btn.primary{background:rgba(200,240,96,.12);border-color:rgba(200,240,96,.4);color:#c8f060}
+  .btn.primary:hover{background:rgba(200,240,96,.2)}
+  .btn:disabled{opacity:.45;cursor:not-allowed}
+  .progress{font-size:11px;color:#888;display:none}
+  .progress.show{display:block}
+  #size-slider{accent-color:#c8f060;width:120px;cursor:pointer}
+  label{font-size:11px;color:#888}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(var(--card-w,160px),1fr));gap:10px}
   .card{background:#16161a;border:1px solid rgba(255,255,255,.07);border-radius:10px;overflow:hidden;break-inside:avoid}
   .card.owned{border-color:rgba(200,240,96,.45)}
   .card.wanted{border-color:rgba(96,160,240,.45)}
   .card img{width:100%;aspect-ratio:3/4;object-fit:cover;display:block}
   .no-img{width:100%;aspect-ratio:3/4;background:#1e1e24;display:flex;align-items:center;justify-content:center;font-size:2rem;color:#444}
   .info{padding:6px 8px 8px;position:relative}
-  .name{font-family:'Syne',sans-serif;font-size:11px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:16px}
+  .name{font-family:'Syne',sans-serif;font-size:11px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:18px}
   .meta{font-size:9px;color:#888;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .artist{font-size:9px;color:#666;margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .b{position:absolute;top:5px;left:6px;font-size:8px;font-weight:700;padding:2px 5px;border-radius:100px;font-family:'Syne',sans-serif}
@@ -2082,21 +2096,74 @@ function generateExport() {
   .p.want{background:rgba(96,160,240,.12);color:#60a0f0}
   .p.api {background:rgba(255,255,255,.06);color:#aaa}
   @media print{
-    body{padding:.5cm;background:#fff!important;color:#000!important}
-    .card{border:1px solid #ddd!important;background:#fff!important}
-    .name,.meta,.artist{color:#000!important}
-    .sub{color:#666!important}
+    .toolbar{display:none!important}
+    body{padding:.5cm}
   }
 </style>
 </head>
 <body>
-<h1>Illusdex — Export</h1>
-<div class="sub">${filterDesc} · ${cards.length} cartes · ${new Date().toLocaleDateString('fr-FR')}</div>
-<div class="grid">${rows}</div>
+<div class="toolbar">
+  <div>
+    <h1>Illusdex</h1>
+    <div class="sub">${filterDesc} · ${cards.length} cartes · ${new Date().toLocaleDateString('fr-FR')}</div>
+  </div>
+  <label>Taille <input type="range" id="size-slider" min="100" max="240" value="160" step="10"></label>
+  <button class="btn primary" id="btn-img">⬇ Générer image PNG</button>
+  <span class="progress" id="progress">Chargement des images…</span>
+</div>
+<div class="grid" id="export-grid">${rows}</div>
 <script>
-// Auto-retry lazy images that fail (CORS / not yet loaded)
-document.querySelectorAll('img[loading="lazy"]').forEach(img => {
-  img.onerror = () => { img.style.opacity = '.2'; };
+// Live resize via CSS variable
+const slider = document.getElementById('size-slider');
+slider.addEventListener('input', () => {
+  document.querySelector('.grid').style.setProperty('--card-w', slider.value + 'px');
+});
+
+// Image error handling
+document.querySelectorAll('img').forEach(img => {
+  img.onerror = () => { img.style.opacity = '.15'; };
+});
+
+// PNG generation via html2canvas
+document.getElementById('btn-img').addEventListener('click', async () => {
+  const btn = document.getElementById('btn-img');
+  const prog = document.getElementById('progress');
+  btn.disabled = true;
+  btn.textContent = '⏳ En cours…';
+  prog.classList.add('show');
+  prog.textContent = 'Chargement des images…';
+
+  // Wait for all images to load
+  const imgs = [...document.querySelectorAll('#export-grid img')];
+  await Promise.all(imgs.map(img => new Promise(res => {
+    if (img.complete) return res();
+    img.onload = res; img.onerror = res;
+  })));
+
+  prog.textContent = 'Rendu en cours…';
+  try {
+    const grid = document.getElementById('export-grid');
+    const canvas = await html2canvas(grid, {
+      backgroundColor: '#0d0d0f',
+      scale: 2,
+      useCORS: true,
+      allowTaint: false,
+      logging: false,
+      windowWidth: grid.scrollWidth,
+      windowHeight: grid.scrollHeight,
+    });
+    prog.textContent = 'Téléchargement…';
+    const link = document.createElement('a');
+    link.download = 'illusdex-export.png';
+    link.href = canvas.toDataURL('image/png');
+    link.click();
+    prog.textContent = '✓ Image téléchargée !';
+    setTimeout(() => { prog.classList.remove('show'); }, 3000);
+  } catch(e) {
+    prog.textContent = '⚠ Erreur : ' + e.message;
+  }
+  btn.disabled = false;
+  btn.textContent = '⬇ Générer image PNG';
 });
 <\/script>
 </body></html>`;
