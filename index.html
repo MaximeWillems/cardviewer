@@ -286,17 +286,7 @@
     text-overflow: ellipsis;
   }
 
-  .card-badge {
-    position: absolute;
-    top: 8px;
-    right: 8px;
-    font-size: 10px;
-    font-weight: 600;
-    padding: 3px 7px;
-    border-radius: 100px;
-    font-family: 'Syne', sans-serif;
-    letter-spacing: 0.04em;
-  }
+  /* .card-badge moved to collection section */
   .badge-ir  { background: rgba(200,240,96,0.2);  color: var(--accent);  border: 1px solid rgba(200,240,96,0.35); }
   .badge-sir { background: rgba(96,240,200,0.2);  color: var(--accent2); border: 1px solid rgba(96,240,200,0.35); }
   .badge-alt { background: rgba(240,160,96,0.2); color: #f0a060; border: 1px solid rgba(240,160,96,0.35); }
@@ -528,51 +518,117 @@
     display: none;
   }
 
-  .card-actions {
-    position: absolute;
-    bottom: 44px;
-    left: 0;
-    right: 0;
-    display: flex;
-    opacity: 0;
-    transition: opacity 0.18s;
-    pointer-events: none;
-  }
-  .card:hover .card-actions,
-  .card.owned .card-actions,
-  .card.wanted .card-actions { opacity: 1; pointer-events: all; }
-
-  .card-action-btn {
-    flex: 1;
-    padding: 6px 0;
-    font-size: 11px;
-    font-family: 'Syne', sans-serif;
-    font-weight: 700;
-    letter-spacing: 0.03em;
-    border: none;
-    cursor: pointer;
-    transition: background 0.15s, color 0.15s;
-    background: rgba(13,13,15,0.88);
-    color: var(--muted);
-  }
-  .card-action-btn:hover { color: var(--text); background: rgba(30,30,36,0.95); }
-  .card-action-btn.active-owned  { background: rgba(200,240,96,0.18); color: var(--accent); }
-  .card-action-btn.active-wanted { background: rgba(96,160,240,0.18); color: #60a0f0; }
+  /* card-actions: supprimés de la grille, gardés uniquement dans la modale */
+  .card-actions { display: none !important; }
+  .card-status-dot { display: none !important; }
 
   .card.owned  { border-color: rgba(200,240,96,0.45); }
   .card.wanted { border-color: rgba(96,160,240,0.45); }
+  .card.owned.wanted { border-color: rgba(200,240,96,0.45); box-shadow: inset 3px 0 0 #60a0f0; }
 
-  .card-status-dot {
+  /* Prix affiché sur la carte */
+  .card-price-tag {
     position: absolute;
-    bottom: 8px;
-    right: 8px;
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
+    bottom: 36px;
+    left: 0; right: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+  }
+  .card-price-pill {
+    background: rgba(13,13,15,0.82);
+    border: 1px solid rgba(255,255,255,0.1);
+    backdrop-filter: blur(4px);
+    border-radius: 100px;
+    font-family: 'Syne', sans-serif;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 3px 9px;
+    color: var(--text);
     display: none;
   }
-  .card.owned  .card-status-dot { display: block; background: var(--accent); }
-  .card.wanted .card-status-dot { display: block; background: #60a0f0; }
+  .card.owned  .card-price-pill.owned-price,
+  .card.wanted .card-price-pill.wanted-price { display: inline-block; }
+  .card-price-pill.owned-price  { color: var(--accent); }
+  .card-price-pill.wanted-price { color: #60a0f0; }
+
+  /* Badge — bottom-left sur la carte */
+  .card-badge {
+    position: absolute;
+    bottom: 36px;
+    left: 8px;
+    font-size: 10px;
+    font-weight: 600;
+    padding: 3px 7px;
+    border-radius: 100px;
+    font-family: 'Syne', sans-serif;
+    letter-spacing: 0.04em;
+  }
+
+  /* Price input in modal */
+  .price-input-wrap {
+    display: flex;
+    gap: 8px;
+    margin-top: 8px;
+    align-items: center;
+  }
+  .price-input-group {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .price-input-label {
+    font-size: 11px;
+    color: var(--muted);
+    font-weight: 500;
+  }
+  .price-input {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 13px;
+    padding: 7px 10px;
+    outline: none;
+    width: 100%;
+    transition: border-color 0.2s;
+  }
+  .price-input:focus { border-color: rgba(255,255,255,0.3); }
+  .price-input::placeholder { color: var(--muted); }
+  .price-input-save {
+    align-self: flex-end;
+    padding: 7px 14px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text);
+    font-family: 'Syne', sans-serif;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.18s;
+    white-space: nowrap;
+  }
+  .price-input-save:hover { border-color: rgba(255,255,255,0.3); background: var(--surface2); }
+  .price-input-section {
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px solid var(--border);
+    display: none;
+  }
+  .price-input-section.visible { display: block; }
+  .price-input-title {
+    font-size: 11px;
+    font-weight: 700;
+    font-family: 'Syne', sans-serif;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--muted);
+    margin-bottom: 6px;
+  }
 
   .collection-bar {
     max-width: 1200px;
@@ -840,22 +896,51 @@ let currentArtist = 'all';
 let currentSort = 'pokedex';
 let currentModalIndex = -1;
 let currentArtistCounts = new Map();
-let collectionFilter = 'all'; // 'all' | 'owned' | 'wanted'
+let collectionFilter = 'all'; // 'all' | 'owned' | 'wanted' | 'both'
 
 const LS_OWNED  = 'illusdex_owned';
 const LS_WANTED = 'illusdex_wanted';
+const LS_PRICES = 'illusdex_prices'; // { cardId: { owned: {val, min, max}, wanted: {val, min, max} } }
 let ownedSet  = new Set(JSON.parse(localStorage.getItem(LS_OWNED)  || '[]'));
 let wantedSet = new Set(JSON.parse(localStorage.getItem(LS_WANTED) || '[]'));
+let pricesMap = JSON.parse(localStorage.getItem(LS_PRICES) || '{}');
 
 function saveOwned()  { localStorage.setItem(LS_OWNED,  JSON.stringify([...ownedSet])); }
 function saveWanted() { localStorage.setItem(LS_WANTED, JSON.stringify([...wantedSet])); }
+function savePrices() { localStorage.setItem(LS_PRICES, JSON.stringify(pricesMap)); }
+
+function setPriceData(cardId, type, data) {
+  if (!pricesMap[cardId]) pricesMap[cardId] = {};
+  pricesMap[cardId][type] = data;
+  savePrices();
+  // Update card pill in grid if visible
+  const gridCard = document.querySelector(`.card[data-id="${cardId}"]`);
+  if (gridCard) updateCardPricePill(gridCard, cardId);
+}
+function getPriceData(cardId, type) {
+  return pricesMap[cardId]?.[type] || { val: '', min: '', max: '' };
+}
+function getPriceLabel(cardId, type) {
+  const d = getPriceData(cardId, type);
+  if (d.val) return fmtEur(parseFloat(d.val));
+  if (d.min && d.max) return `${fmtEur(parseFloat(d.min))}–${fmtEur(parseFloat(d.max))}`;
+  if (d.min) return `≥${fmtEur(parseFloat(d.min))}`;
+  if (d.max) return `≤${fmtEur(parseFloat(d.max))}`;
+  return '';
+}
+function updateCardPricePill(el, cardId) {
+  const ownedPill  = el.querySelector('.owned-price');
+  const wantedPill = el.querySelector('.wanted-price');
+  if (ownedPill)  ownedPill.textContent  = getPriceLabel(cardId, 'owned');
+  if (wantedPill) wantedPill.textContent = getPriceLabel(cardId, 'wanted');
+}
 
 function toggleOwned(id) {
-  if (ownedSet.has(id)) { ownedSet.delete(id); } else { ownedSet.add(id); wantedSet.delete(id); saveWanted(); }
+  if (ownedSet.has(id)) { ownedSet.delete(id); } else { ownedSet.add(id); }
   saveOwned(); updateCollStat();
 }
 function toggleWanted(id) {
-  if (wantedSet.has(id)) { wantedSet.delete(id); } else { wantedSet.add(id); ownedSet.delete(id); saveOwned(); }
+  if (wantedSet.has(id)) { wantedSet.delete(id); } else { wantedSet.add(id); }
   saveWanted(); updateCollStat();
 }
 function updateCollStat() {
@@ -865,8 +950,10 @@ function updateCollStat() {
   el.innerHTML = (o || w) ? `<b>${o}</b> en collection · <b>${w}</b> à obtenir` : '';
   const bo = document.getElementById('filter-owned');
   const bw = document.getElementById('filter-wanted');
-  if (bo) bo.className = 'coll-filter-btn' + (collectionFilter === 'owned'  ? ' active-owned'  : '');
-  if (bw) bw.className = 'coll-filter-btn' + (collectionFilter === 'wanted' ? ' active-wanted' : '');
+  const showOwned  = collectionFilter === 'owned'  || collectionFilter === 'both';
+  const showWanted = collectionFilter === 'wanted' || collectionFilter === 'both';
+  if (bo) bo.className = 'coll-filter-btn' + (showOwned  ? ' active-owned'  : '');
+  if (bw) bw.className = 'coll-filter-btn' + (showWanted ? ' active-wanted' : '');
 }
 
 const grid       = document.getElementById('grid');
@@ -1178,38 +1265,21 @@ function renderCards(cards, append = false, startIndex = 0) {
     const div  = document.createElement('div');
     div.className = 'card' + (isOwned ? ' owned' : '') + (isWanted ? ' wanted' : '');
     div.dataset.id = c.id;
+    const ownedLabel  = getPriceLabel(c.id, 'owned');
+    const wantedLabel = getPriceLabel(c.id, 'wanted');
     div.innerHTML = `
       ${getBadge(c.rarity, c.rarityKind)}
       ${img
         ? `<img class="card-img" src="${img}" alt="${escapeHtml(name)}" loading="lazy" onerror="handleImageError(this)">`
         : imagePlaceholder(name)}
-      <div class="card-actions">
-        <button class="card-action-btn ${isOwned ? 'active-owned' : ''}" data-action="owned">✦ Obtenue</button>
-        <button class="card-action-btn ${isWanted ? 'active-wanted' : ''}" data-action="wanted">⊕ Souhaitée</button>
+      <div class="card-price-tag">
+        <span class="card-price-pill owned-price">${ownedLabel}</span>
+        <span class="card-price-pill wanted-price">${wantedLabel}</span>
       </div>
-      <div class="card-status-dot"></div>
       <div class="card-body">
         <div class="card-name">${escapeHtml(name)}</div>
         <div class="card-meta">${escapeHtml(set)}</div>
       </div>`;
-    div.querySelector('[data-action="owned"]').addEventListener('click', e => {
-      e.stopPropagation();
-      toggleOwned(c.id);
-      const no = ownedSet.has(c.id), nw = wantedSet.has(c.id);
-      div.classList.toggle('owned', no); div.classList.toggle('wanted', nw);
-      e.currentTarget.className = 'card-action-btn' + (no ? ' active-owned' : '');
-      div.querySelector('[data-action="wanted"]').className = 'card-action-btn' + (nw ? ' active-wanted' : '');
-      if (collectionFilter !== 'all') applyFilters();
-    });
-    div.querySelector('[data-action="wanted"]').addEventListener('click', e => {
-      e.stopPropagation();
-      toggleWanted(c.id);
-      const no = ownedSet.has(c.id), nw = wantedSet.has(c.id);
-      div.classList.toggle('owned', no); div.classList.toggle('wanted', nw);
-      div.querySelector('[data-action="owned"]').className = 'card-action-btn' + (no ? ' active-owned' : '');
-      e.currentTarget.className = 'card-action-btn' + (nw ? ' active-wanted' : '');
-      if (collectionFilter !== 'all') applyFilters();
-    });
     div.addEventListener('click', () => openModal(c));
     frag.appendChild(div);
   });
@@ -1234,7 +1304,8 @@ function getBaseFilteredCards() {
     const typeMatch  = currentType === 'all' || (Array.isArray(c.types) && c.types.includes(currentType));
     const collMatch  = collectionFilter === 'all'
       || (collectionFilter === 'owned'  && ownedSet.has(c.id))
-      || (collectionFilter === 'wanted' && wantedSet.has(c.id));
+      || (collectionFilter === 'wanted' && wantedSet.has(c.id))
+      || (collectionFilter === 'both'   && (ownedSet.has(c.id) || wantedSet.has(c.id)));
     return nameMatch && rarityMatch && typeMatch && collMatch;
   });
 }
@@ -1632,21 +1703,62 @@ async function openModal(card, index = filtered.findIndex(c => c.id === card.id)
   document.getElementById('modal-media').innerHTML = img
     ? `<img class="modal-img" id="modal-img" src="${img}" alt="${escapeHtml(card.name || '')}" onerror="handleImageError(this)">`
     : imagePlaceholder(card.name || 'Carte', true);
+  const oPrices = getPriceData(card.id, 'owned');
+  const wPrices = getPriceData(card.id, 'wanted');
   document.getElementById('modal-info').innerHTML = `
     <div class="modal-position">${position}</div>
     <div class="modal-name">${escapeHtml(card.name || '—')}</div>
     <div style="margin:0.5rem 0 0.75rem;">
-      ${getBadge(rarity, card.rarityKind)}
-      <span style="font-size:13px;color:var(--muted);margin-left:4px">${escapeHtml(rarity)}</span>
+      <span style="font-size:13px;color:var(--muted)">${escapeHtml(rarity)}</span>
     </div>
     <div class="modal-collection-btns">
       <button class="modal-coll-btn ${ownedSet.has(card.id) ? 'active-owned' : ''}" id="modal-btn-owned">✦ En collection</button>
       <button class="modal-coll-btn ${wantedSet.has(card.id) ? 'active-wanted' : ''}" id="modal-btn-wanted">⊕ À obtenir</button>
     </div>
+    <div class="price-input-section ${ownedSet.has(card.id) ? 'visible' : ''}" id="price-section-owned">
+      <div class="price-input-title">Prix payé / estimé</div>
+      <div class="price-input-wrap">
+        <div class="price-input-group">
+          <div class="price-input-label">Valeur fixe (€)</div>
+          <input class="price-input" id="pi-owned-val" type="number" min="0" step="0.01" placeholder="ex: 12.50" value="${escapeHtml(oPrices.val)}">
+        </div>
+        <div class="price-input-group">
+          <div class="price-input-label">Min (€)</div>
+          <input class="price-input" id="pi-owned-min" type="number" min="0" step="0.01" placeholder="min" value="${escapeHtml(oPrices.min)}">
+        </div>
+        <div class="price-input-group">
+          <div class="price-input-label">Max (€)</div>
+          <input class="price-input" id="pi-owned-max" type="number" min="0" step="0.01" placeholder="max" value="${escapeHtml(oPrices.max)}">
+        </div>
+        <button class="price-input-save" id="pi-owned-save">OK</button>
+      </div>
+    </div>
+    <div class="price-input-section ${wantedSet.has(card.id) ? 'visible' : ''}" id="price-section-wanted">
+      <div class="price-input-title">Budget cible</div>
+      <div class="price-input-wrap">
+        <div class="price-input-group">
+          <div class="price-input-label">Valeur fixe (€)</div>
+          <input class="price-input" id="pi-wanted-val" type="number" min="0" step="0.01" placeholder="ex: 8.00" value="${escapeHtml(wPrices.val)}">
+        </div>
+        <div class="price-input-group">
+          <div class="price-input-label">Min (€)</div>
+          <input class="price-input" id="pi-wanted-min" type="number" min="0" step="0.01" placeholder="min" value="${escapeHtml(wPrices.min)}">
+        </div>
+        <div class="price-input-group">
+          <div class="price-input-label">Max (€)</div>
+          <input class="price-input" id="pi-wanted-max" type="number" min="0" step="0.01" placeholder="max" value="${escapeHtml(wPrices.max)}">
+        </div>
+        <button class="price-input-save" id="pi-wanted-save">OK</button>
+      </div>
+    </div>
     <div class="price-block" id="price-block">
       <div class="price-loading">Chargement du prix…</div>
     </div>
     <div class="modal-row"><span class="key">Extension</span><span class="val">${escapeHtml(set)}</span></div>
+    <div class="modal-row" style="margin-top:2px;">
+      <span class="key">Rareté</span>
+      <span class="val" style="display:flex;align-items:center;gap:6px;">${getBadge(rarity, card.rarityKind)}</span>
+    </div>
     <div class="modal-row"><span class="key">Série</span><span class="val">${escapeHtml(series)}</span></div>
     <div class="modal-row"><span class="key">Numéro</span><span class="val">${escapeHtml(num)}</span></div>
     <div class="modal-row"><span class="key">Illustrateur</span><span class="val">${escapeHtml(illus)}</span></div>
@@ -1663,14 +1775,16 @@ async function openModal(card, index = filtered.findIndex(c => c.id === card.id)
     if (!bo || !bw) return;
     bo.className = 'modal-coll-btn' + (ownedSet.has(id)  ? ' active-owned'  : '');
     bw.className = 'modal-coll-btn' + (wantedSet.has(id) ? ' active-wanted' : '');
+    // Show/hide price input sections
+    const so = document.getElementById('price-section-owned');
+    const sw = document.getElementById('price-section-wanted');
+    if (so) so.classList.toggle('visible', ownedSet.has(id));
+    if (sw) sw.classList.toggle('visible', wantedSet.has(id));
+    // Update grid card classes
     const gridCard = document.querySelector(`.card[data-id="${id}"]`);
     if (gridCard) {
       gridCard.classList.toggle('owned',  ownedSet.has(id));
       gridCard.classList.toggle('wanted', wantedSet.has(id));
-      const ab = gridCard.querySelector('[data-action="owned"]');
-      const wb = gridCard.querySelector('[data-action="wanted"]');
-      if (ab) ab.className = 'card-action-btn' + (ownedSet.has(id)  ? ' active-owned'  : '');
-      if (wb) wb.className = 'card-action-btn' + (wantedSet.has(id) ? ' active-wanted' : '');
     }
   };
   document.getElementById('modal-btn-owned').addEventListener('click', () => {
@@ -1680,6 +1794,22 @@ async function openModal(card, index = filtered.findIndex(c => c.id === card.id)
   document.getElementById('modal-btn-wanted').addEventListener('click', () => {
     toggleWanted(card.id); syncModalBtns(card.id);
     if (collectionFilter !== 'all') applyFilters();
+  });
+
+  // Price save buttons
+  document.getElementById('pi-owned-save')?.addEventListener('click', () => {
+    setPriceData(card.id, 'owned', {
+      val: document.getElementById('pi-owned-val').value,
+      min: document.getElementById('pi-owned-min').value,
+      max: document.getElementById('pi-owned-max').value,
+    });
+  });
+  document.getElementById('pi-wanted-save')?.addEventListener('click', () => {
+    setPriceData(card.id, 'wanted', {
+      val: document.getElementById('pi-wanted-val').value,
+      min: document.getElementById('pi-wanted-min').value,
+      max: document.getElementById('pi-wanted-max').value,
+    });
   });
 
   modalOverlay.classList.add('open');
@@ -1707,11 +1837,17 @@ document.addEventListener('keydown', e => {
 });
 
 document.getElementById('filter-owned').addEventListener('click', () => {
-  collectionFilter = collectionFilter === 'owned' ? 'all' : 'owned';
+  if (collectionFilter === 'all')     collectionFilter = 'owned';
+  else if (collectionFilter === 'owned')  collectionFilter = 'all';
+  else if (collectionFilter === 'wanted') collectionFilter = 'both';
+  else if (collectionFilter === 'both')   collectionFilter = 'wanted';
   updateCollStat(); applyFilters(true);
 });
 document.getElementById('filter-wanted').addEventListener('click', () => {
-  collectionFilter = collectionFilter === 'wanted' ? 'all' : 'wanted';
+  if (collectionFilter === 'all')     collectionFilter = 'wanted';
+  else if (collectionFilter === 'wanted') collectionFilter = 'all';
+  else if (collectionFilter === 'owned')  collectionFilter = 'both';
+  else if (collectionFilter === 'both')   collectionFilter = 'owned';
   updateCollStat(); applyFilters(true);
 });
 
