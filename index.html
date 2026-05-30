@@ -1324,12 +1324,48 @@ function trendArrow(trend, avg30) {
 }
 
 
+// Map TCGdex set IDs to Cardmarket/PTCGo set codes (used in search)
+const TCGDEX_TO_CM_CODE = {
+  // Scarlet & Violet
+  'sv1':'SVI','sv2':'PAL','sv3':'OBF','sv3pt5':'MEW','sv4':'PAR',
+  'sv4pt5':'PAF','sv5':'TEF','sv6':'TWM','sv6pt5':'SFA','sv7':'SCR',
+  'sv8':'SSP','sv8pt5':'PRE','sv9':'JTG','sv9pt5':'DRI',
+  // Sword & Shield
+  'swsh1':'SSH','swsh2':'RCL','swsh3':'DAA','swsh3pt5':'CPA',
+  'swsh4':'VIV','swsh4pt5':'SHF','swsh5':'BST','swsh6':'CRE',
+  'swsh7':'EVS','swsh7pt5':'CEL','swsh8':'FST','swsh9':'BRS',
+  'swsh10':'ASR','swsh10pt5':'PGO','swsh11':'LOR','swsh12':'SIT',
+  'swsh12pt5':'CRZ',
+  // Sun & Moon
+  'sm1':'SUM','sm2':'GRI','sm3':'BUS','sm3pt5':'SLG','sm4':'CIN',
+  'sm5':'UPR','sm6':'FLI','sm7':'CES','sm7pt5':'DRM','sm8':'LOT',
+  'sm9':'TEU','sm10':'UNB','sm11':'UNM','sm11pt5':'HIF','sm12':'CEC',
+  // XY
+  'xy1':'XY','xy2':'FLF','xy3':'FFI','xy4':'PHF','xy5':'PRC',
+  'xy6':'ROS','xy7':'AOR','xy8':'BKT','xy9':'BKP','xy10':'FCO',
+  'xy11':'STS','xy12':'EVO',
+  // Promos
+  'svp':'SVP','swshp':'SWSH','smp':'SM','xyp':'XY',
+};
+
+function buildCardmarketSearchUrl(card) {
+  // Use the EN card name (from card.name which is already EN in our API calls)
+  const name = (card.name || '').trim();
+  // Get set code: try mapping, fallback to set id uppercased
+  const setId = card.set?.id || '';
+  const setCode = TCGDEX_TO_CM_CODE[setId] || setId.toUpperCase();
+  const localId = card.localId || '';
+
+  // Build search query: "Gastly TEF 177"
+  const query = [name, setCode, localId].filter(Boolean).join(' ');
+  return 'https://www.cardmarket.com/fr/Pokemon/Products/Search?searchString=' + encodeURIComponent(query);
+}
+
 function buildCmButton(card) {
-  const url = buildCardmarketUrl(card);
-  return `<a href="${url}" target="_blank" rel="noopener" class="btn-cardmarket">
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
-    Voir sur Cardmarket
-  </a>`;
+  const url = buildCardmarketSearchUrl(card);
+  return `<a href="${url}" target="_blank" rel="noopener" class="btn-cardmarket">` +
+    `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>` +
+    `Voir sur Cardmarket</a>`;
 }
 
 async function renderCardPrice(card) {
@@ -1395,28 +1431,6 @@ async function renderCardPrice(card) {
     </div>
   `;
   el.innerHTML += buildCmButton(card);
-}
-
-
-function buildCardmarketUrl(card) {
-  // Cardmarket URL format:
-  // https://www.cardmarket.com/fr/Pokemon/Products/Singles/{Set-Name}/{Card-Name}
-  // We slugify set name and card name: spaces → -, accents stripped, special chars removed
-  function slugify(str) {
-    return str
-      .normalize('NFD').replace(/[̀-ͯ]/g, '') // strip accents
-      .replace(/[''`]/g, '')                             // apostrophes
-      .replace(/[^a-zA-Z0-9\s-]/g, '')                  // remove special chars
-      .trim()
-      .replace(/\s+/g, '-');                             // spaces to hyphens
-  }
-  const name = card.name || '';
-  const setName = card.set?.name || '';
-  if (!name || !setName) {
-    // Fallback: search page
-    return `https://www.cardmarket.com/fr/Pokemon/Products/Search?searchString=${encodeURIComponent(name)}`;
-  }
-  return `https://www.cardmarket.com/fr/Pokemon/Products/Singles/${encodeURIComponent(slugify(setName))}/${encodeURIComponent(slugify(name))}`;
 }
 
 async function openModal(card, index = filtered.findIndex(c => c.id === card.id)) {
