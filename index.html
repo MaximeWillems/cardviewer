@@ -1406,9 +1406,9 @@ const CM_SETS = {
   'xy11':     { code:'STS',  slug:'Steam-Siege' },
   'xy12':     { code:'EVO',  slug:'Evolutions' },
   // ── Promos ────────────────────────────────────────────────────────────────
-  'svp':      { code:'SVP',  slug:'Scarlet-Violet-Black-Star-Promos' },
-  'swshp':    { code:'SWSH', slug:'Sword-Shield-Black-Star-Promos' },
-  'smp':      { code:'SM',   slug:'Sun-Moon-Black-Star-Promos' },
+  'svp':      { code:'SVP',  slug:'SV-Black-Star-Promos' },
+  'swshp':    { code:'SWSH', slug:'SWSH-Black-Star-Promos' },
+  'smp':      { code:'SM',   slug:'SM-Black-Star-Promos' },
   'xyp':      { code:'XY',   slug:'XY-Black-Star-Promos' },
 };
 
@@ -1436,24 +1436,21 @@ function slugifyName(str) {
 function buildCardmarketUrl(card) {
   const name = (card.nameEn || card.name || '').trim();
   const rawId = card.set?.id || '';
-  // Try direct key first, then normalized
   const setMeta = CM_SETS[rawId] || CM_SETS[normalizeSetId(rawId)];
   const localId = card.localId || '';
 
-  if (setMeta && name && localId) {
-    const nameSlug = slugifyName(name);
-    const suffix = setMeta.code + localId;
-    // Try direct link: /Singles/{SetSlug}/{NameSlug}-V2-{CODE}{num}
-    // V2 is Cardmarket's "2nd version" marker for cards sharing a name — we try V2 first (most illustration rares),
-    // fall through to V1 if not found. Since we can't know, we use the search with exact set + number.
-    // Best reliable approach: search with name + set code + number → unique result
-    const query = [name, setMeta.code, localId].join(' ');
+  if (setMeta && name) {
+    // Use set page filtered by card name — avoids the unsolvable V1/V2 problem.
+    // cardmarket.com/fr/Pokemon/Products/Singles/151?name=Squirtle&language=2
+    // This reliably shows all versions of the card in the set (usually 1-2 results).
     return 'https://www.cardmarket.com/fr/Pokemon/Products/Singles/'
-      + setMeta.slug + '/' + nameSlug + '-' + suffix + '?language=2';
+      + setMeta.slug
+      + '?name=' + encodeURIComponent(name)
+      + '&language=2';
   }
 
-  // Fallback: search page
-  const setCode = setMeta?.code || rawId.toUpperCase();
+  // Fallback: global search with name + set code + number
+  const setCode = setMeta?.code || rawId.replace(/[^a-z0-9]/gi, '').toUpperCase();
   const query = [name, setCode, localId].filter(Boolean).join(' ');
   return 'https://www.cardmarket.com/fr/Pokemon/Products/Search?searchString='
     + encodeURIComponent(query) + '&language=2';
