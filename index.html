@@ -817,6 +817,25 @@
   }
   #toast.toast-ok   { border-color: rgba(200,240,96,0.4); color: var(--accent); }
   #toast.toast-info { border-color: rgba(255,255,255,0.18); }
+
+  .modal-share {
+    position: absolute;
+    top: 1rem;
+    right: 3.75rem;
+    width: 36px;
+    height: 36px;
+    background: rgba(0,0,0,0.5);
+    border: none;
+    border-radius: 50%;
+    color: var(--text);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 2;
+    transition: background 0.18s;
+  }
+  .modal-share:hover { background: rgba(255,255,255,0.12); }
 </style>
 </head>
 <body>
@@ -902,6 +921,9 @@
 <div class="modal-overlay" id="modal-overlay">
   <button class="modal-nav modal-prev" id="modal-prev" aria-label="Carte précédente">‹</button>
   <div class="modal" id="modal">
+    <button class="modal-share" id="modal-share" aria-label="Partager">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+    </button>
     <button class="modal-close" id="modal-close" aria-label="Fermer">✕</button>
     <div class="modal-image-wrap">
       <div id="modal-media"></div>
@@ -1502,6 +1524,8 @@ sortSelect.addEventListener('change', e => {
 function closeModal() {
   modalOverlay.classList.remove('open');
   currentModalIndex = -1;
+  // Remove card fragment from URL without reloading
+  history.replaceState(null, '', window.location.pathname + window.location.search);
 }
 
 function getModalCard(offset) {
@@ -1857,8 +1881,29 @@ async function openModal(card, index = filtered.findIndex(c => c.id === card.id)
     <div class="modal-row"><span class="key">PV</span><span class="val">${escapeHtml(hp)}</span></div>
   `;
 
+  // Set URL fragment so this card can be shared / bookmarked
+  history.replaceState(null, '', '#card-' + encodeURIComponent(card.id));
+
   // Fetch & render Cardmarket pricing (EUR)
   renderCardPrice(card);
+
+  // Share button — copy current URL to clipboard
+  document.getElementById('modal-share').onclick = () => {
+    const url = window.location.href;
+    navigator.clipboard.writeText(url).then(() => {
+      showToast('🔗 Lien copié !', 'info');
+    }).catch(() => {
+      // Fallback for browsers without clipboard API
+      const ta = document.createElement('textarea');
+      ta.value = url;
+      ta.style.position = 'fixed'; ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+      showToast('🔗 Lien copié !', 'info');
+    });
+  };
 
   const syncModalBtns = (id) => {
     const bo = document.getElementById('modal-btn-owned');
@@ -2064,7 +2109,31 @@ document.querySelectorAll('img[loading="lazy"]').forEach(img => {
 
 document.getElementById('btn-export').addEventListener('click', generateExport);
 
-fetchCards();
+// Deep-link: if URL has #card-{id}, open that card once data is loaded
+function handleDeepLink() {
+  const hash = window.location.hash;
+  if (!hash.startsWith('#card-')) return;
+  const cardId = decodeURIComponent(hash.slice(6));
+  if (!cardId) return;
+  // allCards may already be populated; otherwise applyFilters will trigger via fetchCards
+  const card = allCards.find(c => c.id === cardId);
+  if (card) {
+    // Make sure it's in filtered (remove active filters temporarily if needed)
+    const inFiltered = filtered.find(c => c.id === cardId);
+    openModal(inFiltered || card, inFiltered ? filtered.indexOf(inFiltered) : -1);
+  }
+}
+
+// Listen for hash changes (e.g. browser back/forward)
+window.addEventListener('hashchange', () => {
+  const hash = window.location.hash;
+  if (!hash.startsWith('#card-')) { closeModal(); return; }
+  handleDeepLink();
+});
+
+fetchCards().then(() => {
+  handleDeepLink();
+});
 updateCollStat();
 </script>
 <div id="toast"></div>
