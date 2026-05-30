@@ -490,19 +490,33 @@
     display: flex;
     justify-content: center;
   }
-  #load-more {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    color: var(--text);
-    font-family: 'DM Sans', sans-serif;
-    font-size: 14px;
-    padding: 12px 32px;
-    cursor: pointer;
-    transition: all 0.2s;
-    display: none;
+  #load-more { display: none !important; }
+
+  .scroll-sentinel {
+    height: 80px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
   }
-  #load-more:hover { border-color: rgba(255,255,255,0.2); background: var(--surface2); }
+  .scroll-loader {
+    display: none;
+    gap: 6px;
+    align-items: center;
+  }
+  .scroll-loader.visible { display: flex; }
+  .scroll-loader span {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--muted);
+    animation: bounce 1.2s infinite ease-in-out;
+  }
+  .scroll-loader span:nth-child(2) { animation-delay: 0.2s; }
+  .scroll-loader span:nth-child(3) { animation-delay: 0.4s; }
+  @keyframes bounce {
+    0%, 80%, 100% { transform: scale(0.6); opacity: 0.4; }
+    40%            { transform: scale(1);   opacity: 1; }
+  }
 
   .error-msg {
     max-width: 1200px;
@@ -784,6 +798,11 @@
 
 <div class="load-more-wrap">
   <button id="load-more">Charger plus</button>
+</div>
+<div class="scroll-sentinel" id="scroll-sentinel">
+  <div class="scroll-loader" id="scroll-loader">
+    <span></span><span></span><span></span>
+  </div>
 </div>
 
 <div class="modal-overlay" id="modal-overlay">
@@ -1089,23 +1108,38 @@ async function fetchCardsByRarity({ label, kind }) {
 
 async function fetchPromoCards() {
   const allPromos = [];
+
   await Promise.all(PROMO_SET_IDS.map(async (setId) => {
     try {
       const res = await fetch(`${API}/sets/${setId}`);
       if (!res.ok) return;
       const setData = await res.json();
-      const cards = setData.cards || [];
-      cards.forEach(card => {
-        if (!card.image) return;
-        allPromos.push({
-          ...card,
-          set: { id: setData.id, name: setData.name, serie: setData.serie || null },
-          rarity: 'Promo',
-          rarityKind: 'promo',
-        });
-      });
+      const cardRefs = setData.cards || [];
+      const setMeta = { id: setData.id, name: setData.name, serie: setData.serie || null };
+
+      // Fetch full card details in batches of 10 to get image + illustrator
+      const BATCH = 10;
+      for (let i = 0; i < cardRefs.length; i += BATCH) {
+        const batch = cardRefs.slice(i, i + BATCH);
+        const results = await Promise.all(batch.map(async (ref) => {
+          // If image already in the set list summary, no need to re-fetch
+          if (ref.image) {
+            return { ...ref, set: setMeta, rarity: 'Promo', rarityKind: 'promo' };
+          }
+          // Otherwise fetch the full card to get the image
+          try {
+            const cr = await fetch(`${API}/cards/${encodeURIComponent(ref.id)}`);
+            if (!cr.ok) return null;
+            const cd = await cr.json();
+            if (!cd.image) return null; // still no image, skip
+            return { ...cd, set: setMeta, rarity: 'Promo', rarityKind: 'promo' };
+          } catch(e) { return null; }
+        }));
+        results.forEach(c => { if (c) allPromos.push(c); });
+      }
     } catch(e) {}
   }));
+
   return allPromos;
 }
 
@@ -1276,6 +1310,32 @@ loadMoreBtn.addEventListener('click', () => {
   loadMoreBtn.style.display = displayed < filtered.length ? 'block' : 'none';
 });
 
+// ── Infinite scroll via IntersectionObserver ───────────────────────────────
+const scrollLoader   = document.getElementById('scroll-loader');
+const scrollSentinel = document.getElementById('scroll-sentinel');
+
+function loadNextPage() {
+  if (displayed >= filtered.length) {
+    scrollLoader.classList.remove('visible');
+    return;
+  }
+  scrollLoader.classList.add('visible');
+  // Small timeout so the loader is visible before the render blocks the thread
+  setTimeout(() => {
+    const slice = filtered.slice(displayed, displayed + PAGE_SIZE);
+    displayed += slice.length;
+    renderCards(slice, true, displayed - slice.length);
+    scrollLoader.classList.remove('visible');
+    loadMoreBtn.style.display = displayed < filtered.length ? 'block' : 'none';
+  }, 80);
+}
+
+const infiniteObserver = new IntersectionObserver((entries) => {
+  if (entries[0].isIntersecting) loadNextPage();
+}, { rootMargin: '200px' });
+
+infiniteObserver.observe(scrollSentinel);
+
 typeFilter.addEventListener('change', e => {
   currentType = e.target.value;
   applyFilters(true);
@@ -1350,13 +1410,17 @@ const CM_SETS = {
   'sv8.5':    { code:'PRE',  slug:'Prismatic-Evolutions' },
   'sv08.5':   { code:'PRE',  slug:'Prismatic-Evolutions' },
   'sv9':      { code:'JTG',  slug:'Journey-Together' },
+  'sv10':     { code:'DRI',  slug:'Destined-Rivals' },
+  'sv10.0':   { code:'DRI',  slug:'Destined-Rivals' },
+  'sv10pt5':  { code:'BLK',  slug:'Black-Bolt' },
+  'sv10.5':   { code:'BLK',  slug:'Black-Bolt' },
+  'sv010.5':  { code:'BLK',  slug:'Black-Bolt' },
+  'sv11':     { code:'WHT',  slug:'White-Flare' },
+  'sv11.5':   { code:'WHT',  slug:'White-Flare' },
+  // Legacy aliases (in case TCGdex used sv9pt5 before renaming)
   'sv9pt5':   { code:'DRI',  slug:'Destined-Rivals' },
   'sv9.5':    { code:'DRI',  slug:'Destined-Rivals' },
   'sv09.5':   { code:'DRI',  slug:'Destined-Rivals' },
-  'sv10':     { code:'BLK',  slug:'Black-Bolt' },
-  'sv10.5':   { code:'WHT',  slug:'White-Flare' },
-  'sv10pt5':  { code:'WHT',  slug:'White-Flare' },
-  'sv10.5b':  { code:'BLK',  slug:'Black-Bolt' },
   // ── Sword & Shield ────────────────────────────────────────────────────────
   'swsh1':    { code:'SSH',  slug:'Sword-Shield' },
   'swsh2':    { code:'RCL',  slug:'Rebel-Clash' },
