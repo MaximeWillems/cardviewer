@@ -836,6 +836,29 @@
     transition: background 0.18s;
   }
   .modal-share:hover { background: rgba(255,255,255,0.12); }
+
+  .lang-toggle {
+    display: flex;
+    gap: 0;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+    flex-shrink: 0;
+  }
+  .lang-btn {
+    padding: 8px 13px;
+    font-size: 12px;
+    font-weight: 700;
+    font-family: 'Syne', sans-serif;
+    background: var(--surface);
+    color: var(--muted);
+    border: none;
+    cursor: pointer;
+    transition: all 0.15s;
+    letter-spacing: 0.04em;
+  }
+  .lang-btn:hover { color: var(--text); background: var(--surface2); }
+  .lang-btn.active { background: var(--surface2); color: var(--text); }
 </style>
 </head>
 <body>
@@ -886,6 +909,11 @@
       <option value="market-desc">Prix marché décroissant</option>
     </optgroup>
   </select>
+
+  <div class="lang-toggle">
+    <button class="lang-btn active" data-lang="fr">FR</button>
+    <button class="lang-btn" data-lang="en">EN</button>
+  </div>
 </div>
 
 <div class="stats-bar">
@@ -934,14 +962,27 @@
 </div>
 
 <script>
-const API = 'https://api.tcgdex.net/v2/fr';
+const API_BASE = 'https://api.tcgdex.net/v2';
 const PAGE_SIZE = 24;
-const RARITIES = [
-  { label: 'Illustration rare', kind: 'ir' },
-  { label: 'Illustration spéciale rare', kind: 'sir' },
-  { label: 'Ultra Rare', kind: 'alt' },
-  { label: 'Promo', kind: 'promo' },
-];
+
+const RARITIES_BY_LANG = {
+  fr: [
+    { label: 'Illustration rare',          kind: 'ir' },
+    { label: 'Illustration spéciale rare', kind: 'sir' },
+    { label: 'Ultra Rare',                 kind: 'alt' },
+    { label: 'Promo',                      kind: 'promo' },
+  ],
+  en: [
+    { label: 'Illustration Rare',          kind: 'ir' },
+    { label: 'Special Illustration Rare',  kind: 'sir' },
+    { label: 'Ultra Rare',                 kind: 'alt' },
+    { label: 'Promo',                      kind: 'promo' },
+  ],
+};
+
+let currentLang = localStorage.getItem('illusdex_lang') || 'fr';
+let API = API_BASE + '/' + currentLang;
+let RARITIES = RARITIES_BY_LANG[currentLang];
 
 // IDs de sets promos connus dans TCGdex (svp = Scarlet & Violet Promos, swshp = S&S Promos, etc.)
 const PROMO_SET_IDS = ['svp', 'swshp', 'smp', 'xyp', 'bwp'];
@@ -1361,6 +1402,8 @@ function renderCards(cards, append = false, startIndex = 0) {
     const set  = `${dex}${c.set?.name || c.rarity || ''}`;
     const isOwned  = ownedSet.has(c.id);
     const isWanted = wantedSet.has(c.id);
+    // Show EN name if lang=en and available
+    if (currentLang === 'en' && c.nameEn) name = c.nameEn;
     const div  = document.createElement('div');
     div.className = 'card' + (isOwned ? ' owned' : '') + (isWanted ? ' wanted' : '');
     div.dataset.id = c.id;
@@ -2003,7 +2046,7 @@ function showToast(msg, type = 'ok') {
 function buildExportRows(cards) {
   return cards.map(c => {
     const img    = c.image ? c.image + '/high.webp' : '';
-    const name   = c.name || '—';
+    const name   = (currentLang === 'en' && c.nameEn) ? c.nameEn : (c.name || '—');
     const set    = c.set?.name || '';
     const rarity = c.rarity || '';
     const num    = c.localId || '';
@@ -2108,6 +2151,7 @@ function generateExport() {
     <div class="sub">${filterDesc} · ${cards.length} cartes · ${new Date().toLocaleDateString('fr-FR')}</div>
   </div>
   <label>Taille <input type="range" id="size-slider" min="100" max="240" value="160" step="10"></label>
+  <button class="btn" id="btn-prices">💰 Cacher les prix</button>
   <button class="btn primary" id="btn-img">⬇ Générer image PNG</button>
   <span class="progress" id="progress">Chargement des images…</span>
 </div>
@@ -2117,6 +2161,16 @@ function generateExport() {
 const slider = document.getElementById('size-slider');
 slider.addEventListener('input', () => {
   document.querySelector('.grid').style.setProperty('--card-w', slider.value + 'px');
+});
+
+// Price toggle
+let pricesVisible = true;
+const priceStyle = document.createElement('style');
+document.head.appendChild(priceStyle);
+document.getElementById('btn-prices').addEventListener('click', function() {
+  pricesVisible = !pricesVisible;
+  priceStyle.textContent = pricesVisible ? '' : '.prices { display: none !important; }';
+  this.textContent = pricesVisible ? '💰 Cacher les prix' : '💰 Afficher les prix';
 });
 
 // Image error handling
@@ -2175,6 +2229,23 @@ document.getElementById('btn-img').addEventListener('click', async () => {
 }
 
 document.getElementById('btn-export').addEventListener('click', generateExport);
+
+// Language toggle
+document.querySelectorAll('.lang-btn').forEach(btn => {
+  if (btn.dataset.lang === currentLang) btn.classList.add('active');
+  else btn.classList.remove('active');
+
+  btn.addEventListener('click', () => {
+    if (btn.dataset.lang === currentLang) return;
+    currentLang = btn.dataset.lang;
+    API = API_BASE + '/' + currentLang;
+    RARITIES = RARITIES_BY_LANG[currentLang];
+    localStorage.setItem('illusdex_lang', currentLang);
+    document.querySelectorAll('.lang-btn').forEach(b => b.classList.toggle('active', b.dataset.lang === currentLang));
+    allCards = [];
+    fetchCards();
+  });
+});
 
 // Deep-link: if URL has #card-{id}, open that card once data is loaded
 function handleDeepLink() {
