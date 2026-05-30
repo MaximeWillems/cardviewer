@@ -692,6 +692,32 @@
   .price-trend-up   { color: #7af07a; }
   .price-trend-down { color: #f07a7a; }
   /* ── fin Prix ──────────────────────────────────────── */
+
+  .btn-cardmarket {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    width: 100%;
+    margin-top: 10px;
+    padding: 9px 14px;
+    border-radius: var(--radius);
+    border: 1px solid rgba(0, 115, 170, 0.45);
+    background: rgba(0, 115, 170, 0.1);
+    color: #4db8f0;
+    font-family: 'Syne', sans-serif;
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    cursor: pointer;
+    text-decoration: none;
+    transition: background 0.18s, border-color 0.18s;
+  }
+  .btn-cardmarket:hover {
+    background: rgba(0, 115, 170, 0.22);
+    border-color: rgba(0, 115, 170, 0.7);
+  }
+  .btn-cardmarket svg { flex-shrink: 0; }
 </style>
 </head>
 <body>
@@ -1297,6 +1323,15 @@ function trendArrow(trend, avg30) {
     : `<span class="price-trend-down"> ▼ ${Math.abs(diff).toFixed(1)}%</span>`;
 }
 
+
+function buildCmButton(card) {
+  const url = buildCardmarketUrl(card);
+  return `<a href="${url}" target="_blank" rel="noopener" class="btn-cardmarket">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+    Voir sur Cardmarket
+  </a>`;
+}
+
 async function renderCardPrice(card) {
   const el = document.getElementById('price-block');
   if (!el) return;
@@ -1320,7 +1355,8 @@ async function renderCardPrice(card) {
   const cm = pricing?.cardmarket;
 
   if (!cm) {
-    el.innerHTML = '<div class="price-na">Prix non disponible sur Cardmarket</div>';
+    el.innerHTML = '<div class="price-na">Prix non encore disponible</div>';
+  el.innerHTML += buildCmButton(card);
     return;
   }
 
@@ -1358,6 +1394,29 @@ async function renderCardPrice(card) {
       ${hasHolo ? '<span class="price-hist-item" style="color:var(--accent2);font-size:10px">Holo</span>' : ''}
     </div>
   `;
+  el.innerHTML += buildCmButton(card);
+}
+
+
+function buildCardmarketUrl(card) {
+  // Cardmarket URL format:
+  // https://www.cardmarket.com/fr/Pokemon/Products/Singles/{Set-Name}/{Card-Name}
+  // We slugify set name and card name: spaces → -, accents stripped, special chars removed
+  function slugify(str) {
+    return str
+      .normalize('NFD').replace(/[̀-ͯ]/g, '') // strip accents
+      .replace(/[''`]/g, '')                             // apostrophes
+      .replace(/[^a-zA-Z0-9\s-]/g, '')                  // remove special chars
+      .trim()
+      .replace(/\s+/g, '-');                             // spaces to hyphens
+  }
+  const name = card.name || '';
+  const setName = card.set?.name || '';
+  if (!name || !setName) {
+    // Fallback: search page
+    return `https://www.cardmarket.com/fr/Pokemon/Products/Search?searchString=${encodeURIComponent(name)}`;
+  }
+  return `https://www.cardmarket.com/fr/Pokemon/Products/Singles/${encodeURIComponent(slugify(setName))}/${encodeURIComponent(slugify(name))}`;
 }
 
 async function openModal(card, index = filtered.findIndex(c => c.id === card.id)) {
