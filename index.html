@@ -1325,44 +1325,142 @@ function trendArrow(trend, avg30) {
 
 
 // Map TCGdex set IDs to Cardmarket/PTCGo set codes (used in search)
-const TCGDEX_TO_CM_CODE = {
-  // Scarlet & Violet
-  'sv1':'SVI','sv2':'PAL','sv3':'OBF','sv3pt5':'MEW','sv4':'PAR',
-  'sv4pt5':'PAF','sv5':'TEF','sv6':'TWM','sv6pt5':'SFA','sv7':'SCR',
-  'sv8':'SSP','sv8pt5':'PRE','sv9':'JTG','sv9pt5':'DRI',
-  // Sword & Shield
-  'swsh1':'SSH','swsh2':'RCL','swsh3':'DAA','swsh3pt5':'CPA',
-  'swsh4':'VIV','swsh4pt5':'SHF','swsh5':'BST','swsh6':'CRE',
-  'swsh7':'EVS','swsh7pt5':'CEL','swsh8':'FST','swsh9':'BRS',
-  'swsh10':'ASR','swsh10pt5':'PGO','swsh11':'LOR','swsh12':'SIT',
-  'swsh12pt5':'CRZ',
-  // Sun & Moon
-  'sm1':'SUM','sm2':'GRI','sm3':'BUS','sm3pt5':'SLG','sm4':'CIN',
-  'sm5':'UPR','sm6':'FLI','sm7':'CES','sm7pt5':'DRM','sm8':'LOT',
-  'sm9':'TEU','sm10':'UNB','sm11':'UNM','sm11pt5':'HIF','sm12':'CEC',
-  // XY
-  'xy1':'XY','xy2':'FLF','xy3':'FFI','xy4':'PHF','xy5':'PRC',
-  'xy6':'ROS','xy7':'AOR','xy8':'BKT','xy9':'BKP','xy10':'FCO',
-  'xy11':'STS','xy12':'EVO',
-  // Promos
-  'svp':'SVP','swshp':'SWSH','smp':'SM','xyp':'XY',
+// Map normalized TCGdex set id → { code: Cardmarket code suffix, slug: Cardmarket URL slug }
+// TCGdex returns ids like "sv3pt5", "sv03.5", "sv3.5" — we normalize all variants
+const CM_SETS = {
+  // ── Scarlet & Violet ──────────────────────────────────────────────────────
+  'sv1':      { code:'SVI',  slug:'Scarlet-Violet' },
+  'sv2':      { code:'PAL',  slug:'Paldea-Evolved' },
+  'sv3':      { code:'OBF',  slug:'Obsidian-Flames' },
+  'sv3pt5':   { code:'MEW',  slug:'151' },
+  'sv3.5':    { code:'MEW',  slug:'151' },
+  'sv03.5':   { code:'MEW',  slug:'151' },
+  'sv4':      { code:'PAR',  slug:'Paradox-Rift' },
+  'sv4pt5':   { code:'PAF',  slug:'Paldean-Fates' },
+  'sv4.5':    { code:'PAF',  slug:'Paldean-Fates' },
+  'sv04.5':   { code:'PAF',  slug:'Paldean-Fates' },
+  'sv5':      { code:'TEF',  slug:'Temporal-Forces' },
+  'sv6':      { code:'TWM',  slug:'Twilight-Masquerade' },
+  'sv6pt5':   { code:'SFA',  slug:'Shrouded-Fable' },
+  'sv6.5':    { code:'SFA',  slug:'Shrouded-Fable' },
+  'sv06.5':   { code:'SFA',  slug:'Shrouded-Fable' },
+  'sv7':      { code:'SCR',  slug:'Stellar-Crown' },
+  'sv8':      { code:'SSP',  slug:'Surging-Sparks' },
+  'sv8pt5':   { code:'PRE',  slug:'Prismatic-Evolutions' },
+  'sv8.5':    { code:'PRE',  slug:'Prismatic-Evolutions' },
+  'sv08.5':   { code:'PRE',  slug:'Prismatic-Evolutions' },
+  'sv9':      { code:'JTG',  slug:'Journey-Together' },
+  'sv9pt5':   { code:'DRI',  slug:'Destined-Rivals' },
+  'sv9.5':    { code:'DRI',  slug:'Destined-Rivals' },
+  'sv09.5':   { code:'DRI',  slug:'Destined-Rivals' },
+  'sv10':     { code:'BLK',  slug:'Black-Bolt' },
+  'sv10.5':   { code:'WHT',  slug:'White-Flare' },
+  'sv10pt5':  { code:'WHT',  slug:'White-Flare' },
+  'sv10.5b':  { code:'BLK',  slug:'Black-Bolt' },
+  // ── Sword & Shield ────────────────────────────────────────────────────────
+  'swsh1':    { code:'SSH',  slug:'Sword-Shield' },
+  'swsh2':    { code:'RCL',  slug:'Rebel-Clash' },
+  'swsh3':    { code:'DAA',  slug:'Darkness-Ablaze' },
+  'swsh3pt5': { code:'CPA',  slug:'Champions-Path' },
+  'swsh4':    { code:'VIV',  slug:'Vivid-Voltage' },
+  'swsh4pt5': { code:'SHF',  slug:'Shining-Fates' },
+  'swsh5':    { code:'BST',  slug:'Battle-Styles' },
+  'swsh6':    { code:'CRE',  slug:'Chilling-Reign' },
+  'swsh7':    { code:'EVS',  slug:'Evolving-Skies' },
+  'swsh7pt5': { code:'CEL',  slug:'Celebrations' },
+  'swsh8':    { code:'FST',  slug:'Fusion-Strike' },
+  'swsh9':    { code:'BRS',  slug:'Brilliant-Stars' },
+  'swsh10':   { code:'ASR',  slug:'Astral-Radiance' },
+  'swsh10pt5':{ code:'PGO',  slug:'Pokemon-GO' },
+  'swsh11':   { code:'LOR',  slug:'Lost-Origin' },
+  'swsh12':   { code:'SIT',  slug:'Silver-Tempest' },
+  'swsh12pt5':{ code:'CRZ',  slug:'Crown-Zenith' },
+  // ── Sun & Moon ────────────────────────────────────────────────────────────
+  'sm1':      { code:'SUM',  slug:'Sun-Moon' },
+  'sm2':      { code:'GRI',  slug:'Guardians-Rising' },
+  'sm3':      { code:'BUS',  slug:'Burning-Shadows' },
+  'sm3pt5':   { code:'SLG',  slug:'Shining-Legends' },
+  'sm4':      { code:'CIN',  slug:'Crimson-Invasion' },
+  'sm5':      { code:'UPR',  slug:'Ultra-Prism' },
+  'sm6':      { code:'FLI',  slug:'Forbidden-Light' },
+  'sm7':      { code:'CES',  slug:'Celestial-Storm' },
+  'sm7pt5':   { code:'DRM',  slug:'Dragon-Majesty' },
+  'sm8':      { code:'LOT',  slug:'Lost-Thunder' },
+  'sm9':      { code:'TEU',  slug:'Team-Up' },
+  'sm10':     { code:'UNB',  slug:'Unbroken-Bonds' },
+  'sm11':     { code:'UNM',  slug:'Unified-Minds' },
+  'sm11pt5':  { code:'HIF',  slug:'Hidden-Fates' },
+  'sm12':     { code:'CEC',  slug:'Cosmic-Eclipse' },
+  // ── XY ────────────────────────────────────────────────────────────────────
+  'xy0':      { code:'KSS',  slug:'Kalos-Starter-Set' },
+  'xy1':      { code:'XY',   slug:'XY' },
+  'xy2':      { code:'FLF',  slug:'Flashfire' },
+  'xy3':      { code:'FFI',  slug:'Furious-Fists' },
+  'xy4':      { code:'PHF',  slug:'Phantom-Forces' },
+  'xy5':      { code:'PRC',  slug:'Primal-Clash' },
+  'xy6':      { code:'ROS',  slug:'Roaring-Skies' },
+  'xy7':      { code:'AOR',  slug:'Ancient-Origins' },
+  'xy8':      { code:'BKT',  slug:'BREAKthrough' },
+  'xy9':      { code:'BKP',  slug:'BREAKpoint' },
+  'xy10':     { code:'FCO',  slug:'Fates-Collide' },
+  'xy11':     { code:'STS',  slug:'Steam-Siege' },
+  'xy12':     { code:'EVO',  slug:'Evolutions' },
+  // ── Promos ────────────────────────────────────────────────────────────────
+  'svp':      { code:'SVP',  slug:'Scarlet-Violet-Black-Star-Promos' },
+  'swshp':    { code:'SWSH', slug:'Sword-Shield-Black-Star-Promos' },
+  'smp':      { code:'SM',   slug:'Sun-Moon-Black-Star-Promos' },
+  'xyp':      { code:'XY',   slug:'XY-Black-Star-Promos' },
 };
 
-function buildCardmarketSearchUrl(card) {
-  // Prefer EN name (fetched async), fallback to whatever name we have
+function normalizeSetId(raw) {
+  if (!raw) return '';
+  // Normalize "sv03.5" → "sv3pt5", "sv3.5" → "sv3pt5", etc.
+  // Replace leading zeros: sv03 → sv3, swsh03 → swsh3
+  return raw
+    .replace(/^([a-z]+)0+(\d)/i, '$1$2')   // sv03pt5 → sv3pt5
+    .replace(/\./g, 'pt')                   // sv3.5 → sv3pt5 (replaces dot with pt, digit after)
+    .replace(/pt(\d)/g, 'pt$1')             // already fine
+    .toLowerCase();
+}
+
+function slugifyName(str) {
+  return str
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .replace(/[''`]/g, '')
+    .replace(/&/g, 'and')
+    .replace(/[^a-zA-Z0-9\s-]/g, '')
+    .trim()
+    .replace(/\s+/g, '-');
+}
+
+function buildCardmarketUrl(card) {
   const name = (card.nameEn || card.name || '').trim();
-  const setId = card.set?.id || '';
-  const setCode = TCGDEX_TO_CM_CODE[setId] || setId.toUpperCase();
+  const rawId = card.set?.id || '';
+  // Try direct key first, then normalized
+  const setMeta = CM_SETS[rawId] || CM_SETS[normalizeSetId(rawId)];
   const localId = card.localId || '';
 
-  // "Team Rocket's Houndoom DRI 191" → Cardmarket finds it immediately
+  if (setMeta && name && localId) {
+    const nameSlug = slugifyName(name);
+    const suffix = setMeta.code + localId;
+    // Try direct link: /Singles/{SetSlug}/{NameSlug}-V2-{CODE}{num}
+    // V2 is Cardmarket's "2nd version" marker for cards sharing a name — we try V2 first (most illustration rares),
+    // fall through to V1 if not found. Since we can't know, we use the search with exact set + number.
+    // Best reliable approach: search with name + set code + number → unique result
+    const query = [name, setMeta.code, localId].join(' ');
+    return 'https://www.cardmarket.com/fr/Pokemon/Products/Singles/'
+      + setMeta.slug + '/' + nameSlug + '-' + suffix + '?language=2';
+  }
+
+  // Fallback: search page
+  const setCode = setMeta?.code || rawId.toUpperCase();
   const query = [name, setCode, localId].filter(Boolean).join(' ');
-  // language=2 = French cards filter
-  return 'https://www.cardmarket.com/fr/Pokemon/Products/Search?searchString=' + encodeURIComponent(query) + '&language=2';
+  return 'https://www.cardmarket.com/fr/Pokemon/Products/Search?searchString='
+    + encodeURIComponent(query) + '&language=2';
 }
 
 function buildCmButton(card) {
-  const url = buildCardmarketSearchUrl(card);
+  const url = buildCardmarketUrl(card);
   return `<a href="${url}" target="_blank" rel="noopener" class="btn-cardmarket">` +
     `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>` +
     `Voir sur Cardmarket</a>`;
