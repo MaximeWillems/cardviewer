@@ -1452,9 +1452,14 @@ function buildCardmarketUrl(card) {
 
   // Fallback: global search with name + set code + number
   const setCode = setMeta?.code || rawId.replace(/[^a-z0-9]/gi, '').toUpperCase();
-  const query = [name, setCode, localId].filter(Boolean).join(' ');
+  const query = [name, localId].filter(Boolean).join(' ');
+
+
+  console.log("setMeta : " + JSON.stringify(setMeta))
   return 'https://www.cardmarket.com/fr/Pokemon/Products/Search?searchString='
-    + encodeURIComponent(query) + '&language=2';
+    + encodeURIComponent(query) 
+    + '&language=2' 
+    + '&sortBy=collectorsnumber_desc';
 }
 
 function buildCmButton(card) {
