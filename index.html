@@ -3053,6 +3053,7 @@ document.getElementById('coll-sort').addEventListener('change', e => {
 // ── Selection toolbar ──────────────────────────────────────
 document.getElementById('btn-select-mode').addEventListener('click', () => {
   selectionMode = !selectionMode;
+  // Clear selection state without re-rendering
   selectedIds.clear();
   lastClickedId = null;
   const btn = document.getElementById('btn-select-mode');
@@ -3060,7 +3061,12 @@ document.getElementById('btn-select-mode').addEventListener('click', () => {
   btn.textContent = selectionMode ? '☑ Sélection active' : '☐ Sélection';
   document.getElementById('btn-select-all').style.display   = selectionMode ? '' : 'none';
   document.getElementById('btn-deselect-all').style.display = selectionMode ? '' : 'none';
-  renderCollGrid();
+  // Toggle selectable/selected classes on existing DOM cards — no image reload
+  document.querySelectorAll('#coll-grid .card').forEach(el => {
+    el.classList.toggle('selectable', selectionMode);
+    el.classList.remove('selected');
+  });
+  updateTotalsBar();
 });
 
 document.getElementById('btn-select-all').addEventListener('click', () => {
