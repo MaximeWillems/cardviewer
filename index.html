@@ -983,6 +983,166 @@
     text-transform: uppercase;
     pointer-events: none;
   }
+
+  /* ── Nav tabs ───────────────────────────────── */
+  .app-nav {
+    display: flex;
+    gap: 0;
+    border-bottom: 1px solid var(--border);
+    margin-top: 1.5rem;
+  }
+  .nav-tab {
+    padding: 10px 22px;
+    font-family: 'Syne', sans-serif;
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    color: var(--muted);
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    cursor: pointer;
+    transition: all 0.18s;
+    margin-bottom: -1px;
+  }
+  .nav-tab:hover { color: var(--text); }
+  .nav-tab.active { color: var(--text); border-bottom-color: var(--accent); }
+
+  /* ── Collection view ────────────────────────── */
+  .collection-view { display: none; max-width: 1200px; margin: 0 auto; padding: 0 2rem; }
+  .collection-view.active { display: block; }
+  .explore-view { display: block; }
+  .explore-view.hidden { display: none; }
+
+  .coll-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 1.25rem 0 1rem;
+    flex-wrap: wrap;
+  }
+  .coll-tab-btn {
+    padding: 7px 16px;
+    border-radius: 100px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--muted);
+    font-family: 'DM Sans', sans-serif;
+    transition: all 0.18s;
+    white-space: nowrap;
+  }
+  .coll-tab-btn:hover { color: var(--text); border-color: rgba(255,255,255,0.2); }
+  .coll-tab-btn.active-owned  { background: rgba(200,240,96,0.12); border-color: var(--accent); color: var(--accent); }
+  .coll-tab-btn.active-wanted { background: rgba(96,160,240,0.12); border-color: #60a0f0; color: #60a0f0; }
+  .coll-tab-btn.active-trade  { background: rgba(240,160,96,0.12); border-color: #f0a060; color: #f0a060; }
+
+  .coll-stats {
+    margin-left: auto;
+    display: flex;
+    gap: 16px;
+    font-size: 12px;
+    color: var(--muted);
+    flex-wrap: wrap;
+  }
+  .coll-stats span b { color: var(--text); font-weight: 700; }
+  .coll-stats .sep { color: var(--border); }
+
+  .coll-search-row {
+    padding-bottom: 1rem;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 0.5rem;
+  }
+  .coll-search-row .search-wrap { max-width: 400px; }
+
+  .coll-empty {
+    text-align: center;
+    padding: 4rem 2rem;
+    color: var(--muted);
+  }
+  .coll-empty svg { display: block; margin: 0 auto 1rem; opacity: 0.25; }
+  .coll-empty p { font-size: 14px; margin-bottom: 0.5rem; }
+  .coll-empty small { font-size: 12px; opacity: 0.6; }
+
+  /* ── Price toggle: € icon ───────────────────── */
+  .icon-btn .euro-icon {
+    font-family: 'Syne', sans-serif;
+    font-size: 14px;
+    font-weight: 800;
+    line-height: 1;
+  }
+
+  /* ── Selection mode ─────────────────────────── */
+  .coll-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding-bottom: 0.75rem;
+    flex-wrap: wrap;
+  }
+  .coll-toolbar-btn {
+    padding: 6px 14px;
+    border-radius: 8px;
+    font-size: 12px;
+    font-weight: 600;
+    font-family: 'Syne', sans-serif;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--muted);
+    cursor: pointer;
+    transition: all 0.18s;
+    white-space: nowrap;
+  }
+  .coll-toolbar-btn:hover { color: var(--text); border-color: rgba(255,255,255,0.2); }
+  .coll-toolbar-btn.active { background: rgba(200,240,96,0.1); border-color: var(--accent); color: var(--accent); }
+
+  /* Card selection state */
+  .card.selectable { cursor: pointer; }
+  .card.selectable:hover { outline: 2px solid rgba(200,240,96,0.4); }
+  .card.selected { outline: 2.5px solid var(--accent) !important; }
+  .card.selected::before {
+    content: '✓';
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    width: 20px;
+    height: 20px;
+    background: var(--accent);
+    color: #0d0d0f;
+    border-radius: 50%;
+    font-size: 11px;
+    font-weight: 800;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 3;
+    line-height: 20px;
+    text-align: center;
+  }
+
+  /* Totals bar */
+  .coll-totals {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 10px 14px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    margin-bottom: 1rem;
+    flex-wrap: wrap;
+    font-size: 13px;
+  }
+  .coll-totals.hidden { display: none; }
+  .total-item { display: flex; flex-direction: column; gap: 2px; }
+  .total-item .t-label { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600; }
+  .total-item .t-value { font-family: 'Syne', sans-serif; font-weight: 800; font-size: 15px; color: var(--text); }
+  .total-item .t-value.green  { color: var(--accent); }
+  .total-item .t-value.blue   { color: #60a0f0; }
+  .total-item .t-value.orange { color: #f0a060; }
+  .totals-sep { width: 1px; height: 28px; background: var(--border); }
 </style>
 </head>
 <body>
@@ -990,13 +1150,12 @@
 <div class="app-header">
   <div class="app-header-top">
     <div>
-      <div class="app-logo">illus<span>dex</span></div>
-      <div class="app-tagline">Illustration Rare · Special IR · Alt Arts · Promos</div>
+      <div class="app-logo">Piki<span>dex</span></div>
     </div>
     <div class="header-actions">
       <!-- Hide prices toggle -->
-      <button class="icon-btn" id="btn-hide-prices" title="Afficher / cacher les prix" aria-label="Cacher les prix">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+      <button class="icon-btn active" id="btn-hide-prices" title="Afficher / cacher les prix" aria-label="Afficher les prix">
+        <span class="euro-icon">€</span>
       </button>
       <!-- Language -->
       <div class="lang-toggle">
@@ -1010,7 +1169,12 @@
     </div>
   </div>
 
-  <div class="controls">
+  <nav class="app-nav">
+    <button class="nav-tab active" data-view="explore">Explorer</button>
+    <button class="nav-tab" data-view="collection">Ma Collection</button>
+  </nav>
+
+  <div class="controls" id="explore-controls">
     <!-- Row 1: Search -->
     <div class="search-row">
       <div class="search-wrap">
@@ -1056,34 +1220,63 @@
     </div>
   </div>
 </div>
-
-<div class="stats-bar">
-  <span class="stat-count" id="count">–</span>
-  <span class="stat-label">cartes trouvées</span>
-  <div class="divider"></div>
-  <span class="stat-label" id="source-label">via TCGdex API</span>
 </div>
 
+<!-- ── EXPLORE VIEW ─────────────────────────────── -->
+<div class="explore-view" id="explore-view">
+  <div class="stats-bar">
+    <span class="stat-count" id="count">–</span>
+    <span class="stat-label">cartes trouvées</span>
+    <div class="divider"></div>
+    <span class="stat-label" id="source-label">via TCGdex API</span>
+  </div>
 
-<div class="collection-bar">
-  <button class="coll-filter-btn" id="filter-owned">✦ En collection</button>
-  <button class="coll-filter-btn" id="filter-wanted">⊕ À obtenir</button>
-  <button class="coll-filter-btn" id="filter-trade">⇄ À vendre / échanger</button>
-  <span class="coll-stat" id="coll-stat"></span>
+  <div class="error-msg" id="error-msg">
+    Impossible de charger les données. Vérifiez votre connexion ou réessayez.
+  </div>
+
+  <div id="grid"></div>
+
+  <div class="load-more-wrap">
+    <button id="load-more">Charger plus</button>
+  </div>
+  <div class="scroll-sentinel" id="scroll-sentinel">
+    <div class="scroll-loader" id="scroll-loader">
+      <span></span><span></span><span></span>
+    </div>
+  </div>
 </div>
 
-<div class="error-msg" id="error-msg">
-  Impossible de charger les données. Vérifiez votre connexion ou réessayez.
-</div>
+<!-- ── COLLECTION VIEW ──────────────────────────── -->
+<div class="collection-view" id="collection-view">
+  <div class="coll-header">
+    <button class="coll-tab-btn active-owned" data-coll="owned">✦ En collection</button>
+    <button class="coll-tab-btn" data-coll="wanted">⊕ À obtenir</button>
+    <button class="coll-tab-btn" data-coll="trade">⇄ À vendre</button>
+    <div class="coll-stats" id="coll-stats"></div>
+  </div>
+  <div class="coll-search-row">
+    <div class="search-wrap">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+      <input type="text" id="coll-search" placeholder="Pokémon, artiste ou extension…" autocomplete="off">
+    </div>
+  </div>
 
-<div id="grid"></div>
+  <!-- Totals bar -->
+  <div class="coll-totals hidden" id="coll-totals"></div>
 
-<div class="load-more-wrap">
-  <button id="load-more">Charger plus</button>
-</div>
-<div class="scroll-sentinel" id="scroll-sentinel">
-  <div class="scroll-loader" id="scroll-loader">
-    <span></span><span></span><span></span>
+  <!-- Toolbar -->
+  <div class="coll-toolbar">
+    <button class="coll-toolbar-btn" id="btn-select-mode">☐ Sélection</button>
+    <button class="coll-toolbar-btn" id="btn-select-all" style="display:none">Tout sélectionner</button>
+    <button class="coll-toolbar-btn" id="btn-deselect-all" style="display:none">Désélectionner</button>
+  </div>
+
+  <div id="coll-grid"></div>
+  <div class="coll-empty" id="coll-empty" style="display:none">
+    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M20 7H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2z"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>
+    <p>Aucune carte ici</p>
+    <small>Explore les cartes et marque-les pour les retrouver ici</small>
   </div>
 </div>
 
@@ -1148,7 +1341,13 @@ let currentArtist = 'all';
 let currentSort = 'pokedex'; // set from prefs after declaration
 let currentModalIndex = -1;
 let currentArtistCounts = new Map();
-let collectionFilter = 'all'; // 'all' | 'owned' | 'wanted' | 'both' | 'trade' — always start unfiltered
+let collectionFilter = 'all'; // kept for backward compat, unused in new flow
+let currentTab = 'explore'; // 'explore' | 'collection'
+let collTab = 'owned';      // 'owned' | 'wanted' | 'trade'
+let collSearchQuery = '';
+let selectionMode = false;
+let selectedIds   = new Set();
+let lastClickedId = null; // for shift-click range
 let pricesVisible  = true; // set from prefs after declaration
 
 const LS_OWNED  = 'illusdex_owned';
@@ -1217,28 +1416,181 @@ function toggleWanted(id) {
   saveWanted(); updateCollStat();
 }
 function updateCollStat() {
-  const el = document.getElementById('coll-stat');
-  if (!el) return;
-  const o = ownedSet.size, w = wantedSet.size, t = tradeSet.size;
-  const parts = [];
-  if (o) parts.push(`<b>${o}</b> en collection`);
-  if (w) parts.push(`<b>${w}</b> à obtenir`);
-  if (t) parts.push(`<b>${t}</b> à vendre`);
-  el.innerHTML = parts.join(' · ');
-  const bo = document.getElementById('filter-owned');
-  const bw = document.getElementById('filter-wanted');
-  const bt = document.getElementById('filter-trade');
-  const showOwned  = collectionFilter === 'owned'  || collectionFilter === 'both';
-  const showWanted = collectionFilter === 'wanted' || collectionFilter === 'both';
-  const showTrade  = collectionFilter === 'trade';
-  if (bo) bo.className = 'coll-filter-btn' + (showOwned  ? ' active-owned'  : '');
-  if (bw) bw.className = 'coll-filter-btn' + (showWanted ? ' active-wanted' : '');
-  if (bt) bt.className = 'coll-filter-btn' + (showTrade  ? ' active-trade'  : '');
+  // Update coll-stats summary
+  const el = document.getElementById('coll-stats');
+  if (el) {
+    const o = ownedSet.size, w = wantedSet.size, t = tradeSet.size;
+    el.innerHTML = [
+      o ? `<span><b>${o}</b> en collection</span>` : '',
+      w ? `<span><b>${w}</b> à obtenir</span>` : '',
+      t ? `<span><b>${t}</b> à vendre</span>` : '',
+    ].filter(Boolean).join('<span class="sep">·</span>');
+  }
+  // Sync coll-tab-btn active states (multi-select)
+  document.querySelectorAll('.coll-tab-btn').forEach(btn => {
+    const type = btn.dataset.coll;
+    btn.classList.toggle(`active-${type}`, collTab === type);
+  });
   // Sync hide-prices icon
   const pb = document.getElementById('btn-hide-prices');
-  if (pb) pb.classList.toggle('active', !pricesVisible);
+  if (pb) pb.classList.toggle('active', pricesVisible);
   // Apply prices visibility
   document.documentElement.style.setProperty('--prices-display', pricesVisible ? '' : 'none');
+}
+
+// ── Totals ────────────────────────────────────────────────
+function getBestPrice(cardId) {
+  // Use user-entered price first, then API price from allCards
+  for (const type of ['owned', 'wanted']) {
+    const d = getPriceData(cardId, type);
+    if (d.val && !isNaN(parseFloat(d.val))) return parseFloat(d.val);
+    if (d.min && !isNaN(parseFloat(d.min))) return parseFloat(d.min);
+  }
+  const card = allCards.find(c => c.id === cardId);
+  return card?.apiPrice ?? null;
+}
+
+function computeTotal(ids) {
+  let sum = 0, known = 0, unknown = 0;
+  ids.forEach(id => {
+    const v = getBestPrice(id);
+    if (v != null) { sum += v; known++; }
+    else unknown++;
+  });
+  return { sum, known, unknown, total: ids.size ?? ids.length };
+}
+
+function updateTotalsBar() {
+  const bar = document.getElementById('coll-totals');
+  if (!bar) return;
+
+  // Hide if prices hidden
+  if (!pricesVisible) { bar.classList.add('hidden'); return; }
+
+  const isSelection = selectionMode && selectedIds.size > 0;
+  const idsToShow   = isSelection ? selectedIds : null;
+
+  if (!isSelection) {
+    // Show totals per active tab (all cards in that tab)
+    const cards = getCollCards();
+    if (cards.length === 0) { bar.classList.add('hidden'); return; }
+
+    const { sum, unknown, total } = computeTotal(new Set(cards.map(c => c.id)));
+    const colorClass = collTab === 'owned' ? 'green' : collTab === 'wanted' ? 'blue' : 'orange';
+    const label = collTab === 'owned' ? 'Collection' : collTab === 'wanted' ? 'À obtenir' : 'À vendre';
+
+    bar.innerHTML = `
+      <div class="total-item">
+        <span class="t-label">${label}</span>
+        <span class="t-value ${colorClass}">${fmtEur(sum)}</span>
+      </div>
+      <div class="totals-sep"></div>
+      <div class="total-item">
+        <span class="t-label">Cartes</span>
+        <span class="t-value">${total}</span>
+      </div>
+      ${unknown > 0 ? `<div class="total-item"><span class="t-label">Sans prix</span><span class="t-value" style="color:var(--muted)">${unknown}</span></div>` : ''}
+    `;
+    bar.classList.remove('hidden');
+  } else {
+    // Selection mode: show selected subset
+    const { sum, unknown } = computeTotal(selectedIds);
+    bar.innerHTML = `
+      <div class="total-item">
+        <span class="t-label">Sélection</span>
+        <span class="t-value green">${fmtEur(sum)}</span>
+      </div>
+      <div class="totals-sep"></div>
+      <div class="total-item">
+        <span class="t-label">Cartes</span>
+        <span class="t-value">${selectedIds.size}</span>
+      </div>
+      ${unknown > 0 ? `<div class="total-item"><span class="t-label">Sans prix</span><span class="t-value" style="color:var(--muted)">${unknown}</span></div>` : ''}
+    `;
+    bar.classList.remove('hidden');
+  }
+}
+
+// ── Collection grid rendering ──────────────────────────────
+function getCollCards() {
+  const sourceSet = collTab === 'owned' ? ownedSet : collTab === 'wanted' ? wantedSet : tradeSet;
+  const q = collSearchQuery.toLowerCase().trim();
+  return allCards.filter(c => {
+    if (!sourceSet.has(c.id)) return false;
+    if (!q) return true;
+    return (c.name || '').toLowerCase().includes(q)
+      || (c.illustrator || '').toLowerCase().includes(q)
+      || (c.set?.name || '').toLowerCase().includes(q);
+  });
+}
+
+function renderCollGrid() {
+  const cards = getCollCards();
+  const grid  = document.getElementById('coll-grid');
+  const empty = document.getElementById('coll-empty');
+  if (!grid) return;
+
+  updateTotalsBar();
+
+  if (cards.length === 0) {
+    grid.innerHTML = '';
+    if (empty) empty.style.display = 'block';
+    return;
+  }
+  if (empty) empty.style.display = 'none';
+
+  grid.innerHTML = '';
+  const frag = document.createDocumentFragment();
+  cards.forEach((c, idx) => {
+    const img  = c.image ? c.image + '/low.webp' : '';
+    let name   = (currentLang === 'en' && c.nameEn) ? c.nameEn : (c.name || '—');
+    const set  = c.set?.name || '';
+    const isOwned  = ownedSet.has(c.id);
+    const isWanted = wantedSet.has(c.id);
+    const isTrade  = tradeSet.has(c.id);
+    const isSelected = selectedIds.has(c.id);
+    const ownedLabel  = getPriceLabel(c.id, 'owned');
+    const wantedLabel = getPriceLabel(c.id, 'wanted');
+    const div = document.createElement('div');
+    div.className = 'card'
+      + (isOwned ? ' owned' : '') + (isWanted ? ' wanted' : '') + (isTrade ? ' trade' : '')
+      + (selectionMode ? ' selectable' : '') + (isSelected ? ' selected' : '');
+    div.dataset.id  = c.id;
+    div.dataset.idx = idx;
+    div.innerHTML = `
+      ${img ? `<img class="card-img" src="${img}" alt="${escapeHtml(name)}" loading="lazy" onerror="handleImageError(this)">` : imagePlaceholder(name)}
+      <div class="card-body">
+        ${getBadge(c.rarity, c.rarityKind)}
+        <div class="card-price-tag">
+          <span class="card-price-pill owned-price">${ownedLabel}</span>
+          <span class="card-price-pill wanted-price">${wantedLabel}</span>
+        </div>
+        <div class="card-name">${escapeHtml(name)}</div>
+        <div class="card-meta">${escapeHtml(set)}</div>
+      </div>`;
+
+    div.addEventListener('click', (e) => {
+      if (selectionMode) {
+        if (e.shiftKey && lastClickedId != null) {
+          // Shift-click: select range between lastClickedId and this card
+          const allCards = getCollCards();
+          const lastIdx  = allCards.findIndex(x => x.id === lastClickedId);
+          const thisIdx  = idx;
+          const [from, to] = lastIdx < thisIdx ? [lastIdx, thisIdx] : [thisIdx, lastIdx];
+          allCards.slice(from, to + 1).forEach(x => selectedIds.add(x.id));
+        } else {
+          if (selectedIds.has(c.id)) selectedIds.delete(c.id);
+          else selectedIds.add(c.id);
+          lastClickedId = c.id;
+        }
+        renderCollGrid(); // re-render to update selected states
+      } else {
+        openModal(c);
+      }
+    });
+    frag.appendChild(div);
+  });
+  grid.appendChild(frag);
 }
 
 const grid       = document.getElementById('grid');
@@ -1256,9 +1608,9 @@ function getBadge(rarity, rarityKind) {
   if (!rarity) return '';
   const r = rarity.toLowerCase();
   if (r.includes('special illustration') || r.includes('illustration spéciale') || r.includes('sar') || r.includes('sir'))
-    return '<span class="card-badge badge-sir">SIR</span>';
+    return '<span class="card-badge badge-sir">SAR</span>';
   if (r.includes('illustration'))
-    return '<span class="card-badge badge-ir">IR</span>';
+    return '<span class="card-badge badge-ir">AR</span>';
   if (r.includes('ultra rare'))
     return '<span class="card-badge badge-alt">ALT</span>';
   return '';
@@ -2165,15 +2517,15 @@ async function openModal(card, index = filtered.findIndex(c => c.id === card.id)
   };
   document.getElementById('modal-btn-owned').addEventListener('click', () => {
     toggleOwned(card.id); syncModalBtns(card.id);
-    if (collectionFilter !== 'all') applyFilters();
+    if (currentTab === 'collection') { renderCollGrid(); updateTotalsBar(); }
   });
   document.getElementById('modal-btn-wanted').addEventListener('click', () => {
     toggleWanted(card.id); syncModalBtns(card.id);
-    if (collectionFilter !== 'all') applyFilters();
+    if (currentTab === 'collection') renderCollGrid();
   });
   document.getElementById('modal-btn-trade')?.addEventListener('click', () => {
     toggleTrade(card.id); syncModalBtns(card.id);
-    if (collectionFilter === 'trade') applyFilters();
+    if (currentTab === 'collection') renderCollGrid();
   });
 
   // Price save buttons
@@ -2218,20 +2570,7 @@ document.addEventListener('keydown', e => {
   if (e.key === 'ArrowRight') showAdjacentCard(1);
 });
 
-document.getElementById('filter-owned').addEventListener('click', () => {
-  if (collectionFilter === 'all')     collectionFilter = 'owned';
-  else if (collectionFilter === 'owned')  collectionFilter = 'all';
-  else if (collectionFilter === 'wanted') collectionFilter = 'both';
-  else if (collectionFilter === 'both')   collectionFilter = 'wanted';
-  updateCollStat(); applyFilters(true);
-});
-document.getElementById('filter-wanted').addEventListener('click', () => {
-  if (collectionFilter === 'all')     collectionFilter = 'wanted';
-  else if (collectionFilter === 'wanted') collectionFilter = 'all';
-  else if (collectionFilter === 'owned')  collectionFilter = 'both';
-  else if (collectionFilter === 'both')   collectionFilter = 'owned';
-  updateCollStat(); applyFilters(true);
-});
+// filter-owned/wanted replaced by nav tabs
 
 
 let _toastTimer = null;
@@ -2300,7 +2639,7 @@ function generateExport() {
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Illusdex — Export</title>
+<title>Pikidex — Export</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=DM+Sans:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"><\/script>
@@ -2348,7 +2687,7 @@ function generateExport() {
 <body>
 <div class="toolbar">
   <div>
-    <h1>Illusdex</h1>
+    <h1>Pikidex</h1>
     <div class="sub">${filterDesc} · ${cards.length} cartes · ${new Date().toLocaleDateString('fr-FR')}</div>
   </div>
   <label>Taille <input type="range" id="size-slider" min="100" max="240" value="160" step="10"></label>
@@ -2440,8 +2779,9 @@ hidePricesBtn.addEventListener('click', () => {
   prefs.pricesVisible = pricesVisible;
   savePrefs();
   document.documentElement.style.setProperty('--prices-display', pricesVisible ? '' : 'none');
-  hidePricesBtn.classList.toggle('active', !pricesVisible);
-  showToast(pricesVisible ? '👁 Prix affichés' : '👁 Prix cachés', 'info');
+  hidePricesBtn.classList.toggle('active', pricesVisible);
+  showToast(pricesVisible ? '€ Prix affichés' : '€ Prix cachés', 'info');
+  if (currentTab === 'collection') updateTotalsBar();
 });
 
 // Language toggle
@@ -2461,10 +2801,57 @@ document.querySelectorAll('.lang-btn').forEach(btn => {
   });
 });
 
-// Trade filter button
-document.getElementById('filter-trade').addEventListener('click', () => {
-  collectionFilter = collectionFilter === 'trade' ? 'all' : 'trade';
-  updateCollStat(); applyFilters(true);
+// ── Nav tabs ──────────────────────────────────────────────
+document.querySelectorAll('.nav-tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    currentTab = tab.dataset.view;
+    document.querySelectorAll('.nav-tab').forEach(t => t.classList.toggle('active', t.dataset.view === currentTab));
+    document.getElementById('explore-view').classList.toggle('hidden', currentTab !== 'explore');
+    document.getElementById('collection-view').classList.toggle('active', currentTab === 'collection');
+    document.getElementById('explore-controls').style.display = currentTab === 'explore' ? '' : 'none';
+    if (currentTab === 'collection') renderCollGrid();
+  });
+});
+
+// ── Collection sub-tabs ────────────────────────────────────
+document.querySelectorAll('.coll-tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    collTab = btn.dataset.coll;
+    selectedIds.clear();
+    lastClickedId = null;
+    updateCollStat();
+    renderCollGrid();
+  });
+});
+
+// ── Collection search ──────────────────────────────────────
+document.getElementById('coll-search').addEventListener('input', e => {
+  collSearchQuery = e.target.value;
+  renderCollGrid();
+});
+
+// ── Selection toolbar ──────────────────────────────────────
+document.getElementById('btn-select-mode').addEventListener('click', () => {
+  selectionMode = !selectionMode;
+  selectedIds.clear();
+  lastClickedId = null;
+  const btn = document.getElementById('btn-select-mode');
+  btn.classList.toggle('active', selectionMode);
+  btn.textContent = selectionMode ? '☑ Sélection active' : '☐ Sélection';
+  document.getElementById('btn-select-all').style.display   = selectionMode ? '' : 'none';
+  document.getElementById('btn-deselect-all').style.display = selectionMode ? '' : 'none';
+  renderCollGrid();
+});
+
+document.getElementById('btn-select-all').addEventListener('click', () => {
+  getCollCards().forEach(c => selectedIds.add(c.id));
+  renderCollGrid();
+});
+
+document.getElementById('btn-deselect-all').addEventListener('click', () => {
+  selectedIds.clear();
+  lastClickedId = null;
+  renderCollGrid();
 });
 
 // Persist sort changes
