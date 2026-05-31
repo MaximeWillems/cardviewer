@@ -1087,6 +1087,16 @@
   </div>
 </div>
 
+
+<div class="card-viewer-overlay" id="card-viewer-overlay">
+  <div class="card-viewer-scene" id="card-viewer-scene">
+    <div class="card-viewer-inner" id="card-viewer-inner">
+      <img id="card-viewer-img" src="" alt="">
+    </div>
+  </div>
+  <div class="card-viewer-hint">Glisser pour pivoter · Clic pour fermer</div>
+</div>
+
 <div class="modal-overlay" id="modal-overlay">
   <button class="modal-nav modal-prev" id="modal-prev" aria-label="Carte précédente">‹</button>
   <div class="modal" id="modal">
@@ -1139,7 +1149,7 @@ let currentSort = 'pokedex'; // set from prefs after declaration
 let currentModalIndex = -1;
 let currentArtistCounts = new Map();
 let collectionFilter = 'all'; // 'all' | 'owned' | 'wanted' | 'both' | 'trade' — always start unfiltered
-let pricesVisible  = prefs.pricesVisible !== false;
+let pricesVisible  = true; // set from prefs after declaration
 
 const LS_OWNED  = 'illusdex_owned';
 const LS_WANTED = 'illusdex_wanted';
@@ -1158,6 +1168,7 @@ function savePrefs() { localStorage.setItem(LS_PREFS, JSON.stringify(prefs)); }
 // Apply persisted prefs now that prefs is initialized
 currentLang = prefs.lang || 'fr';
 currentSort = prefs.sort || 'pokedex';
+pricesVisible = prefs.pricesVisible !== false;
 
 function saveOwned()  { localStorage.setItem(LS_OWNED,  JSON.stringify([...ownedSet])); }
 function saveWanted() { localStorage.setItem(LS_WANTED, JSON.stringify([...wantedSet])); }
@@ -2551,14 +2562,6 @@ fetchCards().then(() => {
 });
 updateCollStat();
 </script>
-<div class="card-viewer-overlay" id="card-viewer-overlay">
-  <div class="card-viewer-scene" id="card-viewer-scene">
-    <div class="card-viewer-inner" id="card-viewer-inner">
-      <img id="card-viewer-img" src="" alt="">
-    </div>
-  </div>
-  <div class="card-viewer-hint">Glisser pour pivoter · Clic pour fermer</div>
-</div>
 <div id="toast"></div>
 </body>
 </html>
