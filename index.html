@@ -1152,6 +1152,14 @@
   }
   .coll-controls .pills-row { padding: 0.75rem 0 0; gap: 8px; }
   .coll-controls .filters-row { padding: 0.75rem 0 0; gap: 10px; }
+
+  .coll-toolbar-sep {
+    width: 1px;
+    height: 20px;
+    background: var(--border);
+    margin: 0 4px;
+    flex-shrink: 0;
+  }
 </style>
 </head>
 <body>
@@ -1258,12 +1266,6 @@
 
 <!-- ── COLLECTION VIEW ──────────────────────────── -->
 <div class="collection-view" id="collection-view">
-  <div class="coll-header">
-    <button class="coll-tab-btn active-owned" data-coll="owned">✦ En collection</button>
-    <button class="coll-tab-btn" data-coll="wanted">⊕ À obtenir</button>
-    <button class="coll-tab-btn" data-coll="trade">⇄ À vendre</button>
-    <div class="coll-stats" id="coll-stats"></div>
-  </div>
   <div class="coll-controls">
     <!-- Search -->
     <div class="search-row" style="padding-top:0.5rem;padding-bottom:0">
@@ -1310,11 +1312,16 @@
   <!-- Totals bar -->
   <div class="coll-totals hidden" id="coll-totals"></div>
 
-  <!-- Toolbar -->
+  <!-- Toolbar: category tabs + selection controls on same row -->
   <div class="coll-toolbar">
+    <button class="coll-tab-btn active-owned" data-coll="owned">✦ En collection</button>
+    <button class="coll-tab-btn" data-coll="wanted">⊕ À obtenir</button>
+    <button class="coll-tab-btn" data-coll="trade">⇄ À vendre</button>
+    <div class="coll-toolbar-sep"></div>
     <button class="coll-toolbar-btn" id="btn-select-mode">☐ Sélection</button>
     <button class="coll-toolbar-btn" id="btn-select-all" style="display:none">Tout sélectionner</button>
     <button class="coll-toolbar-btn" id="btn-deselect-all" style="display:none">Désélectionner</button>
+    <div class="coll-stats" id="coll-stats" style="margin-left:auto"></div>
   </div>
 
   <div id="coll-grid"></div>
