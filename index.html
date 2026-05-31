@@ -92,7 +92,7 @@
     display: flex;
     align-items: center;
     gap: 10px;
-    padding: 1.25rem 0 0;
+    padding: 1.5rem 0 0;
   }
 
   .search-row .search-wrap {
@@ -103,24 +103,24 @@
   /* ── Rarity pills row ───────────────────────── */
   .pills-row {
     display: flex;
-    gap: 6px;
+    gap: 8px;
     flex-wrap: wrap;
-    padding: 0.75rem 0 0;
+    padding: 1rem 0 0;
   }
 
   /* ── Advanced filters row ───────────────────── */
   .filters-row {
     display: flex;
-    gap: 8px;
+    gap: 10px;
     align-items: center;
     flex-wrap: wrap;
-    padding: 0.75rem 0 0;
+    padding: 1rem 0 0;
   }
 
   .controls {
     max-width: 1200px;
     margin: 0 auto;
-    padding: 0 2rem 1rem;
+    padding: 0 2rem 1.25rem;
     border-bottom: 1px solid var(--border);
   }
 
@@ -1100,8 +1100,8 @@
 
   /* Card selection state */
   .card.selectable { cursor: pointer; }
-  .card.selectable:hover { outline: 2px solid rgba(200,240,96,0.4); }
-  .card.selected { outline: 2.5px solid var(--accent) !important; }
+  .card.selectable:hover { outline: 2px solid rgba(96,160,240,0.45); }
+  .card.selected { outline: 2.5px solid #60a0f0 !important; box-shadow: 0 0 0 4px rgba(96,160,240,0.15) !important; }
   .card.selected::before {
     content: '✓';
     position: absolute;
@@ -1109,7 +1109,7 @@
     right: 6px;
     width: 20px;
     height: 20px;
-    background: var(--accent);
+    background: #60a0f0;
     color: #0d0d0f;
     border-radius: 50%;
     font-size: 11px;
@@ -1146,12 +1146,12 @@
 
   /* ── Collection controls ────────────────────── */
   .coll-controls {
-    padding: 0.75rem 0 0;
+    padding: 1rem 0 0;
     border-top: 1px solid var(--border);
     margin-top: 0.25rem;
   }
-  .coll-controls .pills-row { padding: 0 0 0.6rem; }
-  .coll-controls .filters-row { padding: 0; }
+  .coll-controls .pills-row { padding: 0.75rem 0 0; gap: 8px; }
+  .coll-controls .filters-row { padding: 0.75rem 0 0; gap: 10px; }
 </style>
 </head>
 <body>
@@ -1266,7 +1266,7 @@
   </div>
   <div class="coll-controls">
     <!-- Search -->
-    <div class="search-row" style="padding-top:0;padding-bottom:0.6rem">
+    <div class="search-row" style="padding-top:0.5rem;padding-bottom:0">
       <div class="search-wrap" style="max-width:100%">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
         <input type="text" id="coll-search" placeholder="Pokémon, artiste ou extension…" autocomplete="off">
@@ -1387,7 +1387,7 @@ let currentSort = 'pokedex'; // set from prefs after declaration
 let currentModalIndex = -1;
 let currentArtistCounts = new Map();
 let collectionFilter = 'all'; // kept for backward compat, unused in new flow
-let currentTab = 'explore'; // 'explore' | 'collection'
+let currentTab = 'explore'; // set from prefs after declaration
 let collTab = 'owned';      // 'owned' | 'wanted' | 'trade'
 let collSearchQuery = '';
 let collRarity = 'all';   // rarity filter for collection
@@ -1414,9 +1414,10 @@ const defaultPrefs = { pricesVisible: true, collFilter: 'all', sort: 'pokedex', 
 let prefs = { ...defaultPrefs, ...JSON.parse(localStorage.getItem(LS_PREFS) || '{}') };
 function savePrefs() { localStorage.setItem(LS_PREFS, JSON.stringify(prefs)); }
 // Apply persisted prefs now that prefs is initialized
-currentLang = prefs.lang || 'fr';
-currentSort = prefs.sort || 'pokedex';
+currentLang   = prefs.lang || 'fr';
+currentSort   = prefs.sort || 'pokedex';
 pricesVisible = prefs.pricesVisible !== false;
+currentTab    = prefs.tab || 'explore';
 
 function saveOwned()  { localStorage.setItem(LS_OWNED,  JSON.stringify([...ownedSet])); }
 function saveWanted() { localStorage.setItem(LS_WANTED, JSON.stringify([...wantedSet])); }
@@ -1685,18 +1686,26 @@ function renderCollGrid() {
     div.addEventListener('click', (e) => {
       if (selectionMode) {
         if (e.shiftKey && lastClickedId != null) {
-          // Shift-click: select range between lastClickedId and this card
-          const allCards = getCollCards();
-          const lastIdx  = allCards.findIndex(x => x.id === lastClickedId);
-          const thisIdx  = idx;
+          const visibleCards = getCollCards();
+          const lastIdx = visibleCards.findIndex(x => x.id === lastClickedId);
+          const thisIdx = idx;
           const [from, to] = lastIdx < thisIdx ? [lastIdx, thisIdx] : [thisIdx, lastIdx];
-          allCards.slice(from, to + 1).forEach(x => selectedIds.add(x.id));
+          visibleCards.slice(from, to + 1).forEach(x => {
+            selectedIds.add(x.id);
+            const el = document.querySelector(`#coll-grid .card[data-id="${x.id}"]`);
+            if (el) el.classList.add('selected');
+          });
         } else {
-          if (selectedIds.has(c.id)) selectedIds.delete(c.id);
-          else selectedIds.add(c.id);
+          if (selectedIds.has(c.id)) {
+            selectedIds.delete(c.id);
+            div.classList.remove('selected');
+          } else {
+            selectedIds.add(c.id);
+            div.classList.add('selected');
+          }
           lastClickedId = c.id;
         }
-        renderCollGrid(); // re-render to update selected states
+        updateTotalsBar(); // update totals without re-rendering
       } else {
         openModal(c);
       }
@@ -2513,8 +2522,15 @@ async function openModal(card, index = filtered.findIndex(c => c.id === card.id)
   const position = currentModalIndex >= 0 ? `${currentModalIndex + 1} / ${filtered.length}` : '';
 
   document.getElementById('modal-media').innerHTML = img
-    ? `<img class="modal-img" id="modal-img" src="${img}" alt="${escapeHtml(card.name || '')}" onerror="handleImageError(this)">`
+    ? `<img class="modal-img" id="modal-img" src="${img}" alt="${escapeHtml(card.name || '')}" onerror="handleImageError(this)" style="cursor:zoom-in;transition:opacity 0.18s" title="Cliquer pour voir en 3D">`
     : imagePlaceholder(card.name || 'Carte', true);
+  // Wire 3D viewer click on image
+  if (img) {
+    setTimeout(() => {
+      const mi = document.getElementById('modal-img');
+      if (mi) mi.onclick = () => openCardViewer(img, card.name);
+    }, 0);
+  }
   const oPrices = getPriceData(card.id, 'owned');
   const wPrices = getPriceData(card.id, 'wanted');
   document.getElementById('modal-info').innerHTML = `
@@ -3108,6 +3124,17 @@ window.addEventListener('hashchange', () => {
 
 fetchCards().then(() => {
   handleDeepLink();
+  // Restore saved tab
+  if (prefs.tab === 'collection') {
+    currentTab = 'collection';
+    document.querySelectorAll('.nav-tab').forEach(t => t.classList.toggle('active', t.dataset.view === 'collection'));
+    document.getElementById('explore-view').classList.add('hidden');
+    document.getElementById('collection-view').classList.add('active');
+    document.getElementById('explore-controls').style.display = 'none';
+    populateCollFilters();
+    renderCollGrid();
+    updateTotalsBar();
+  }
 });
 updateCollStat();
 </script>
