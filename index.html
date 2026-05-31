@@ -201,21 +201,39 @@
   .pill.active-promo { background: rgba(200,140,255,0.12); border-color: #c88cff; color: #c88cff; }
   .pill.active-all { background: rgba(255,255,255,0.07); border-color: rgba(255,255,255,0.3); color: var(--text); }
 
-  .stats-bar {
-    max-width: 1200px;
-    margin: 1.2rem auto 0;
-    padding: 0 2rem;
+  /* stats-bar is now an inline info-box inside the filters-row */
+  .stats-bar { display: none; } /* legacy hidden */
+
+  .explore-info-box {
+    margin-left: auto;
     display: flex;
     align-items: center;
-    gap: 16px;
+    gap: 10px;
+    flex-shrink: 0;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 6px 14px;
+    white-space: nowrap;
   }
   .stat-count {
     font-family: 'Syne', sans-serif;
-    font-size: 1.4rem;
+    font-size: 14px;
     font-weight: 700;
+    color: var(--text);
   }
-  .stat-label { font-size: 13px; color: var(--muted); }
-  .divider { width: 1px; height: 24px; background: var(--border); }
+  .stat-label { font-size: 12px; color: var(--muted); }
+  .divider { width: 1px; height: 18px; background: var(--border); }
+
+  /* Price pill inside info-box */
+  .explore-price-total {
+    font-family: 'Syne', sans-serif;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--accent);
+    display: none; /* shown only when prices visible */
+  }
+  .prices-shown .explore-price-total { display: block; }
 
   #grid, #coll-grid {
     max-width: 1200px;
@@ -1204,13 +1222,13 @@
     <!-- Row 2: Rarity pills -->
     <div class="pills-row rarity-pills">
       <button class="pill active-all" data-rarity="all">Toutes</button>
-      <button class="pill" data-rarity="ir">✦ Illustration Rare</button>
-      <button class="pill" data-rarity="sir">✦✦ Spéciale Rare</button>
+      <button class="pill" data-rarity="ir">✦ AR</button>
+      <button class="pill" data-rarity="sir">✦✦ SAR</button>
       <button class="pill" data-rarity="alt">Alt Art</button>
       <button class="pill" data-rarity="promo">★ Promo</button>
     </div>
 
-    <!-- Row 3: Advanced filters -->
+    <!-- Row 3: Advanced filters + info box -->
     <div class="filters-row">
       <select id="type-filter" aria-label="Filtrer par type">
         <option value="all">Tous les types</option>
@@ -1235,6 +1253,14 @@
           <option value="market-desc">Marché ↓</option>
         </optgroup>
       </select>
+      <div class="explore-info-box" id="explore-info-box">
+        <span class="stat-count" id="count">–</span>
+        <span class="stat-label">cartes</span>
+        <div class="divider" id="price-divider" style="display:none"></div>
+        <span class="explore-price-total" id="explore-price-total"></span>
+        <div class="divider"></div>
+        <span class="stat-label" id="source-label">via TCGdex</span>
+      </div>
     </div>
   </div>
 </div>
@@ -1242,13 +1268,6 @@
 
 <!-- ── EXPLORE VIEW ─────────────────────────────── -->
 <div class="explore-view" id="explore-view">
-  <div class="stats-bar">
-    <span class="stat-count" id="count">–</span>
-    <span class="stat-label">cartes trouvées</span>
-    <div class="divider"></div>
-    <span class="stat-label" id="source-label">via TCGdex API</span>
-  </div>
-
   <div class="error-msg" id="error-msg">
     Impossible de charger les données. Vérifiez votre connexion ou réessayez.
   </div>
@@ -2036,6 +2055,24 @@ async function fetchPromoCards() {
   return allPromos;
 }
 
+
+function updateExplorePriceTotal() {
+  const el = document.getElementById('explore-price-total');
+  const pd = document.getElementById('price-divider');
+  if (!el) return;
+  if (!pricesVisible) { el.style.display = 'none'; if (pd) pd.style.display = 'none'; return; }
+  const cards = filtered;
+  let sum = 0, count = 0;
+  cards.forEach(c => {
+    const v = getBestPrice(c.id);
+    if (v != null) { sum += v; count++; }
+  });
+  if (count === 0) { el.style.display = 'none'; if (pd) pd.style.display = 'none'; return; }
+  el.style.display = 'block';
+  if (pd) pd.style.display = '';
+  el.textContent = fmtEur(sum);
+}
+
 function renderCards(cards, append = false, startIndex = 0) {
   if (!append) grid.innerHTML = '';
 
@@ -2131,6 +2168,7 @@ function applyFilters(refreshArtists = false) {
   filtered = sortCards(filtered);
   displayed = 0;
   countEl.textContent = filtered.length;
+  updateExplorePriceTotal();
   const slice = filtered.slice(0, PAGE_SIZE);
   displayed = slice.length;
   renderCards(slice, false, 0);
@@ -3030,14 +3068,22 @@ document.getElementById('btn-select-mode').addEventListener('click', () => {
 });
 
 document.getElementById('btn-select-all').addEventListener('click', () => {
-  getCollCards().forEach(c => selectedIds.add(c.id));
-  renderCollGrid();
+  getCollCards().forEach(c => {
+    selectedIds.add(c.id);
+    const el = document.querySelector(`#coll-grid .card[data-id="${c.id}"]`);
+    if (el) el.classList.add('selected');
+  });
+  updateTotalsBar();
 });
 
 document.getElementById('btn-deselect-all').addEventListener('click', () => {
+  selectedIds.forEach(id => {
+    const el = document.querySelector(`#coll-grid .card[data-id="${id}"]`);
+    if (el) el.classList.remove('selected');
+  });
   selectedIds.clear();
   lastClickedId = null;
-  renderCollGrid();
+  updateTotalsBar();
 });
 
 // Persist sort changes
