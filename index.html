@@ -1142,26 +1142,37 @@
   }
 
   /* Totals bar */
-  .coll-totals {
+  /* coll-totals now inline in toolbar — same style as explore-info-box */
+  .coll-totals { display: none; } /* legacy hidden */
+  .coll-info-box {
+    margin-left: auto;
     display: flex;
     align-items: center;
-    gap: 14px;
-    padding: 10px 14px;
+    gap: 8px;
+    flex-shrink: 0;
     background: var(--surface);
     border: 1px solid var(--border);
     border-radius: var(--radius);
-    margin-bottom: 1rem;
-    flex-wrap: wrap;
-    font-size: 13px;
+    padding: 5px 12px;
+    white-space: nowrap;
+    font-size: 12px;
   }
-  .coll-totals.hidden { display: none; }
-  .total-item { display: flex; flex-direction: column; gap: 2px; }
-  .total-item .t-label { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600; }
-  .total-item .t-value { font-family: 'Syne', sans-serif; font-weight: 800; font-size: 15px; color: var(--text); }
-  .total-item .t-value.green  { color: var(--accent); }
-  .total-item .t-value.blue   { color: #60a0f0; }
-  .total-item .t-value.orange { color: #f0a060; }
-  .totals-sep { width: 1px; height: 28px; background: var(--border); }
+  .coll-info-count {
+    font-family: 'Syne', sans-serif;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--text);
+  }
+  .coll-info-label { color: var(--muted); font-size: 11px; }
+  .coll-info-price {
+    font-family: 'Syne', sans-serif;
+    font-size: 13px;
+    font-weight: 700;
+  }
+  .coll-info-price.green  { color: var(--accent); }
+  .coll-info-price.blue   { color: #60a0f0; }
+  .coll-info-price.orange { color: #f0a060; }
+  .coll-info-divider { width: 1px; height: 16px; background: var(--border); }
 
   /* ── Collection controls ────────────────────── */
   .coll-controls {
@@ -1330,10 +1341,7 @@
     </div>
   </div>
 
-  <!-- Totals bar -->
-  <div class="coll-totals hidden" id="coll-totals"></div>
-
-  <!-- Toolbar: category tabs + selection controls on same row -->
+  <!-- Toolbar: category tabs + selection controls + info box -->
   <div class="coll-toolbar">
     <button class="coll-tab-btn active-owned" data-coll="owned">✦ En collection</button>
     <button class="coll-tab-btn" data-coll="wanted">⊕ À obtenir</button>
@@ -1342,7 +1350,12 @@
     <button class="coll-toolbar-btn" id="btn-select-mode">☐ Sélection</button>
     <button class="coll-toolbar-btn" id="btn-select-all" style="display:none">Tout sélectionner</button>
     <button class="coll-toolbar-btn" id="btn-deselect-all" style="display:none">Désélectionner</button>
-    <div class="coll-stats" id="coll-stats" style="margin-left:auto"></div>
+    <div class="coll-info-box" id="coll-info-box">
+      <span class="coll-info-count" id="coll-info-count">–</span>
+      <span class="coll-info-label">cartes</span>
+      <div class="coll-info-divider" id="coll-info-price-sep" style="display:none"></div>
+      <span class="coll-info-price" id="coll-info-price" style="display:none"></span>
+    </div>
   </div>
 
   <div id="coll-grid"></div>
@@ -1494,16 +1507,7 @@ function toggleWanted(id) {
   saveWanted(); updateCollStat();
 }
 function updateCollStat() {
-  // Update coll-stats summary
-  const el = document.getElementById('coll-stats');
-  if (el) {
-    const o = ownedSet.size, w = wantedSet.size, t = tradeSet.size;
-    el.innerHTML = [
-      o ? `<span><b>${o}</b> en collection</span>` : '',
-      w ? `<span><b>${w}</b> à obtenir</span>` : '',
-      t ? `<span><b>${t}</b> à vendre</span>` : '',
-    ].filter(Boolean).join('<span class="sep">·</span>');
-  }
+  // coll-stats replaced by coll-info-box — updateTotalsBar handles display
   // Sync coll-tab-btn active states (multi-select)
   document.querySelectorAll('.coll-tab-btn').forEach(btn => {
     const type = btn.dataset.coll;
@@ -1539,53 +1543,44 @@ function computeTotal(ids) {
 }
 
 function updateTotalsBar() {
-  const bar = document.getElementById('coll-totals');
-  if (!bar) return;
-
-  // Hide if prices hidden
-  if (!pricesVisible) { bar.classList.add('hidden'); return; }
+  const countEl = document.getElementById('coll-info-count');
+  const priceEl = document.getElementById('coll-info-price');
+  const sepEl   = document.getElementById('coll-info-price-sep');
+  if (!countEl) return;
 
   const isSelection = selectionMode && selectedIds.size > 0;
-  const idsToShow   = isSelection ? selectedIds : null;
 
-  if (!isSelection) {
-    // Show totals per active tab (all cards in that tab)
-    const cards = getCollCards();
-    if (cards.length === 0) { bar.classList.add('hidden'); return; }
-
-    const { sum, unknown, total } = computeTotal(new Set(cards.map(c => c.id)));
-    const colorClass = collTab === 'owned' ? 'green' : collTab === 'wanted' ? 'blue' : 'orange';
-    const label = collTab === 'owned' ? 'Collection' : collTab === 'wanted' ? 'À obtenir' : 'À vendre';
-
-    bar.innerHTML = `
-      <div class="total-item">
-        <span class="t-label">${label}</span>
-        <span class="t-value ${colorClass}">${fmtEur(sum)}</span>
-      </div>
-      <div class="totals-sep"></div>
-      <div class="total-item">
-        <span class="t-label">Cartes</span>
-        <span class="t-value">${total}</span>
-      </div>
-      ${unknown > 0 ? `<div class="total-item"><span class="t-label">Sans prix</span><span class="t-value" style="color:var(--muted)">${unknown}</span></div>` : ''}
-    `;
-    bar.classList.remove('hidden');
+  if (isSelection) {
+    const { sum, total } = computeTotal(selectedIds);
+    countEl.textContent = total;
+    if (pricesVisible && sum > 0) {
+      priceEl.textContent  = fmtEur(sum);
+      priceEl.className    = 'coll-info-price green';
+      priceEl.style.display = '';
+      if (sepEl) sepEl.style.display = '';
+    } else {
+      priceEl.style.display = 'none';
+      if (sepEl) sepEl.style.display = 'none';
+    }
   } else {
-    // Selection mode: show selected subset
-    const { sum, unknown } = computeTotal(selectedIds);
-    bar.innerHTML = `
-      <div class="total-item">
-        <span class="t-label">Sélection</span>
-        <span class="t-value green">${fmtEur(sum)}</span>
-      </div>
-      <div class="totals-sep"></div>
-      <div class="total-item">
-        <span class="t-label">Cartes</span>
-        <span class="t-value">${selectedIds.size}</span>
-      </div>
-      ${unknown > 0 ? `<div class="total-item"><span class="t-label">Sans prix</span><span class="t-value" style="color:var(--muted)">${unknown}</span></div>` : ''}
-    `;
-    bar.classList.remove('hidden');
+    const cards = getCollCards();
+    countEl.textContent = cards.length;
+    if (pricesVisible && cards.length > 0) {
+      const { sum } = computeTotal(new Set(cards.map(c => c.id)));
+      const colorClass = collTab === 'owned' ? 'green' : collTab === 'wanted' ? 'blue' : 'orange';
+      if (sum > 0) {
+        priceEl.textContent   = fmtEur(sum);
+        priceEl.className     = 'coll-info-price ' + colorClass;
+        priceEl.style.display = '';
+        if (sepEl) sepEl.style.display = '';
+      } else {
+        priceEl.style.display = 'none';
+        if (sepEl) sepEl.style.display = 'none';
+      }
+    } else {
+      priceEl.style.display = 'none';
+      if (sepEl) sepEl.style.display = 'none';
+    }
   }
 }
 
@@ -2967,7 +2962,7 @@ hidePricesBtn.addEventListener('click', () => {
   document.documentElement.style.setProperty('--prices-display', pricesVisible ? '' : 'none');
   hidePricesBtn.classList.toggle('active', pricesVisible);
   showToast(pricesVisible ? '€ Prix affichés' : '€ Prix cachés', 'info');
-  if (currentTab === 'collection') updateTotalsBar();
+  if (currentTab === 'collection') { renderCollGrid(); updateTotalsBar(); }
 });
 
 // Language toggle
