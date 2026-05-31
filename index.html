@@ -217,7 +217,7 @@
   .stat-label { font-size: 13px; color: var(--muted); }
   .divider { width: 1px; height: 24px; background: var(--border); }
 
-  #grid {
+  #grid, #coll-grid {
     max-width: 1200px;
     margin: 1.5rem auto 4rem;
     padding: 0 2rem;
@@ -1068,9 +1068,9 @@
 
   /* ── Price toggle: € icon ───────────────────── */
   .icon-btn .euro-icon {
-    font-family: 'Syne', sans-serif;
-    font-size: 14px;
-    font-weight: 800;
+    font-family: 'DM Sans', system-ui, sans-serif;
+    font-size: 15px;
+    font-weight: 700;
     line-height: 1;
   }
 
@@ -2628,7 +2628,17 @@ function getFilterDesc() {
 }
 
 function generateExport() {
-  const cards = filtered;
+  let cards;
+  if (currentTab === 'collection') {
+    // In collection tab: export selection if active, otherwise current tab cards
+    if (selectionMode && selectedIds.size > 0) {
+      cards = allCards.filter(c => selectedIds.has(c.id));
+    } else {
+      cards = getCollCards();
+    }
+  } else {
+    cards = filtered;
+  }
   if (!cards.length) { showToast('Aucune carte à exporter', 'info'); return; }
 
   const rows       = buildExportRows(cards);
