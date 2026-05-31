@@ -1143,6 +1143,15 @@
   .total-item .t-value.blue   { color: #60a0f0; }
   .total-item .t-value.orange { color: #f0a060; }
   .totals-sep { width: 1px; height: 28px; background: var(--border); }
+
+  /* ── Collection controls ────────────────────── */
+  .coll-controls {
+    padding: 0.75rem 0 0;
+    border-top: 1px solid var(--border);
+    margin-top: 0.25rem;
+  }
+  .coll-controls .pills-row { padding: 0 0 0.6rem; }
+  .coll-controls .filters-row { padding: 0; }
 </style>
 </head>
 <body>
@@ -1255,10 +1264,46 @@
     <button class="coll-tab-btn" data-coll="trade">⇄ À vendre</button>
     <div class="coll-stats" id="coll-stats"></div>
   </div>
-  <div class="coll-search-row">
-    <div class="search-wrap">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
-      <input type="text" id="coll-search" placeholder="Pokémon, artiste ou extension…" autocomplete="off">
+  <div class="coll-controls">
+    <!-- Search -->
+    <div class="search-row" style="padding-top:0;padding-bottom:0.6rem">
+      <div class="search-wrap" style="max-width:100%">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+        <input type="text" id="coll-search" placeholder="Pokémon, artiste ou extension…" autocomplete="off">
+      </div>
+    </div>
+    <!-- Rarity pills -->
+    <div class="pills-row" id="coll-rarity-pills">
+      <button class="pill active-all" data-coll-rarity="all">Toutes</button>
+      <button class="pill" data-coll-rarity="ir">✦ AR</button>
+      <button class="pill" data-coll-rarity="sir">✦✦ SAR</button>
+      <button class="pill" data-coll-rarity="alt">Alt Art</button>
+      <button class="pill" data-coll-rarity="promo">★ Promo</button>
+    </div>
+    <!-- Advanced filters -->
+    <div class="filters-row">
+      <select id="coll-type-filter" aria-label="Filtrer par type">
+        <option value="all">Tous les types</option>
+      </select>
+      <select id="coll-artist-filter" aria-label="Filtrer par artiste">
+        <option value="all">Tous les artistes</option>
+      </select>
+      <select id="coll-sort" aria-label="Trier les cartes">
+        <option value="pokedex">Pokédex</option>
+        <option value="name-asc">A → Z</option>
+        <option value="name-desc">Z → A</option>
+        <option value="set">Extension</option>
+        <option value="rarity">Rareté</option>
+        <option value="artist-name">Artiste A → Z</option>
+        <optgroup label="── Prix saisis ──">
+          <option value="price-asc">Prix ↑</option>
+          <option value="price-desc">Prix ↓</option>
+        </optgroup>
+        <optgroup label="── Prix marché ──">
+          <option value="market-asc">Marché ↑</option>
+          <option value="market-desc">Marché ↓</option>
+        </optgroup>
+      </select>
     </div>
   </div>
 
@@ -1345,6 +1390,10 @@ let collectionFilter = 'all'; // kept for backward compat, unused in new flow
 let currentTab = 'explore'; // 'explore' | 'collection'
 let collTab = 'owned';      // 'owned' | 'wanted' | 'trade'
 let collSearchQuery = '';
+let collRarity = 'all';   // rarity filter for collection
+let collType   = 'all';   // type filter for collection
+let collArtist = 'all';   // artist filter for collection
+let collSort   = 'pokedex'; // sort for collection
 let selectionMode = false;
 let selectedIds   = new Set();
 let lastClickedId = null; // for shift-click range
@@ -1512,16 +1561,80 @@ function updateTotalsBar() {
 }
 
 // ── Collection grid rendering ──────────────────────────────
+function matchesCollRarity(c) {
+  if (collRarity === 'all') return true;
+  const r = (c.rarity || '').toLowerCase();
+  const k = c.rarityKind;
+  if (collRarity === 'ir')    return k !== 'promo' && r.includes('illustration') && !r.includes('special') && !r.includes('spéciale');
+  if (collRarity === 'sir')   return r.includes('special illustration') || r.includes('illustration spéciale');
+  if (collRarity === 'alt')   return r.includes('ultra rare');
+  if (collRarity === 'promo') return k === 'promo';
+  return true;
+}
+
+function sortCollCards(cards) {
+  const collator = new Intl.Collator('fr', { sensitivity: 'base', numeric: true });
+  return [...cards].sort((a, b) => {
+    if (collSort === 'name-asc')   return collator.compare(a.name || '', b.name || '');
+    if (collSort === 'name-desc')  return collator.compare(b.name || '', a.name || '');
+    if (collSort === 'set')        return collator.compare(a.set?.name || '', b.set?.name || '') || collator.compare(a.localId || '', b.localId || '');
+    if (collSort === 'rarity')     return collator.compare(a.rarity || '', b.rarity || '');
+    if (collSort === 'artist-name') return collator.compare(a.illustrator || '', b.illustrator || '');
+    if (collSort === 'price-asc')  return getUserPriceValue(a) - getUserPriceValue(b);
+    if (collSort === 'price-desc') return getUserPriceValue(b) - getUserPriceValue(a);
+    if (collSort === 'market-asc') return getMarketPriceValue(a) - getMarketPriceValue(b);
+    if (collSort === 'market-desc') return getMarketPriceValue(b) - getMarketPriceValue(a);
+    return getDexNumber(a) - getDexNumber(b) || collator.compare(a.name || '', b.name || '');
+  });
+}
+
 function getCollCards() {
   const sourceSet = collTab === 'owned' ? ownedSet : collTab === 'wanted' ? wantedSet : tradeSet;
   const q = collSearchQuery.toLowerCase().trim();
-  return allCards.filter(c => {
+  const base = allCards.filter(c => {
     if (!sourceSet.has(c.id)) return false;
-    if (!q) return true;
-    return (c.name || '').toLowerCase().includes(q)
-      || (c.illustrator || '').toLowerCase().includes(q)
-      || (c.set?.name || '').toLowerCase().includes(q);
+    if (!matchesCollRarity(c)) return false;
+    if (collType !== 'all' && !(Array.isArray(c.types) && c.types.includes(collType))) return false;
+    if (collArtist !== 'all' && c.illustrator !== collArtist) return false;
+    if (q && !(
+      (c.name || '').toLowerCase().includes(q) ||
+      (c.illustrator || '').toLowerCase().includes(q) ||
+      (c.set?.name || '').toLowerCase().includes(q)
+    )) return false;
+    return true;
   });
+  return sortCollCards(base);
+}
+
+function populateCollFilters() {
+  const sourceSet = collTab === 'owned' ? ownedSet : collTab === 'wanted' ? wantedSet : tradeSet;
+  const collCards = allCards.filter(c => sourceSet.has(c.id));
+
+  // Types
+  const typeEl = document.getElementById('coll-type-filter');
+  if (typeEl) {
+    const types = [...new Set(collCards.flatMap(c => Array.isArray(c.types) ? c.types : []))].sort();
+    const prev = typeEl.value;
+    typeEl.innerHTML = '<option value="all">Tous les types</option>';
+    types.forEach(t => { const o = document.createElement('option'); o.value = t; o.textContent = t; typeEl.appendChild(o); });
+    typeEl.value = types.includes(prev) ? prev : 'all';
+    collType = typeEl.value;
+  }
+
+  // Artists
+  const artistEl = document.getElementById('coll-artist-filter');
+  if (artistEl) {
+    const artists = [...new Set(collCards.map(c => c.illustrator).filter(Boolean))].sort();
+    const prev = artistEl.value;
+    artistEl.innerHTML = '<option value="all">Tous les artistes</option>';
+    artists.forEach(a => { const o = document.createElement('option'); o.value = a; o.textContent = a; artistEl.appendChild(o); });
+    artistEl.value = artists.includes(prev) ? prev : 'all';
+    collArtist = artistEl.value;
+  }
+
+  // Sync sort select
+  const sortEl = document.getElementById('coll-sort');
+  if (sortEl) sortEl.value = collSort;
 }
 
 function renderCollGrid() {
@@ -2517,7 +2630,7 @@ async function openModal(card, index = filtered.findIndex(c => c.id === card.id)
   };
   document.getElementById('modal-btn-owned').addEventListener('click', () => {
     toggleOwned(card.id); syncModalBtns(card.id);
-    if (currentTab === 'collection') { renderCollGrid(); updateTotalsBar(); }
+    if (currentTab === 'collection') { populateCollFilters(); renderCollGrid(); updateTotalsBar(); }
   });
   document.getElementById('modal-btn-wanted').addEventListener('click', () => {
     toggleWanted(card.id); syncModalBtns(card.id);
@@ -2827,9 +2940,20 @@ document.querySelectorAll('.nav-tab').forEach(tab => {
 document.querySelectorAll('.coll-tab-btn').forEach(btn => {
   btn.addEventListener('click', () => {
     collTab = btn.dataset.coll;
+    collRarity = 'all';
+    collType   = 'all';
+    collArtist = 'all';
+    collSearchQuery = '';
+    const si = document.getElementById('coll-search'); if (si) si.value = '';
     selectedIds.clear();
     lastClickedId = null;
+    // Reset rarity pills
+    document.querySelectorAll('[data-coll-rarity]').forEach(b => {
+      b.className = 'pill';
+      if (b.dataset.collRarity === 'all') b.classList.add('active-all');
+    });
     updateCollStat();
+    populateCollFilters();
     renderCollGrid();
   });
 });
@@ -2837,6 +2961,34 @@ document.querySelectorAll('.coll-tab-btn').forEach(btn => {
 // ── Collection search ──────────────────────────────────────
 document.getElementById('coll-search').addEventListener('input', e => {
   collSearchQuery = e.target.value;
+  renderCollGrid();
+});
+
+// ── Collection filters ─────────────────────────────────────
+document.querySelectorAll('[data-coll-rarity]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    collRarity = btn.dataset.collRarity;
+    document.querySelectorAll('[data-coll-rarity]').forEach(b => {
+      b.className = 'pill';
+      const r = b.dataset.collRarity;
+      if (r === collRarity) b.classList.add(r === 'all' ? 'active-all' : `active-${r}`);
+    });
+    renderCollGrid();
+  });
+});
+
+document.getElementById('coll-type-filter').addEventListener('change', e => {
+  collType = e.target.value;
+  renderCollGrid();
+});
+
+document.getElementById('coll-artist-filter').addEventListener('change', e => {
+  collArtist = e.target.value;
+  renderCollGrid();
+});
+
+document.getElementById('coll-sort').addEventListener('change', e => {
+  collSort = e.target.value;
   renderCollGrid();
 });
 
