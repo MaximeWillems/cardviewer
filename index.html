@@ -1121,7 +1121,7 @@ const RARITIES_BY_LANG = {
   ],
 };
 
-let currentLang = prefs.lang || 'fr';
+let currentLang = 'fr'; // set from prefs after declaration
 let API = API_BASE + '/' + currentLang;
 let RARITIES = RARITIES_BY_LANG[currentLang];
 
@@ -1135,10 +1135,10 @@ let selectedRarities = new Set(RARITIES.map(r => r.kind));
 let searchQuery = '';
 let currentType = 'all';
 let currentArtist = 'all';
-let currentSort = prefs.sort || 'pokedex';
+let currentSort = 'pokedex'; // set from prefs after declaration
 let currentModalIndex = -1;
 let currentArtistCounts = new Map();
-let collectionFilter = prefs.collFilter || 'all'; // 'all' | 'owned' | 'wanted' | 'both' | 'trade'
+let collectionFilter = 'all'; // 'all' | 'owned' | 'wanted' | 'both' | 'trade' — always start unfiltered
 let pricesVisible  = prefs.pricesVisible !== false;
 
 const LS_OWNED  = 'illusdex_owned';
@@ -1155,6 +1155,9 @@ let pricesMap = JSON.parse(localStorage.getItem(LS_PRICES) || '{}');
 const defaultPrefs = { pricesVisible: true, collFilter: 'all', sort: 'pokedex', lang: 'fr' };
 let prefs = { ...defaultPrefs, ...JSON.parse(localStorage.getItem(LS_PREFS) || '{}') };
 function savePrefs() { localStorage.setItem(LS_PREFS, JSON.stringify(prefs)); }
+// Apply persisted prefs now that prefs is initialized
+currentLang = prefs.lang || 'fr';
+currentSort = prefs.sort || 'pokedex';
 
 function saveOwned()  { localStorage.setItem(LS_OWNED,  JSON.stringify([...ownedSet])); }
 function saveWanted() { localStorage.setItem(LS_WANTED, JSON.stringify([...wantedSet])); }
@@ -1567,7 +1570,7 @@ function renderCards(cards, append = false, startIndex = 0) {
     }
 
     const img  = c.image ? c.image + '/low.webp' : '';
-    const name = c.name || '—';
+    let name = c.name || '—';
     const dex  = getDexNumber(c) === Number.MAX_SAFE_INTEGER ? '' : `#${String(getDexNumber(c)).padStart(4, '0')} · `;
     const set  = `${dex}${c.set?.name || c.rarity || ''}`;
     const isOwned  = ownedSet.has(c.id);
@@ -2450,8 +2453,6 @@ document.querySelectorAll('.lang-btn').forEach(btn => {
 // Trade filter button
 document.getElementById('filter-trade').addEventListener('click', () => {
   collectionFilter = collectionFilter === 'trade' ? 'all' : 'trade';
-  prefs.collFilter = collectionFilter;
-  savePrefs();
   updateCollStat(); applyFilters(true);
 });
 
