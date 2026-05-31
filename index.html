@@ -29,44 +29,99 @@
     min-height: 100vh;
   }
 
-  header {
-    padding: 2.5rem 2rem 0;
+  /* ── App Shell ─────────────────────────────── */
+  .app-header {
     max-width: 1200px;
     margin: 0 auto;
-    display: flex;
-    align-items: flex-end;
-    justify-content: space-between;
-    flex-wrap: wrap;
-    gap: 1rem;
+    padding: 2rem 2rem 0;
   }
 
-  .logo {
+  .app-header-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding-bottom: 1.75rem;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .app-logo {
     font-family: 'Syne', sans-serif;
     font-weight: 800;
-    font-size: clamp(1.7rem, 2.8vw, 2.8rem);
-    line-height: 1.05;
-    max-width: 760px;
+    font-size: 1.5rem;
+    letter-spacing: -0.03em;
+    line-height: 1;
   }
-  .logo span {
-    color: var(--accent);
-    display: block;
+  .app-logo span { color: var(--accent); }
+
+  .app-tagline {
+    font-size: 12px;
+    color: var(--muted);
+    margin-top: 5px;
+    font-weight: 400;
+    letter-spacing: 0.01em;
   }
 
-  .tagline {
-    font-size: 14px;
+  .header-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+  }
+
+  .icon-btn {
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    background: var(--surface);
     color: var(--muted);
-    font-weight: 300;
-    margin-top: 0.75rem;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.18s;
+    flex-shrink: 0;
+  }
+  .icon-btn:hover { border-color: rgba(255,255,255,.2); color: var(--text); }
+  .icon-btn.active { background: rgba(200,240,96,.1); border-color: var(--accent); color: var(--accent); }
+  .icon-btn.active-blue { background: rgba(96,160,240,.1); border-color: #60a0f0; color: #60a0f0; }
+
+  /* ── Search bar row ─────────────────────────── */
+  .search-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 1.25rem 0 0;
+  }
+
+  .search-row .search-wrap {
+    flex: 1;
+    max-width: 100%;
+  }
+
+  /* ── Rarity pills row ───────────────────────── */
+  .pills-row {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    padding: 0.75rem 0 0;
+  }
+
+  /* ── Advanced filters row ───────────────────── */
+  .filters-row {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    flex-wrap: wrap;
+    padding: 0.75rem 0 0;
   }
 
   .controls {
     max-width: 1200px;
-    margin: 1.5rem auto 0;
-    padding: 0 2rem;
-    display: flex;
-    gap: 10px;
-    flex-wrap: wrap;
-    align-items: center;
+    margin: 0 auto;
+    padding: 0 2rem 1rem;
+    border-bottom: 1px solid var(--border);
   }
 
   .search-wrap {
@@ -563,7 +618,23 @@
     line-height: 1.4;
   }
   .card.owned  .card-price-pill.owned-price,
-  .card.wanted .card-price-pill.wanted-price { display: inline-block; }
+  .card.wanted .card-price-pill.wanted-price { display: var(--prices-display, inline-block); }
+
+  /* Trade badge on card */
+  .card.trade::after {
+    content: '⇄';
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    background: rgba(240,160,96,0.2);
+    border: 1px solid rgba(240,160,96,0.4);
+    color: #f0a060;
+    font-size: 10px;
+    padding: 2px 5px;
+    border-radius: 100px;
+    font-family: 'Syne', sans-serif;
+    font-weight: 700;
+  }
   .card-price-pill.owned-price  { color: var(--accent); background: rgba(200,240,96,0.12); }
   .card-price-pill.wanted-price { color: #60a0f0;       background: rgba(96,160,240,0.12); }
 
@@ -656,6 +727,8 @@
   .coll-filter-btn:hover { color: var(--text); border-color: rgba(255,255,255,0.2); }
   .coll-filter-btn.active-owned  { background: rgba(200,240,96,0.12); border-color: var(--accent); color: var(--accent); }
   .coll-filter-btn.active-wanted { background: rgba(96,160,240,0.12); border-color: #60a0f0; color: #60a0f0; }
+  .coll-filter-btn.active-trade  { background: rgba(240,160,96,0.12); border-color: #f0a060; color: #f0a060; }
+  .card.trade { box-shadow: inset 0 0 0 2px rgba(240,160,96,0.5); }
   .coll-stat { font-size: 12px; color: var(--muted); }
   .coll-stat b { color: var(--text); font-weight: 600; }
 
@@ -681,6 +754,7 @@
   .modal-coll-btn:hover { color: var(--text); border-color: rgba(255,255,255,0.2); }
   .modal-coll-btn.active-owned  { background: rgba(200,240,96,0.14); border-color: var(--accent); color: var(--accent); }
   .modal-coll-btn.active-wanted { background: rgba(96,160,240,0.14); border-color: #60a0f0; color: #60a0f0; }
+  .modal-coll-btn.active-trade  { background: rgba(240,160,96,0.14); border-color: #f0a060; color: #f0a060; }
 
   /* ── Prix Cardmarket ───────────────────────────────── */
   .price-block {
@@ -859,60 +933,127 @@
   }
   .lang-btn:hover { color: var(--text); background: var(--surface2); }
   .lang-btn.active { background: var(--surface2); color: var(--text); }
+
+  /* ── 3D card viewer ─────────────────────────── */
+  .card-viewer-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.92);
+    backdrop-filter: blur(12px);
+    z-index: 1000;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    cursor: zoom-out;
+  }
+  .card-viewer-overlay.open { display: flex; }
+  .card-viewer-scene {
+    perspective: 900px;
+    width: min(80vw, 380px);
+    aspect-ratio: 63/88;
+    cursor: grab;
+    user-select: none;
+  }
+  .card-viewer-scene:active { cursor: grabbing; }
+  .card-viewer-inner {
+    width: 100%;
+    height: 100%;
+    transform-style: preserve-3d;
+    transition: transform 0.08s ease-out;
+    border-radius: 14px;
+    overflow: hidden;
+    box-shadow: 0 30px 80px rgba(0,0,0,0.7), 0 0 0 1px rgba(255,255,255,0.08);
+  }
+  .card-viewer-inner img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+    border-radius: 14px;
+    pointer-events: none;
+  }
+  .card-viewer-hint {
+    position: absolute;
+    bottom: 2rem;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 11px;
+    color: rgba(255,255,255,0.35);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    pointer-events: none;
+  }
 </style>
 </head>
 <body>
 
-<header>
-  <div>
-    <h1 class="logo">Encyclopédie des illustrations <span>de cartes Pokémon</span></h1>
-    <div class="tagline">Illustration Rare, Illustration spéciale rare et alt arts</div>
+<div class="app-header">
+  <div class="app-header-top">
+    <div>
+      <div class="app-logo">illus<span>dex</span></div>
+      <div class="app-tagline">Illustration Rare · Special IR · Alt Arts · Promos</div>
+    </div>
+    <div class="header-actions">
+      <!-- Hide prices toggle -->
+      <button class="icon-btn" id="btn-hide-prices" title="Afficher / cacher les prix" aria-label="Cacher les prix">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+      </button>
+      <!-- Language -->
+      <div class="lang-toggle">
+        <button class="lang-btn active" data-lang="fr">FR</button>
+        <button class="lang-btn" data-lang="en">EN</button>
+      </div>
+      <!-- Export -->
+      <button class="icon-btn" id="btn-export" title="Exporter la vue" aria-label="Exporter">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+      </button>
+    </div>
   </div>
-</header>
 
-<div class="controls">
-  <div class="search-wrap">
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
-    <input type="text" id="search" placeholder="Pokémon ou artiste…" autocomplete="off">
-  </div>
+  <div class="controls">
+    <!-- Row 1: Search -->
+    <div class="search-row">
+      <div class="search-wrap">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+        <input type="text" id="search" placeholder="Pokémon, artiste ou extension…" autocomplete="off">
+      </div>
+    </div>
 
-  <div class="rarity-pills">
-    <button class="pill active-all" data-rarity="all">Toutes</button>
-    <button class="pill" data-rarity="ir">✦ Illustration Rare</button>
-    <button class="pill" data-rarity="sir">✦✦ Illustration spéciale rare</button>
-    <button class="pill" data-rarity="alt">Alt arts / Ultra Rare</button>
-    <button class="pill" data-rarity="promo">★ Promos</button>
-  </div>
+    <!-- Row 2: Rarity pills -->
+    <div class="pills-row rarity-pills">
+      <button class="pill active-all" data-rarity="all">Toutes</button>
+      <button class="pill" data-rarity="ir">✦ Illustration Rare</button>
+      <button class="pill" data-rarity="sir">✦✦ Spéciale Rare</button>
+      <button class="pill" data-rarity="alt">Alt Art</button>
+      <button class="pill" data-rarity="promo">★ Promo</button>
+    </div>
 
-  <select id="type-filter" aria-label="Filtrer par type">
-    <option value="all">Tous les types</option>
-  </select>
-
-  <select id="artist-filter" aria-label="Filtrer par artiste">
-    <option value="all">Tous les artistes</option>
-  </select>
-
-  <select id="sort" aria-label="Trier les cartes">
-    <option value="pokedex">Pokédex</option>
-    <option value="name-asc">A-Z</option>
-    <option value="name-desc">Z-A</option>
-    <option value="set">Extension</option>
-    <option value="rarity">Rareté</option>
-    <option value="artist-count">Artistes les + prolifiques</option>
-    <option value="artist-name">Artiste A-Z</option>
-    <optgroup label="── Prix saisis ──">
-      <option value="price-asc">Prix croissant</option>
-      <option value="price-desc">Prix décroissant</option>
-    </optgroup>
-    <optgroup label="── Prix marché ──">
-      <option value="market-asc">Prix marché croissant</option>
-      <option value="market-desc">Prix marché décroissant</option>
-    </optgroup>
-  </select>
-
-  <div class="lang-toggle">
-    <button class="lang-btn active" data-lang="fr">FR</button>
-    <button class="lang-btn" data-lang="en">EN</button>
+    <!-- Row 3: Advanced filters -->
+    <div class="filters-row">
+      <select id="type-filter" aria-label="Filtrer par type">
+        <option value="all">Tous les types</option>
+      </select>
+      <select id="artist-filter" aria-label="Filtrer par artiste">
+        <option value="all">Tous les artistes</option>
+      </select>
+      <select id="sort" aria-label="Trier les cartes">
+        <option value="pokedex">Pokédex</option>
+        <option value="name-asc">A → Z</option>
+        <option value="name-desc">Z → A</option>
+        <option value="set">Extension</option>
+        <option value="rarity">Rareté</option>
+        <option value="artist-count">Artiste (volume)</option>
+        <option value="artist-name">Artiste A → Z</option>
+        <optgroup label="── Prix saisis ──">
+          <option value="price-asc">Prix ↑</option>
+          <option value="price-desc">Prix ↓</option>
+        </optgroup>
+        <optgroup label="── Prix marché ──">
+          <option value="market-asc">Marché ↑</option>
+          <option value="market-desc">Marché ↓</option>
+        </optgroup>
+      </select>
+    </div>
   </div>
 </div>
 
@@ -927,8 +1068,8 @@
 <div class="collection-bar">
   <button class="coll-filter-btn" id="filter-owned">✦ En collection</button>
   <button class="coll-filter-btn" id="filter-wanted">⊕ À obtenir</button>
+  <button class="coll-filter-btn" id="filter-trade">⇄ À vendre / échanger</button>
   <span class="coll-stat" id="coll-stat"></span>
-  <button class="coll-filter-btn" id="btn-export" style="margin-left:auto">↗ Exporter la vue</button>
 </div>
 
 <div class="error-msg" id="error-msg">
@@ -980,7 +1121,7 @@ const RARITIES_BY_LANG = {
   ],
 };
 
-let currentLang = localStorage.getItem('illusdex_lang') || 'fr';
+let currentLang = prefs.lang || 'fr';
 let API = API_BASE + '/' + currentLang;
 let RARITIES = RARITIES_BY_LANG[currentLang];
 
@@ -994,21 +1135,38 @@ let selectedRarities = new Set(RARITIES.map(r => r.kind));
 let searchQuery = '';
 let currentType = 'all';
 let currentArtist = 'all';
-let currentSort = 'pokedex';
+let currentSort = prefs.sort || 'pokedex';
 let currentModalIndex = -1;
 let currentArtistCounts = new Map();
-let collectionFilter = 'all'; // 'all' | 'owned' | 'wanted' | 'both'
+let collectionFilter = prefs.collFilter || 'all'; // 'all' | 'owned' | 'wanted' | 'both' | 'trade'
+let pricesVisible  = prefs.pricesVisible !== false;
 
 const LS_OWNED  = 'illusdex_owned';
 const LS_WANTED = 'illusdex_wanted';
-const LS_PRICES = 'illusdex_prices'; // { cardId: { owned: {val, min, max}, wanted: {val, min, max} } }
+const LS_TRADE  = 'illusdex_trade';
+const LS_PRICES = 'illusdex_prices';
+const LS_PREFS  = 'illusdex_prefs';
 let ownedSet  = new Set(JSON.parse(localStorage.getItem(LS_OWNED)  || '[]'));
 let wantedSet = new Set(JSON.parse(localStorage.getItem(LS_WANTED) || '[]'));
+let tradeSet  = new Set(JSON.parse(localStorage.getItem(LS_TRADE)  || '[]'));
 let pricesMap = JSON.parse(localStorage.getItem(LS_PRICES) || '{}');
+
+// User preferences (persisted)
+const defaultPrefs = { pricesVisible: true, collFilter: 'all', sort: 'pokedex', lang: 'fr' };
+let prefs = { ...defaultPrefs, ...JSON.parse(localStorage.getItem(LS_PREFS) || '{}') };
+function savePrefs() { localStorage.setItem(LS_PREFS, JSON.stringify(prefs)); }
 
 function saveOwned()  { localStorage.setItem(LS_OWNED,  JSON.stringify([...ownedSet])); }
 function saveWanted() { localStorage.setItem(LS_WANTED, JSON.stringify([...wantedSet])); }
+function saveTrade()  { localStorage.setItem(LS_TRADE,  JSON.stringify([...tradeSet])); }
 function savePrices() { localStorage.setItem(LS_PRICES, JSON.stringify(pricesMap)); }
+
+function toggleTrade(id) {
+  // Only allowed if card is owned
+  if (!ownedSet.has(id)) return;
+  if (tradeSet.has(id)) tradeSet.delete(id); else tradeSet.add(id);
+  saveTrade(); updateCollStat();
+}
 
 function setPriceData(cardId, type, data) {
   if (!pricesMap[cardId]) pricesMap[cardId] = {};
@@ -1047,14 +1205,26 @@ function toggleWanted(id) {
 function updateCollStat() {
   const el = document.getElementById('coll-stat');
   if (!el) return;
-  const o = ownedSet.size, w = wantedSet.size;
-  el.innerHTML = (o || w) ? `<b>${o}</b> en collection · <b>${w}</b> à obtenir` : '';
+  const o = ownedSet.size, w = wantedSet.size, t = tradeSet.size;
+  const parts = [];
+  if (o) parts.push(`<b>${o}</b> en collection`);
+  if (w) parts.push(`<b>${w}</b> à obtenir`);
+  if (t) parts.push(`<b>${t}</b> à vendre`);
+  el.innerHTML = parts.join(' · ');
   const bo = document.getElementById('filter-owned');
   const bw = document.getElementById('filter-wanted');
+  const bt = document.getElementById('filter-trade');
   const showOwned  = collectionFilter === 'owned'  || collectionFilter === 'both';
   const showWanted = collectionFilter === 'wanted' || collectionFilter === 'both';
+  const showTrade  = collectionFilter === 'trade';
   if (bo) bo.className = 'coll-filter-btn' + (showOwned  ? ' active-owned'  : '');
   if (bw) bw.className = 'coll-filter-btn' + (showWanted ? ' active-wanted' : '');
+  if (bt) bt.className = 'coll-filter-btn' + (showTrade  ? ' active-trade'  : '');
+  // Sync hide-prices icon
+  const pb = document.getElementById('btn-hide-prices');
+  if (pb) pb.classList.toggle('active', !pricesVisible);
+  // Apply prices visibility
+  document.documentElement.style.setProperty('--prices-display', pricesVisible ? '' : 'none');
 }
 
 const grid       = document.getElementById('grid');
@@ -1402,10 +1572,11 @@ function renderCards(cards, append = false, startIndex = 0) {
     const set  = `${dex}${c.set?.name || c.rarity || ''}`;
     const isOwned  = ownedSet.has(c.id);
     const isWanted = wantedSet.has(c.id);
+    const isTrade  = tradeSet.has(c.id);
     // Show EN name if lang=en and available
     if (currentLang === 'en' && c.nameEn) name = c.nameEn;
     const div  = document.createElement('div');
-    div.className = 'card' + (isOwned ? ' owned' : '') + (isWanted ? ' wanted' : '');
+    div.className = 'card' + (isOwned ? ' owned' : '') + (isWanted ? ' wanted' : '') + (isTrade ? ' trade' : '');
     div.dataset.id = c.id;
     const ownedLabel  = getPriceLabel(c.id, 'owned');
     const wantedLabel = getPriceLabel(c.id, 'wanted');
@@ -1441,13 +1612,17 @@ function showSkeletons(n = 12) {
 function getBaseFilteredCards() {
   const q = searchQuery.toLowerCase().trim();
   return allCards.filter(c => {
-    const nameMatch  = !q || (c.name || '').toLowerCase().includes(q) || (c.illustrator || '').toLowerCase().includes(q);
+    const nameMatch  = !q || (c.name || '').toLowerCase().includes(q)
+      || (c.illustrator || '').toLowerCase().includes(q)
+      || (c.set?.name || '').toLowerCase().includes(q)
+      || (c.set?.serie?.name || '').toLowerCase().includes(q);
     const rarityMatch = matchesSelectedRarities(c);
     const typeMatch  = currentType === 'all' || (Array.isArray(c.types) && c.types.includes(currentType));
     const collMatch  = collectionFilter === 'all'
       || (collectionFilter === 'owned'  && ownedSet.has(c.id))
       || (collectionFilter === 'wanted' && wantedSet.has(c.id))
-      || (collectionFilter === 'both'   && (ownedSet.has(c.id) || wantedSet.has(c.id)));
+      || (collectionFilter === 'both'   && (ownedSet.has(c.id) || wantedSet.has(c.id)))
+      || (collectionFilter === 'trade'  && tradeSet.has(c.id));
     return nameMatch && rarityMatch && typeMatch && collMatch;
   });
 }
@@ -1872,6 +2047,7 @@ async function openModal(card, index = filtered.findIndex(c => c.id === card.id)
     <div class="modal-collection-btns">
       <button class="modal-coll-btn ${ownedSet.has(card.id) ? 'active-owned' : ''}" id="modal-btn-owned">✦ En collection</button>
       <button class="modal-coll-btn ${wantedSet.has(card.id) ? 'active-wanted' : ''}" id="modal-btn-wanted">⊕ À obtenir</button>
+      <button class="modal-coll-btn ${tradeSet.has(card.id) ? 'active-trade' : ''}" id="modal-btn-trade" style="${ownedSet.has(card.id) ? '' : 'opacity:.35;pointer-events:none'}">⇄ Vendre</button>
     </div>
     <div class="price-input-section ${ownedSet.has(card.id) ? 'visible' : ''}" id="price-section-owned">
       <div class="price-input-title">Prix payé / estimé</div>
@@ -1951,9 +2127,15 @@ async function openModal(card, index = filtered.findIndex(c => c.id === card.id)
   const syncModalBtns = (id) => {
     const bo = document.getElementById('modal-btn-owned');
     const bw = document.getElementById('modal-btn-wanted');
+    const bt = document.getElementById('modal-btn-trade');
     if (!bo || !bw) return;
     bo.className = 'modal-coll-btn' + (ownedSet.has(id)  ? ' active-owned'  : '');
     bw.className = 'modal-coll-btn' + (wantedSet.has(id) ? ' active-wanted' : '');
+    if (bt) {
+      bt.className = 'modal-coll-btn' + (tradeSet.has(id) ? ' active-trade' : '');
+      bt.style.opacity = ownedSet.has(id) ? '1' : '0.35';
+      bt.style.pointerEvents = ownedSet.has(id) ? '' : 'none';
+    }
     // Show/hide price input sections
     const so = document.getElementById('price-section-owned');
     const sw = document.getElementById('price-section-wanted');
@@ -1964,6 +2146,7 @@ async function openModal(card, index = filtered.findIndex(c => c.id === card.id)
     if (gridCard) {
       gridCard.classList.toggle('owned',  ownedSet.has(id));
       gridCard.classList.toggle('wanted', wantedSet.has(id));
+      gridCard.classList.toggle('trade',  tradeSet.has(id));
     }
   };
   document.getElementById('modal-btn-owned').addEventListener('click', () => {
@@ -1973,6 +2156,10 @@ async function openModal(card, index = filtered.findIndex(c => c.id === card.id)
   document.getElementById('modal-btn-wanted').addEventListener('click', () => {
     toggleWanted(card.id); syncModalBtns(card.id);
     if (collectionFilter !== 'all') applyFilters();
+  });
+  document.getElementById('modal-btn-trade')?.addEventListener('click', () => {
+    toggleTrade(card.id); syncModalBtns(card.id);
+    if (collectionFilter === 'trade') applyFilters();
   });
 
   // Price save buttons
@@ -2230,21 +2417,110 @@ document.getElementById('btn-img').addEventListener('click', async () => {
 
 document.getElementById('btn-export').addEventListener('click', generateExport);
 
+// Hide prices toggle
+const hidePricesBtn = document.getElementById('btn-hide-prices');
+hidePricesBtn.classList.toggle('active', !pricesVisible);
+document.documentElement.style.setProperty('--prices-display', pricesVisible ? '' : 'none');
+hidePricesBtn.addEventListener('click', () => {
+  pricesVisible = !pricesVisible;
+  prefs.pricesVisible = pricesVisible;
+  savePrefs();
+  document.documentElement.style.setProperty('--prices-display', pricesVisible ? '' : 'none');
+  hidePricesBtn.classList.toggle('active', !pricesVisible);
+  showToast(pricesVisible ? '👁 Prix affichés' : '👁 Prix cachés', 'info');
+});
+
 // Language toggle
 document.querySelectorAll('.lang-btn').forEach(btn => {
   if (btn.dataset.lang === currentLang) btn.classList.add('active');
   else btn.classList.remove('active');
-
   btn.addEventListener('click', () => {
     if (btn.dataset.lang === currentLang) return;
     currentLang = btn.dataset.lang;
     API = API_BASE + '/' + currentLang;
     RARITIES = RARITIES_BY_LANG[currentLang];
-    localStorage.setItem('illusdex_lang', currentLang);
+    prefs.lang = currentLang;
+    savePrefs();
     document.querySelectorAll('.lang-btn').forEach(b => b.classList.toggle('active', b.dataset.lang === currentLang));
     allCards = [];
     fetchCards();
   });
+});
+
+// Trade filter button
+document.getElementById('filter-trade').addEventListener('click', () => {
+  collectionFilter = collectionFilter === 'trade' ? 'all' : 'trade';
+  prefs.collFilter = collectionFilter;
+  savePrefs();
+  updateCollStat(); applyFilters(true);
+});
+
+// Persist sort changes
+document.getElementById('sort').value = currentSort;
+document.getElementById('sort').addEventListener('change', e => {
+  currentSort = e.target.value;
+  prefs.sort = currentSort;
+  savePrefs();
+  applyFilters(true);
+});
+
+// ── 3D card viewer ────────────────────────────────────────
+function openCardViewer(imgUrl, altText) {
+  const overlay = document.getElementById('card-viewer-overlay');
+  const img     = document.getElementById('card-viewer-img');
+  const inner   = document.getElementById('card-viewer-inner');
+  img.src = imgUrl.replace('/low.webp', '/high.webp');
+  img.alt = altText || '';
+  inner.style.transform = 'rotateY(0deg) rotateX(0deg)';
+  overlay.classList.add('open');
+
+  let isDragging = false;
+  let startX = 0, startY = 0;
+  let rotX = 0, rotY = 0;
+  const scene = document.getElementById('card-viewer-scene');
+
+  function applyRotation(dx, dy) {
+    rotY = Math.max(-35, Math.min(35, rotY + dx * 0.4));
+    rotX = Math.max(-25, Math.min(25, rotX - dy * 0.4));
+    inner.style.transform = `rotateY(${rotY}deg) rotateX(${rotX}deg)`;
+  }
+
+  function onDown(e) {
+    isDragging = true;
+    startX = e.touches ? e.touches[0].clientX : e.clientX;
+    startY = e.touches ? e.touches[0].clientY : e.clientY;
+    e.stopPropagation();
+  }
+  function onMove(e) {
+    if (!isDragging) return;
+    const cx = e.touches ? e.touches[0].clientX : e.clientX;
+    const cy = e.touches ? e.touches[0].clientY : e.clientY;
+    applyRotation(cx - startX, cy - startY);
+    startX = cx; startY = cy;
+    e.preventDefault();
+  }
+  function onUp() { isDragging = false; }
+
+  // Remove previous listeners by cloning
+  const newScene = scene.cloneNode(false);
+  newScene.appendChild(inner);
+  scene.parentNode.replaceChild(newScene, scene);
+
+  newScene.addEventListener('mousedown',  onDown);
+  newScene.addEventListener('touchstart', onDown, { passive: true });
+  window.addEventListener('mousemove',  onMove);
+  window.addEventListener('touchmove',  onMove, { passive: false });
+  window.addEventListener('mouseup',    onUp);
+  window.addEventListener('touchend',   onUp);
+}
+
+document.getElementById('card-viewer-overlay').addEventListener('click', function(e) {
+  if (e.target === this || e.target.id === 'card-viewer-img') {
+    this.classList.remove('open');
+  }
+});
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') document.getElementById('card-viewer-overlay').classList.remove('open');
 });
 
 // Deep-link: if URL has #card-{id}, open that card once data is loaded
@@ -2274,6 +2550,14 @@ fetchCards().then(() => {
 });
 updateCollStat();
 </script>
+<div class="card-viewer-overlay" id="card-viewer-overlay">
+  <div class="card-viewer-scene" id="card-viewer-scene">
+    <div class="card-viewer-inner" id="card-viewer-inner">
+      <img id="card-viewer-img" src="" alt="">
+    </div>
+  </div>
+  <div class="card-viewer-hint">Glisser pour pivoter · Clic pour fermer</div>
+</div>
 <div id="toast"></div>
 </body>
 </html>
