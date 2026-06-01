@@ -1650,20 +1650,70 @@ function sortCollCards(cards) {
 }
 
 function getCollCards() {
-  const sourceSet = collTab === 'owned' ? ownedSet : collTab === 'wanted' ? wantedSet : tradeSet;
+  const sourceSet =
+    collTab === 'owned'
+      ? ownedSet
+      : collTab === 'wanted'
+      ? wantedSet
+      : tradeSet;
+
   const q = collSearchQuery.toLowerCase().trim();
+
+  const minPrice =
+    currentPriceMin !== '' ? Number(currentPriceMin) : null;
+
+  const maxPrice =
+    currentPriceMax !== '' ? Number(currentPriceMax) : null;
+
   const base = allCards.filter(c => {
     if (!sourceSet.has(c.id)) return false;
+
     if (!matchesCollRarity(c)) return false;
-    if (collType !== 'all' && !(Array.isArray(c.types) && c.types.includes(collType))) return false;
-    if (collArtist !== 'all' && c.illustrator !== collArtist) return false;
-    if (q && !(
-      (c.name || '').toLowerCase().includes(q) ||
-      (c.illustrator || '').toLowerCase().includes(q) ||
-      (c.set?.name || '').toLowerCase().includes(q)
-    )) return false;
+
+    if (
+      collType !== 'all' &&
+      !(Array.isArray(c.types) && c.types.includes(collType))
+    ) {
+      return false;
+    }
+
+    if (
+      collArtist !== 'all' &&
+      c.illustrator !== collArtist
+    ) {
+      return false;
+    }
+
+    if (
+      q &&
+      !(
+        (c.name || '').toLowerCase().includes(q) ||
+        (c.illustrator || '').toLowerCase().includes(q) ||
+        (c.set?.name || '').toLowerCase().includes(q)
+      )
+    ) {
+      return false;
+    }
+
+    // ───── Filtre prix ─────
+
+    const price = getBestPrice(c.id);
+
+    if (minPrice !== null) {
+      if (price == null || price < minPrice) {
+        return false;
+      }
+    }
+
+    if (maxPrice !== null) {
+      if (price == null || price > maxPrice) {
+        return false;
+      }
+    }
+
     return true;
   });
+
   return sortCollCards(base);
 }
 
@@ -3116,12 +3166,12 @@ document.getElementById('coll-sort').addEventListener('change', e => {
 
 document.getElementById('price-min-filter').addEventListener('input', e => {
   currentPriceMin = e.target.value.trim();
-  applyFilters();
+  renderCollGrid();
 });
 
 document.getElementById('price-max-filter').addEventListener('input', e => {
   currentPriceMax = e.target.value.trim();
-  applyFilters();
+  renderCollGrid();
 });
 
 // ── Selection toolbar ──────────────────────────────────────
