@@ -2177,28 +2177,37 @@ function showSkeletons(n = 12) {
 
 function getBaseFilteredCards() {
   const q = searchQuery.toLowerCase().trim();
+
   return allCards.filter(c => {
-    const nameMatch  = !q || (c.name || '').toLowerCase().includes(q)
-      || (c.illustrator || '').toLowerCase().includes(q)
-      || (c.set?.name || '').toLowerCase().includes(q)
-      || (c.set?.serie?.name || '').toLowerCase().includes(q);
+    const nameMatch =
+      !q ||
+      (c.name || '').toLowerCase().includes(q) ||
+      (c.illustrator || '').toLowerCase().includes(q) ||
+      (c.set?.name || '').toLowerCase().includes(q) ||
+      (c.set?.serie?.name || '').toLowerCase().includes(q);
+
     const rarityMatch = matchesSelectedRarities(c);
-    const typeMatch  = currentType === 'all' || (Array.isArray(c.types) && c.types.includes(currentType));
-    const collMatch  = collectionFilter === 'all'
+
+    const typeMatch =
+      currentType === 'all' ||
+      (Array.isArray(c.types) && c.types.includes(currentType));
+
+    const collMatch =
+      collectionFilter === 'all'
       || (collectionFilter === 'owned'  && ownedSet.has(c.id))
       || (collectionFilter === 'wanted' && wantedSet.has(c.id))
       || (collectionFilter === 'both'   && (ownedSet.has(c.id) || wantedSet.has(c.id)))
       || (collectionFilter === 'trade'  && tradeSet.has(c.id));
-    
-    const cardPrice = getBestPrice(c.id);
+
+    const price = getBestPrice(c.id);
 
     const minMatch =
       currentPriceMin === '' ||
-      (cardPrice != null && cardPrice >= parseFloat(currentPriceMin));
+      (price != null && price >= Number(currentPriceMin));
 
     const maxMatch =
       currentPriceMax === '' ||
-      (cardPrice != null && cardPrice <= parseFloat(currentPriceMax));
+      (price != null && price <= Number(currentPriceMax));
 
     return (
       nameMatch &&
