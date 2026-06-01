@@ -1185,7 +1185,8 @@
   .coll-controls .filters-row { padding: 0.75rem 0 0; gap: 10px; }
 
   .price-filter {
-    display: none;
+    width: 120px;
+    flex-shrink: 0;
   }
 
   .prices-shown .price-filter {
@@ -1198,6 +1199,30 @@
     background: var(--border);
     margin: 0 4px;
     flex-shrink: 0;
+  }
+
+  input[type="text"],
+  input[type="number"] {
+    width: 100%;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    color: var(--text);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 14px;
+    padding: 10px 14px;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+
+  input[type="text"]:focus,
+  input[type="number"]:focus {
+    border-color: var(--accent);
+  }
+
+  input[type="text"]::placeholder,
+  input[type="number"]::placeholder {
+    color: var(--muted);
   }
 </style>
 </head>
@@ -1346,19 +1371,8 @@
           <option value="market-desc">Marché ↓</option>
         </optgroup>
       </select>
-      <input type="number"
-        id="price-min-filter"
-        placeholder="Prix min"
-        min="0"
-        step="0.01"
-        style="width:120px;padding-left:14px;">
-      <input
-        type="number"
-        id="price-max-filter"
-        placeholder="Prix max"
-        min="0"
-        step="0.01"
-        style="width:120px;padding-left:14px;">
+      <input type="number" id="price-min-filter" class="price-filter" placeholder="Prix min">
+      <input type="number" id="price-max-filter" class="price-filter" placeholder="Prix max">
     </div>
   </div>
 
