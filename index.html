@@ -1184,6 +1184,14 @@
   .coll-controls .pills-row { padding: 0.75rem 0 0; gap: 8px; }
   .coll-controls .filters-row { padding: 0.75rem 0 0; gap: 10px; }
 
+  .price-filter {
+    display: none;
+  }
+
+  .prices-shown .price-filter {
+    display: block;
+  }
+
   .coll-toolbar-sep {
     width: 1px;
     height: 20px;
@@ -1265,6 +1273,19 @@
           <option value="market-desc">Marché ↓</option>
         </optgroup>
       </select>
+      <input type="number"
+        id="price-min-filter"
+        placeholder="Prix min"
+        min="0"
+        step="0.01"
+        style="width:120px;padding-left:14px;">
+      <input
+        type="number"
+        id="price-max-filter"
+        placeholder="Prix max"
+        min="0"
+        step="0.01"
+        style="width:120px;padding-left:14px;">
       <div class="explore-info-box" id="explore-info-box">
         <span class="stat-count" id="count">–</span>
         <span class="stat-label">cartes</span>
@@ -1424,6 +1445,8 @@ let selectedRarities = new Set(RARITIES.map(r => r.kind));
 let searchQuery = '';
 let currentType = 'all';
 let currentArtist = 'all';
+let currentPriceMin = '';
+let currentPriceMax = '';
 let currentSort = 'pokedex'; // set from prefs after declaration
 let currentModalIndex = -1;
 let currentArtistCounts = new Map();
@@ -2152,7 +2175,25 @@ function getBaseFilteredCards() {
       || (collectionFilter === 'wanted' && wantedSet.has(c.id))
       || (collectionFilter === 'both'   && (ownedSet.has(c.id) || wantedSet.has(c.id)))
       || (collectionFilter === 'trade'  && tradeSet.has(c.id));
-    return nameMatch && rarityMatch && typeMatch && collMatch;
+    
+    const cardPrice = getBestPrice(c.id);
+
+    const minMatch =
+      currentPriceMin === '' ||
+      (cardPrice != null && cardPrice >= parseFloat(currentPriceMin));
+
+    const maxMatch =
+      currentPriceMax === '' ||
+      (cardPrice != null && cardPrice <= parseFloat(currentPriceMax));
+
+    return (
+      nameMatch &&
+      rarityMatch &&
+      typeMatch &&
+      collMatch &&
+      minMatch &&
+      maxMatch
+    );
   });
 }
 
@@ -3048,6 +3089,16 @@ document.getElementById('coll-artist-filter').addEventListener('change', e => {
 document.getElementById('coll-sort').addEventListener('change', e => {
   collSort = e.target.value;
   renderCollGrid();
+});
+
+document.getElementById('price-min-filter').addEventListener('input', e => {
+  currentPriceMin = e.target.value.trim();
+  applyFilters();
+});
+
+document.getElementById('price-max-filter').addEventListener('input', e => {
+  currentPriceMax = e.target.value.trim();
+  applyFilters();
 });
 
 // ── Selection toolbar ──────────────────────────────────────
