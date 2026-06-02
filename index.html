@@ -2105,7 +2105,7 @@ function renderCards(cards, append = false, startIndex = 0) {
   const frag = document.createDocumentFragment();
   cards.forEach((c, index) => {
     const globalIndex = startIndex + index;
-    const sectionKey = getSectionKey(c);
+    const sectionKey = getSectionKeyForSort(c, currentSort);
     const previousKey = globalIndex > 0 ? getSectionKey(filtered[globalIndex - 1]) : '';
     if (shouldShowSections() && sectionKey && sectionKey !== previousKey) {
       const section = getSectionLabel(sectionKey);
