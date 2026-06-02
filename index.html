@@ -1454,22 +1454,29 @@ let allCards = [];
 let filtered = [];
 let displayed = 0;
 let selectedRarities = new Set(RARITIES.map(r => r.kind));
-let searchQuery = '';
-let currentType = 'all';
-let currentArtist = 'all';
+// ── Unified filter state ──────────────────────────────────────────
+const filterState = {
+  explore:    { query: '', rarity: 'all', type: 'all', artist: 'all', sort: 'pokedex', priceMin: '', priceMax: '' },
+  collection: { query: '', rarity: 'all', type: 'all', artist: 'all', sort: 'pokedex', priceMin: '', priceMax: '' },
+};
+// Shorthands kept for compatibility with parts of code that still reference them directly
+let searchQuery  = '';  // mirrors filterState.explore.query
+let currentType  = 'all'; // mirrors filterState.explore.type
+let currentArtist= 'all'; // mirrors filterState.explore.artist
 let currentPriceMin = '';
 let currentPriceMax = '';
-let currentSort = 'pokedex'; // set from prefs after declaration
+let currentSort = 'pokedex'; // mirrors filterState.explore.sort — set from prefs after declaration
 let currentModalIndex = -1;
 let currentArtistCounts = new Map();
 let collectionFilter = 'all'; // kept for backward compat, unused in new flow
 let currentTab = 'explore'; // set from prefs after declaration
 let collTab = 'owned';      // 'owned' | 'wanted' | 'trade'
-let collSearchQuery = '';
-let collRarity = 'all';   // rarity filter for collection
-let collType   = 'all';   // type filter for collection
-let collArtist = 'all';   // artist filter for collection
-let collSort   = 'pokedex'; // sort for collection
+// Collection filter vars mirror filterState.collection for compat
+let collSearchQuery = ''; // mirrors filterState.collection.query
+let collRarity = 'all';   // mirrors filterState.collection.rarity
+let collType   = 'all';   // mirrors filterState.collection.type
+let collArtist = 'all';   // mirrors filterState.collection.artist
+let collSort   = 'pokedex'; // mirrors filterState.collection.sort
 let selectionMode = false;
 let selectedIds   = new Set();
 let lastClickedId = null; // for shift-click range
@@ -1492,6 +1499,9 @@ function savePrefs() { localStorage.setItem(LS_PREFS, JSON.stringify(prefs)); }
 // Apply persisted prefs now that prefs is initialized
 currentLang   = prefs.lang || 'fr';
 currentSort   = prefs.sort || 'pokedex';
+filterState.explore.sort = currentSort;
+collSort = prefs.collSort || 'pokedex';
+filterState.collection.sort = collSort;
 pricesVisible = prefs.pricesVisible !== false;
 currentTab    = prefs.tab || 'explore';
 
@@ -1620,32 +1630,39 @@ function updateTotalsBar() {
 }
 
 // ── Collection grid rendering ──────────────────────────────
-function matchesCollRarity(c) {
-  if (collRarity === 'all') return true;
+// Shared rarity matcher — used by both explore and collection
+function matchesRarity(c, rarity) {
+  if (!rarity || rarity === 'all') return true;
   const r = (c.rarity || '').toLowerCase();
   const k = c.rarityKind;
-  if (collRarity === 'ir')    return k !== 'promo' && r.includes('illustration') && !r.includes('special') && !r.includes('spéciale');
-  if (collRarity === 'sir')   return r.includes('special illustration') || r.includes('illustration spéciale');
-  if (collRarity === 'alt')   return r.includes('ultra rare');
-  if (collRarity === 'promo') return k === 'promo';
+  if (rarity === 'ir')    return k !== 'promo' && r.includes('illustration') && !r.includes('special') && !r.includes('spéciale');
+  if (rarity === 'sir')   return r.includes('special illustration') || r.includes('illustration spéciale');
+  if (rarity === 'alt')   return r.includes('ultra rare');
+  if (rarity === 'promo') return k === 'promo';
   return true;
 }
+function matchesCollRarity(c) { return matchesRarity(c, collRarity); } // compat shim
 
-function sortCollCards(cards) {
+// Shared sort — replaces both sortCards and sortCollCards
+function sortByConfig(cards, sort, artistCounts = new Map()) {
   const collator = new Intl.Collator('fr', { sensitivity: 'base', numeric: true });
   return [...cards].sort((a, b) => {
-    if (collSort === 'name-asc')   return collator.compare(a.name || '', b.name || '');
-    if (collSort === 'name-desc')  return collator.compare(b.name || '', a.name || '');
-    if (collSort === 'set')        return collator.compare(a.set?.name || '', b.set?.name || '') || collator.compare(a.localId || '', b.localId || '');
-    if (collSort === 'rarity')     return collator.compare(a.rarity || '', b.rarity || '');
-    if (collSort === 'artist-name') return collator.compare(a.illustrator || '', b.illustrator || '');
-    if (collSort === 'price-asc')  return getUserPriceValue(a) - getUserPriceValue(b);
-    if (collSort === 'price-desc') return getUserPriceValue(b) - getUserPriceValue(a);
-    if (collSort === 'market-asc') return getMarketPriceValue(a) - getMarketPriceValue(b);
-    if (collSort === 'market-desc') return getMarketPriceValue(b) - getMarketPriceValue(a);
-    return getDexNumber(a) - getDexNumber(b) || collator.compare(a.name || '', b.name || '');
+    switch (sort) {
+      case 'name-asc':    return collator.compare(a.name || '', b.name || '');
+      case 'name-desc':   return collator.compare(b.name || '', a.name || '');
+      case 'set':         return collator.compare(a.set?.name || '', b.set?.name || '') || collator.compare(a.localId || '', b.localId || '') || collator.compare(a.name || '', b.name || '');
+      case 'rarity':      return collator.compare(a.rarity || '', b.rarity || '') || getDexNumber(a) - getDexNumber(b) || collator.compare(a.name || '', b.name || '');
+      case 'artist-count': return (artistCounts.get(b.illustrator) || 0) - (artistCounts.get(a.illustrator) || 0) || collator.compare(a.illustrator || '', b.illustrator || '') || getDexNumber(a) - getDexNumber(b);
+      case 'artist-name': return collator.compare(a.illustrator || '', b.illustrator || '') || getDexNumber(a) - getDexNumber(b);
+      case 'price-asc':   return getUserPriceValue(a) - getUserPriceValue(b) || collator.compare(a.name || '', b.name || '');
+      case 'price-desc':  return getUserPriceValue(b) - getUserPriceValue(a) || collator.compare(a.name || '', b.name || '');
+      case 'market-asc':  return getMarketPriceValue(a) - getMarketPriceValue(b) || collator.compare(a.name || '', b.name || '');
+      case 'market-desc': return getMarketPriceValue(b) - getMarketPriceValue(a) || collator.compare(a.name || '', b.name || '');
+      default:            return getDexNumber(a) - getDexNumber(b) || collator.compare(a.name || '', b.name || '') || collator.compare(a.id || '', b.id || '');
+    }
   });
 }
+function sortCollCards(cards) { return sortByConfig(cards, collSort); } // compat shim
 
 function getCollCards() {
   const sourceSet =
@@ -1715,35 +1732,47 @@ function getCollCards() {
   return sortCollCards(base);
 }
 
-function populateCollFilters() {
-  const sourceSet = collTab === 'owned' ? ownedSet : collTab === 'wanted' ? wantedSet : tradeSet;
-  const collCards = allCards.filter(c => sourceSet.has(c.id));
+// Shared select populator — ctx = 'explore' | 'collection'
+function populateSelectsForCtx(ctx, sourceCards) {
+  const prefix = ctx === 'collection' ? 'coll-' : '';
 
   // Types
-  const typeEl = document.getElementById('coll-type-filter');
+  const typeEl = document.getElementById(prefix + 'type-filter');
   if (typeEl) {
-    const types = [...new Set(collCards.flatMap(c => Array.isArray(c.types) ? c.types : []))].sort();
-    const prev = typeEl.value;
+    const types = [...new Set(sourceCards.flatMap(c => Array.isArray(c.types) ? c.types : []))].sort((a,b) => a.localeCompare(b,'fr',{sensitivity:'base'}));
+    const prev  = typeEl.value;
     typeEl.innerHTML = '<option value="all">Tous les types</option>';
     types.forEach(t => { const o = document.createElement('option'); o.value = t; o.textContent = t; typeEl.appendChild(o); });
     typeEl.value = types.includes(prev) ? prev : 'all';
-    collType = typeEl.value;
+    if (ctx === 'collection') collType = typeEl.value; else currentType = typeEl.value;
   }
 
   // Artists
-  const artistEl = document.getElementById('coll-artist-filter');
+  const artistEl = document.getElementById(prefix + 'artist-filter');
   if (artistEl) {
-    const artists = [...new Set(collCards.map(c => c.illustrator).filter(Boolean))].sort();
-    const prev = artistEl.value;
+    const artists = [...new Set(sourceCards.map(c => c.illustrator).filter(Boolean))].sort();
+    const counts  = sourceCards.reduce((m,c) => { if (c.illustrator) m.set(c.illustrator,(m.get(c.illustrator)||0)+1); return m; }, new Map());
+    const prev    = artistEl.value;
     artistEl.innerHTML = '<option value="all">Tous les artistes</option>';
-    artists.forEach(a => { const o = document.createElement('option'); o.value = a; o.textContent = a; artistEl.appendChild(o); });
+    artists.forEach(a => {
+      const o = document.createElement('option');
+      o.value = a;
+      o.textContent = ctx === 'explore' ? `${a} (${counts.get(a)||0})` : a;
+      artistEl.appendChild(o);
+    });
     artistEl.value = artists.includes(prev) ? prev : 'all';
-    collArtist = artistEl.value;
+    if (ctx === 'collection') collArtist = artistEl.value; else currentArtist = artistEl.value;
+    if (ctx === 'explore') currentArtistCounts = counts;
   }
 
-  // Sync sort select
-  const sortEl = document.getElementById('coll-sort');
-  if (sortEl) sortEl.value = collSort;
+  // Sort
+  const sortEl = document.getElementById(ctx === 'collection' ? 'coll-sort' : 'sort');
+  if (sortEl) sortEl.value = ctx === 'collection' ? collSort : currentSort;
+}
+
+function populateCollFilters() {
+  const sourceSet = collTab === 'owned' ? ownedSet : collTab === 'wanted' ? wantedSet : tradeSet;
+  populateSelectsForCtx('collection', allCards.filter(c => sourceSet.has(c.id)));
 }
 
 function renderCollGrid() {
@@ -1887,41 +1916,7 @@ function getSetName(card) {
   return card.set?.name || '';
 }
 
-function sortCards(cards) {
-  const collator = new Intl.Collator('fr', { sensitivity: 'base', numeric: true });
-  return [...cards].sort((a, b) => {
-    if (currentSort === 'name-asc') return collator.compare(a.name || '', b.name || '');
-    if (currentSort === 'name-desc') return collator.compare(b.name || '', a.name || '');
-    if (currentSort === 'set') {
-      return collator.compare(getSetName(a), getSetName(b))
-        || collator.compare(a.localId || '', b.localId || '')
-        || collator.compare(a.name || '', b.name || '');
-    }
-    if (currentSort === 'rarity') {
-      return collator.compare(a.rarity || '', b.rarity || '')
-        || getDexNumber(a) - getDexNumber(b)
-        || collator.compare(a.name || '', b.name || '');
-    }
-    if (currentSort === 'artist-count') {
-      return (currentArtistCounts.get(b.illustrator) || 0) - (currentArtistCounts.get(a.illustrator) || 0)
-        || collator.compare(a.illustrator || '', b.illustrator || '')
-        || getDexNumber(a) - getDexNumber(b)
-        || collator.compare(a.name || '', b.name || '');
-    }
-    if (currentSort === 'artist-name') {
-      return collator.compare(a.illustrator || '', b.illustrator || '')
-        || getDexNumber(a) - getDexNumber(b)
-        || collator.compare(a.name || '', b.name || '');
-    }
-    if (currentSort === 'price-asc')    return getUserPriceValue(a) - getUserPriceValue(b) || collator.compare(a.name || '', b.name || '');
-    if (currentSort === 'price-desc')   return getUserPriceValue(b) - getUserPriceValue(a) || collator.compare(a.name || '', b.name || '');
-    if (currentSort === 'market-asc')   return getMarketPriceValue(a) - getMarketPriceValue(b) || collator.compare(a.name || '', b.name || '');
-    if (currentSort === 'market-desc')  return getMarketPriceValue(b) - getMarketPriceValue(a) || collator.compare(a.name || '', b.name || '');
-    return getDexNumber(a) - getDexNumber(b)
-      || collator.compare(a.name || '', b.name || '')
-      || collator.compare(a.id || '', b.id || '');
-  });
-}
+function sortCards(cards) { return sortByConfig(cards, currentSort, currentArtistCounts); } // uses shared sortByConfig
 
 function getSectionKey(card) {
   if (currentSort === 'artist-count' || currentSort === 'artist-name') return card.illustrator || 'Artiste inconnu';
@@ -2002,21 +1997,7 @@ function handleImageError(img) {
   img.replaceWith(wrapper.firstElementChild);
 }
 
-function populateTypeFilter() {
-  const selected = typeFilter.value;
-  const types = [...new Set(allCards.flatMap(c => Array.isArray(c.types) ? c.types : []))]
-    .sort((a, b) => a.localeCompare(b, 'fr', { sensitivity: 'base' }));
-
-  typeFilter.innerHTML = '<option value="all">Tous les types</option>';
-  types.forEach(type => {
-    const option = document.createElement('option');
-    option.value = type;
-    option.textContent = type;
-    typeFilter.appendChild(option);
-  });
-  typeFilter.value = types.includes(selected) ? selected : 'all';
-  currentType = typeFilter.value;
-}
+function populateTypeFilter() { populateSelectsForCtx('explore', allCards); }
 
 function getActiveRarityKinds() {
   return RARITIES.map(r => r.kind).filter(kind => selectedRarities.has(kind));
@@ -2027,6 +2008,7 @@ function matchesSelectedRarities(card) {
   if (active.length === RARITIES.length) return true;
   return active.includes(card.rarityKind);
 }
+// For explore we keep selectedRarities Set for multi-select, collection uses single-value collRarity
 
 function updateRarityButtons() {
   const active = getActiveRarityKinds();
@@ -2038,28 +2020,7 @@ function updateRarityButtons() {
   });
 }
 
-function populateArtistFilter(cards = allCards) {
-  const selected = artistFilter.value;
-  const counts = cards.reduce((acc, card) => {
-    if (card.illustrator) acc.set(card.illustrator, (acc.get(card.illustrator) || 0) + 1);
-    return acc;
-  }, new Map());
-  currentArtistCounts = counts;
-
-  const artists = [...counts.entries()].sort((a, b) =>
-    b[1] - a[1] || a[0].localeCompare(b[0], 'fr', { sensitivity: 'base' })
-  );
-
-  artistFilter.innerHTML = '<option value="all">Tous les artistes</option>';
-  artists.forEach(([artist, count]) => {
-    const option = document.createElement('option');
-    option.value = artist;
-    option.textContent = `${artist} (${count})`;
-    artistFilter.appendChild(option);
-  });
-  artistFilter.value = selected === 'all' || counts.has(selected) ? selected : 'all';
-  currentArtist = artistFilter.value;
-}
+function populateArtistFilter(cards = allCards) { populateSelectsForCtx('explore', cards); }
 
 async function fetchCardDetails(card) {
   const res = await fetch(`${API}/cards/${encodeURIComponent(card.id)}`);
@@ -3135,42 +3096,70 @@ document.getElementById('coll-search').addEventListener('input', e => {
 });
 
 // ── Collection filters ─────────────────────────────────────
-document.querySelectorAll('[data-coll-rarity]').forEach(btn => {
-  btn.addEventListener('click', () => {
-    collRarity = btn.dataset.collRarity;
-    document.querySelectorAll('[data-coll-rarity]').forEach(b => {
-      b.className = 'pill';
-      const r = b.dataset.collRarity;
-      if (r === collRarity) b.classList.add(r === 'all' ? 'active-all' : `active-${r}`);
+
+// ── Shared filter wiring ───────────────────────────────────────────
+function wireFilters(ctx) {
+  const isCollect = ctx === 'collection';
+  const prefix    = isCollect ? 'coll-' : '';
+  const rarityAttr = isCollect ? 'data-coll-rarity' : 'data-rarity';
+  const apply     = isCollect ? () => renderCollGrid() : () => applyFilters();
+
+  // Rarity pills
+  document.querySelectorAll(`[${rarityAttr}]`).forEach(btn => {
+    btn.addEventListener('click', () => {
+      const val = btn.dataset[isCollect ? 'collRarity' : 'rarity'];
+      if (isCollect) collRarity = val; else {
+        // Explore uses Set for multi-select
+        if (val === 'all') { selectedRarities = new Set(RARITIES.map(r => r.kind)); }
+        else { selectedRarities.has(val) ? selectedRarities.delete(val) : selectedRarities.add(val); }
+        updateRarityButtons(); apply(); return;
+      }
+      // Collection: single-select
+      document.querySelectorAll(`[${rarityAttr}]`).forEach(b => {
+        b.className = 'pill';
+        const r = b.dataset[isCollect ? 'collRarity' : 'rarity'];
+        if (r === val) b.classList.add(r === 'all' ? 'active-all' : `active-${r}`);
+      });
+      apply();
     });
-    renderCollGrid();
   });
-});
 
-document.getElementById('coll-type-filter').addEventListener('change', e => {
-  collType = e.target.value;
-  renderCollGrid();
-});
+  // Type
+  const typeEl = document.getElementById(prefix + 'type-filter');
+  if (typeEl) typeEl.addEventListener('change', e => {
+    if (isCollect) collType = e.target.value; else currentType = e.target.value;
+    apply();
+  });
 
-document.getElementById('coll-artist-filter').addEventListener('change', e => {
-  collArtist = e.target.value;
-  renderCollGrid();
-});
+  // Artist
+  const artistEl = document.getElementById(prefix + 'artist-filter');
+  if (artistEl) artistEl.addEventListener('change', e => {
+    if (isCollect) collArtist = e.target.value; else currentArtist = e.target.value;
+    if (!isCollect) apply(); else apply();
+  });
 
-document.getElementById('coll-sort').addEventListener('change', e => {
-  collSort = e.target.value;
-  renderCollGrid();
-});
+  // Sort
+  const sortEl = document.getElementById(isCollect ? 'coll-sort' : 'sort');
+  if (sortEl) {
+    sortEl.value = isCollect ? collSort : currentSort;
+    sortEl.addEventListener('change', e => {
+      if (isCollect) { collSort = e.target.value; }
+      else { currentSort = e.target.value; prefs.sort = currentSort; savePrefs(); applyFilters(true); return; }
+      apply();
+    });
+  }
 
-document.getElementById('price-min-filter').addEventListener('input', e => {
-  currentPriceMin = e.target.value.trim();
-  renderCollGrid();
-});
+  // Price min/max (collection only)
+  if (isCollect) {
+    const minEl = document.getElementById('price-min-filter');
+    const maxEl = document.getElementById('price-max-filter');
+    if (minEl) minEl.addEventListener('input', e => { currentPriceMin = e.target.value.trim(); apply(); });
+    if (maxEl) maxEl.addEventListener('input', e => { currentPriceMax = e.target.value.trim(); apply(); });
+  }
+}
 
-document.getElementById('price-max-filter').addEventListener('input', e => {
-  currentPriceMax = e.target.value.trim();
-  renderCollGrid();
-});
+// ── Wire collection filters (shared wireFilters) ──────────────────
+wireFilters('collection');
 
 // ── Selection toolbar ──────────────────────────────────────
 document.getElementById('btn-select-mode').addEventListener('click', () => {
@@ -3210,14 +3199,8 @@ document.getElementById('btn-deselect-all').addEventListener('click', () => {
   updateTotalsBar();
 });
 
-// Persist sort changes
-document.getElementById('sort').value = currentSort;
-document.getElementById('sort').addEventListener('change', e => {
-  currentSort = e.target.value;
-  prefs.sort = currentSort;
-  savePrefs();
-  applyFilters(true);
-});
+// ── Wire explore filters (shared wireFilters) ─────────────────────
+wireFilters('explore');
 
 // ── 3D card viewer ────────────────────────────────────────
 function openCardViewer(imgUrl, altText) {
