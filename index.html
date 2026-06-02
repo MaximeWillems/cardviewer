@@ -1710,10 +1710,31 @@ function renderCollGrid() {
 
   grid.innerHTML = '';
   const frag = document.createDocumentFragment();
+  const setCounts = cards.reduce((counts, card) => {
+    const setName = card.set?.name || 'Extension inconnue';
+    counts.set(setName, (counts.get(setName) || 0) + 1);
+    return counts;
+  }, new Map());
+
   cards.forEach((c, idx) => {
     const img  = c.image ? c.image + '/low.webp' : '';
     let name   = (currentLang === 'en' && c.nameEn) ? c.nameEn : (c.name || '—');
     const set  = c.set?.name || '';
+
+    if (collSort === 'set') {
+      const setName = set || 'Extension inconnue';
+      const previousSet = idx > 0 ? (cards[idx - 1].set?.name || 'Extension inconnue') : '';
+      if (setName !== previousSet) {
+        const count = setCounts.get(setName) || 0;
+        const heading = document.createElement('div');
+        heading.className = 'section-heading';
+        heading.innerHTML = `
+          <div class="section-title">${escapeHtml(setName)}</div>
+          <div class="section-count">${count} carte${count > 1 ? 's' : ''}</div>`;
+        frag.appendChild(heading);
+      }
+    }
+
     const isOwned  = ownedSet.has(c.id);
     const isWanted = wantedSet.has(c.id);
     const isTrade  = tradeSet.has(c.id);
