@@ -1792,32 +1792,63 @@ function renderCollGrid() {
 
   grid.innerHTML = '';
   const frag = document.createDocumentFragment();
-  
-  let currentSection = null;
+  cards.forEach((c, idx) => {
+    const img  = c.image ? c.image + '/low.webp' : '';
+    let name   = (currentLang === 'en' && c.nameEn) ? c.nameEn : (c.name || '—');
+    const set  = c.set?.name || '';
+    const isOwned  = ownedSet.has(c.id);
+    const isWanted = wantedSet.has(c.id);
+    const isTrade  = tradeSet.has(c.id);
+    const isSelected = selectedIds.has(c.id);
+    const ownedLabel  = getPriceLabel(c.id, 'owned');
+    const wantedLabel = getPriceLabel(c.id, 'wanted');
+    const div = document.createElement('div');
+    div.className = 'card'
+      + (isOwned ? ' owned' : '') + (isWanted ? ' wanted' : '') + (isTrade ? ' trade' : '')
+      + (selectionMode ? ' selectable' : '') + (isSelected ? ' selected' : '');
+    div.dataset.id  = c.id;
+    div.dataset.idx = idx;
+    div.innerHTML = `
+      ${img ? `<img class="card-img" src="${img}" alt="${escapeHtml(name)}" loading="lazy" onerror="handleImageError(this)">` : imagePlaceholder(name)}
+      <div class="card-body">
+        ${getBadge(c.rarity, c.rarityKind)}
+        <div class="card-price-tag">
+          <span class="card-price-pill owned-price">${ownedLabel}</span>
+          <span class="card-price-pill wanted-price">${wantedLabel}</span>
+        </div>
+        <div class="card-name">${escapeHtml(name)}</div>
+        <div class="card-meta">${escapeHtml(set)}</div>
+      </div>`;
 
-  cards.forEach(c => {
-    const sectionKey = getSectionKeyForSort(c, collSort);
-
-    if (sectionKey && sectionKey !== currentSection) {
-      currentSection = sectionKey;
-
-      const count = cards.filter(
-        x => getSectionKeyForSort(x, collSort) === sectionKey
-      ).length;
-
-      const heading = document.createElement('div');
-      heading.className = 'section-heading';
-      heading.innerHTML = `
-        <div class="section-title">${escapeHtml(sectionKey)}</div>
-        <div class="section-count">${count} cartes</div>
-      `;
-
-      frag.appendChild(heading);
-    }
-
-    frag.appendChild(createCard(c));
+    div.addEventListener('click', (e) => {
+      if (selectionMode) {
+        if (e.shiftKey && lastClickedId != null) {
+          const visibleCards = getCollCards();
+          const lastIdx = visibleCards.findIndex(x => x.id === lastClickedId);
+          const thisIdx = idx;
+          const [from, to] = lastIdx < thisIdx ? [lastIdx, thisIdx] : [thisIdx, lastIdx];
+          visibleCards.slice(from, to + 1).forEach(x => {
+            selectedIds.add(x.id);
+            const el = document.querySelector(`#coll-grid .card[data-id="${x.id}"]`);
+            if (el) el.classList.add('selected');
+          });
+        } else {
+          if (selectedIds.has(c.id)) {
+            selectedIds.delete(c.id);
+            div.classList.remove('selected');
+          } else {
+            selectedIds.add(c.id);
+            div.classList.add('selected');
+          }
+          lastClickedId = c.id;
+        }
+        updateTotalsBar(); // update totals without re-rendering
+      } else {
+        openModal(c);
+      }
+    });
+    frag.appendChild(div);
   });
-
   grid.appendChild(frag);
 }
 
@@ -1883,13 +1914,6 @@ function getDexNumber(card) {
 
 function getSetName(card) {
   return card.set?.name || '';
-}
-
-function getSectionKeyForSort(card, sort) {
-  if (sort === 'set') return card.set?.name || 'Extension inconnue';
-  if (sort === 'rarity') return card.rarity || 'Rareté inconnue';
-  if (sort === 'artist-name') return card.illustrator || 'Artiste inconnu';
-  return null;
 }
 
 function sortCards(cards) { return sortByConfig(cards, currentSort, currentArtistCounts); } // uses shared sortByConfig
@@ -2105,7 +2129,7 @@ function renderCards(cards, append = false, startIndex = 0) {
   const frag = document.createDocumentFragment();
   cards.forEach((c, index) => {
     const globalIndex = startIndex + index;
-    const sectionKey = getSectionKeyForSort(c, currentSort);
+    const sectionKey = getSectionKey(c);
     const previousKey = globalIndex > 0 ? getSectionKey(filtered[globalIndex - 1]) : '';
     if (shouldShowSections() && sectionKey && sectionKey !== previousKey) {
       const section = getSectionLabel(sectionKey);
