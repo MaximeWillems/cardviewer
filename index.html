@@ -3127,15 +3127,15 @@ function wireFilters(ctx) {
   // Type
   const typeEl = document.getElementById(prefix + 'type-filter');
   if (typeEl) typeEl.addEventListener('change', e => {
-    if (isCollect) collType = e.target.value; else currentType = e.target.value;
-    apply();
+    if (isCollect) { collType = e.target.value; renderCollGrid(); }
+    else { currentType = e.target.value; applyFilters(true); }
   });
 
   // Artist
   const artistEl = document.getElementById(prefix + 'artist-filter');
   if (artistEl) artistEl.addEventListener('change', e => {
-    if (isCollect) collArtist = e.target.value; else currentArtist = e.target.value;
-    if (!isCollect) apply(); else apply();
+    if (isCollect) { collArtist = e.target.value; renderCollGrid(); }
+    else { currentArtist = e.target.value; applyFilters(); }
   });
 
   // Sort
@@ -3285,6 +3285,12 @@ window.addEventListener('hashchange', () => {
 
 fetchCards().then(() => {
   handleDeepLink();
+  // If collection tab was restored, refresh its selects now that allCards is populated
+  if (currentTab === 'collection') {
+    populateCollFilters();
+    renderCollGrid();
+    updateTotalsBar();
+  }
   // Restore saved tab
   if (prefs.tab === 'collection') {
     currentTab = 'collection';
