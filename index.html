@@ -1255,58 +1255,7 @@
     <button class="nav-tab" data-view="collection">Ma Collection</button>
   </nav>
 
-  <div class="controls" id="explore-controls">
-    <!-- Row 1: Search -->
-    <div class="search-row">
-      <div class="search-wrap">
-        <input type="text" id="search" placeholder="Pokémon, artiste ou extension…" autocomplete="off">
-      </div>
-    </div>
-
-    <!-- Row 2: Rarity pills -->
-    <div class="pills-row rarity-pills">
-      <button class="pill active-all" data-rarity="all">Toutes</button>
-      <button class="pill" data-rarity="ir">✦ AR</button>
-      <button class="pill" data-rarity="sir">✦✦ SAR</button>
-      <button class="pill" data-rarity="alt">Alt Art</button>
-      <button class="pill" data-rarity="promo">★ Promo</button>
-    </div>
-
-    <!-- Row 3: Advanced filters + info box -->
-    <div class="filters-row">
-      <select id="type-filter" aria-label="Filtrer par type">
-        <option value="all">Tous les types</option>
-      </select>
-      <select id="artist-filter" aria-label="Filtrer par artiste">
-        <option value="all">Tous les artistes</option>
-      </select>
-      <select id="sort" aria-label="Trier les cartes">
-        <option value="pokedex">Pokédex</option>
-        <option value="name-asc">A → Z</option>
-        <option value="name-desc">Z → A</option>
-        <option value="set">Extension</option>
-        <option value="rarity">Rareté</option>
-        <option value="artist-count">Artiste (volume)</option>
-        <option value="artist-name">Artiste A → Z</option>
-        <optgroup label="── Prix saisis ──">
-          <option value="price-asc">Prix ↑</option>
-          <option value="price-desc">Prix ↓</option>
-        </optgroup>
-        <optgroup label="── Prix marché ──">
-          <option value="market-asc">Marché ↑</option>
-          <option value="market-desc">Marché ↓</option>
-        </optgroup>
-      </select>
-      <div class="explore-info-box" id="explore-info-box">
-        <span class="stat-count" id="count">–</span>
-        <span class="stat-label">cartes</span>
-        <div class="divider" id="price-divider" style="display:none"></div>
-        <span class="explore-price-total" id="explore-price-total"></span>
-        <div class="divider"></div>
-        <span class="stat-label" id="source-label">via TCGdex</span>
-      </div>
-    </div>
-  </div>
+  <div class="controls" id="explore-controls"></div>
 </div>
 </div>
 
@@ -1330,49 +1279,7 @@
 
 <!-- ── COLLECTION VIEW ──────────────────────────── -->
 <div class="collection-view" id="collection-view">
-  <div class="coll-controls">
-    <!-- Search -->
-    <div class="search-row" style="padding-top:0.5rem;padding-bottom:0">
-      <div class="search-wrap" style="max-width:100%">
-        <input type="text" id="coll-search" placeholder="Pokémon, artiste ou extension…" autocomplete="off">
-      </div>
-    </div>
-    <!-- Rarity pills -->
-    <div class="pills-row" id="coll-rarity-pills">
-      <button class="pill active-all" data-coll-rarity="all">Toutes</button>
-      <button class="pill" data-coll-rarity="ir">✦ AR</button>
-      <button class="pill" data-coll-rarity="sir">✦✦ SAR</button>
-      <button class="pill" data-coll-rarity="alt">Alt Art</button>
-      <button class="pill" data-coll-rarity="promo">★ Promo</button>
-    </div>
-    <!-- Advanced filters -->
-    <div class="filters-row">
-      <select id="coll-type-filter" aria-label="Filtrer par type">
-        <option value="all">Tous les types</option>
-      </select>
-      <select id="coll-artist-filter" aria-label="Filtrer par artiste">
-        <option value="all">Tous les artistes</option>
-      </select>
-      <select id="coll-sort" aria-label="Trier les cartes">
-        <option value="pokedex">Pokédex</option>
-        <option value="name-asc">A → Z</option>
-        <option value="name-desc">Z → A</option>
-        <option value="set">Extension</option>
-        <option value="rarity">Rareté</option>
-        <option value="artist-name">Artiste A → Z</option>
-        <optgroup label="── Prix saisis ──">
-          <option value="price-asc">Prix ↑</option>
-          <option value="price-desc">Prix ↓</option>
-        </optgroup>
-        <optgroup label="── Prix marché ──">
-          <option value="market-asc">Marché ↑</option>
-          <option value="market-desc">Marché ↓</option>
-        </optgroup>
-      </select>
-      <input type="number" id="price-min-filter" class="price-filter" placeholder="Prix min">
-      <input type="number" id="price-max-filter" class="price-filter" placeholder="Prix max">
-    </div>
-  </div>
+  <div class="coll-controls" id="collection-controls"></div>
 
   <!-- Toolbar: category tabs + selection controls + info box -->
   <div class="coll-toolbar">
@@ -1474,6 +1381,7 @@ let collTab = 'owned';      // 'owned' | 'wanted' | 'trade'
 // Collection filter vars mirror filterState.collection for compat
 let collSearchQuery = ''; // mirrors filterState.collection.query
 let collRarity = 'all';   // mirrors filterState.collection.rarity
+let selectedCollRarities = new Set(RARITIES.map(r => r.kind));
 let collType   = 'all';   // mirrors filterState.collection.type
 let collArtist = 'all';   // mirrors filterState.collection.artist
 let collSort   = 'pokedex'; // mirrors filterState.collection.sort
@@ -1641,7 +1549,11 @@ function matchesRarity(c, rarity) {
   if (rarity === 'promo') return k === 'promo';
   return true;
 }
-function matchesCollRarity(c) { return matchesRarity(c, collRarity); } // compat shim
+function matchesCollRarity(c) {
+  const active = RARITIES.map(r => r.kind).filter(kind => selectedCollRarities.has(kind));
+  if (active.length === RARITIES.length) return true;
+  return active.includes(c.rarityKind);
+}
 
 // Shared sort — replaces both sortCards and sortCollCards
 function sortByConfig(cards, sort, artistCounts = new Map()) {
@@ -1662,7 +1574,13 @@ function sortByConfig(cards, sort, artistCounts = new Map()) {
     }
   });
 }
-function sortCollCards(cards) { return sortByConfig(cards, collSort); } // compat shim
+function sortCollCards(cards) {
+  const artistCounts = cards.reduce((m, c) => {
+    if (c.illustrator) m.set(c.illustrator, (m.get(c.illustrator) || 0) + 1);
+    return m;
+  }, new Map());
+  return sortByConfig(cards, collSort, artistCounts);
+}
 
 function getCollCards() {
   const sourceSet =
@@ -1757,7 +1675,7 @@ function populateSelectsForCtx(ctx, sourceCards) {
     artists.forEach(a => {
       const o = document.createElement('option');
       o.value = a;
-      o.textContent = ctx === 'explore' ? `${a} (${counts.get(a)||0})` : a;
+      o.textContent = `${a} (${counts.get(a) || 0})`;
       artistEl.appendChild(o);
     });
     artistEl.value = artists.includes(prev) ? prev : 'all';
@@ -1851,6 +1769,90 @@ function renderCollGrid() {
   });
   grid.appendChild(frag);
 }
+
+const RARITY_FILTERS = [
+  { kind: 'all', label: 'Toutes' },
+  { kind: 'ir', label: '✦ AR' },
+  { kind: 'sir', label: '✦✦ SAR' },
+  { kind: 'alt', label: 'Alt Art' },
+  { kind: 'promo', label: '★ Promo' },
+];
+
+const SORT_FILTERS_HTML = `
+  <option value="pokedex">Pokédex</option>
+  <option value="name-asc">A → Z</option>
+  <option value="name-desc">Z → A</option>
+  <option value="set">Extension</option>
+  <option value="rarity">Rareté</option>
+  <option value="artist-count">Artiste (volume)</option>
+  <option value="artist-name">Artiste A → Z</option>
+  <optgroup label="── Prix saisis ──">
+    <option value="price-asc">Prix ↑</option>
+    <option value="price-desc">Prix ↓</option>
+  </optgroup>
+  <optgroup label="── Prix marché ──">
+    <option value="market-asc">Marché ↑</option>
+    <option value="market-desc">Marché ↓</option>
+  </optgroup>`;
+
+function renderFilterControls(ctx) {
+  const isCollection = ctx === 'collection';
+  const root = document.getElementById(isCollection ? 'collection-controls' : 'explore-controls');
+  if (!root) return;
+
+  const prefix = isCollection ? 'coll-' : '';
+  const rarityAttr = isCollection ? 'data-coll-rarity' : 'data-rarity';
+  const searchId = isCollection ? 'coll-search' : 'search';
+  const sortId = isCollection ? 'coll-sort' : 'sort';
+  const pillsId = isCollection ? ' id="coll-rarity-pills"' : '';
+  const searchStyle = isCollection ? ' style="padding-top:0.5rem;padding-bottom:0"' : '';
+  const wrapStyle = isCollection ? ' style="max-width:100%"' : '';
+  const activeRarities = isCollection ? selectedCollRarities : selectedRarities;
+
+  const rarityButtons = RARITY_FILTERS.map(({ kind, label }) => {
+    const activeClass = kind === 'all'
+      ? (isCollection ? collRarity === 'all' : activeRarities.size === RARITIES.length)
+      : activeRarities.has(kind);
+    return `<button class="pill ${activeClass ? (kind === 'all' ? 'active-all' : `active-${kind}`) : ''}" ${rarityAttr}="${kind}">${label}</button>`;
+  }).join('');
+
+  root.innerHTML = `
+    <div class="search-row"${searchStyle}>
+      <div class="search-wrap"${wrapStyle}>
+        <input type="text" id="${searchId}" placeholder="Pokémon, artiste ou extension…" autocomplete="off">
+      </div>
+    </div>
+    <div class="pills-row rarity-pills"${pillsId}>
+      ${rarityButtons}
+    </div>
+    <div class="filters-row">
+      <select id="${prefix}type-filter" aria-label="Filtrer par type">
+        <option value="all">Tous les types</option>
+      </select>
+      <select id="${prefix}artist-filter" aria-label="Filtrer par artiste">
+        <option value="all">Tous les artistes</option>
+      </select>
+      <select id="${sortId}" aria-label="Trier les cartes">
+        ${SORT_FILTERS_HTML}
+      </select>
+      ${isCollection ? `
+        <input type="number" id="price-min-filter" class="price-filter" placeholder="Prix min">
+        <input type="number" id="price-max-filter" class="price-filter" placeholder="Prix max">
+      ` : `
+        <div class="explore-info-box" id="explore-info-box">
+          <span class="stat-count" id="count">–</span>
+          <span class="stat-label">cartes</span>
+          <div class="divider" id="price-divider" style="display:none"></div>
+          <span class="explore-price-total" id="explore-price-total"></span>
+          <div class="divider"></div>
+          <span class="stat-label" id="source-label">via TCGdex</span>
+        </div>
+      `}
+    </div>`;
+}
+
+renderFilterControls('explore');
+renderFilterControls('collection');
 
 const grid       = document.getElementById('grid');
 const countEl    = document.getElementById('count');
@@ -2010,13 +2012,17 @@ function matchesSelectedRarities(card) {
 }
 // For explore we keep selectedRarities Set for multi-select, collection uses single-value collRarity
 
-function updateRarityButtons() {
-  const active = getActiveRarityKinds();
-  document.querySelectorAll('.pill').forEach(btn => {
-    const rarity = btn.dataset.rarity;
+function updateRarityButtons(ctx = 'explore') {
+  const isCollection = ctx === 'collection';
+  const attr = isCollection ? 'data-coll-rarity' : 'data-rarity';
+  const key = isCollection ? 'collRarity' : 'rarity';
+  const selected = isCollection ? selectedCollRarities : selectedRarities;
+  const active = RARITIES.map(r => r.kind).filter(kind => selected.has(kind));
+  document.querySelectorAll(`[${attr}]`).forEach(btn => {
+    const rarity = btn.dataset[key];
     btn.className = 'pill';
     if (rarity === 'all' && active.length === RARITIES.length) btn.classList.add('active-all');
-    if (rarity !== 'all' && selectedRarities.has(rarity)) btn.classList.add(`active-${rarity}`);
+    if (rarity !== 'all' && selected.has(rarity)) btn.classList.add(`active-${rarity}`);
   });
 }
 
@@ -2272,27 +2278,6 @@ async function fetchCards() {
     sourceLabel.textContent = 'via TCGdex API';
   }
 }
-
-document.getElementById('search').addEventListener('input', e => {
-  searchQuery = e.target.value;
-  applyFilters(true);
-});
-
-document.querySelectorAll('.pill').forEach(btn => {
-  btn.addEventListener('click', () => {
-    const r = btn.dataset.rarity;
-    if (r === 'all') {
-      selectedRarities = new Set(RARITIES.map(rarity => rarity.kind));
-    } else if (selectedRarities.has(r)) {
-      selectedRarities.delete(r);
-      if (selectedRarities.size === 0) selectedRarities.add(r);
-    } else {
-      selectedRarities.add(r);
-    }
-    updateRarityButtons();
-    applyFilters(true);
-  });
-});
 
 loadMoreBtn.addEventListener('click', () => {
   const slice = filtered.slice(displayed, displayed + PAGE_SIZE);
@@ -3072,27 +3057,18 @@ document.querySelectorAll('.coll-tab-btn').forEach(btn => {
   btn.addEventListener('click', () => {
     collTab = btn.dataset.coll;
     collRarity = 'all';
+    selectedCollRarities = new Set(RARITIES.map(r => r.kind));
     collType   = 'all';
     collArtist = 'all';
     collSearchQuery = '';
     const si = document.getElementById('coll-search'); if (si) si.value = '';
     selectedIds.clear();
     lastClickedId = null;
-    // Reset rarity pills
-    document.querySelectorAll('[data-coll-rarity]').forEach(b => {
-      b.className = 'pill';
-      if (b.dataset.collRarity === 'all') b.classList.add('active-all');
-    });
+    updateRarityButtons('collection');
     updateCollStat();
     populateCollFilters();
     renderCollGrid();
   });
-});
-
-// ── Collection search ──────────────────────────────────────
-document.getElementById('coll-search').addEventListener('input', e => {
-  collSearchQuery = e.target.value;
-  renderCollGrid();
 });
 
 // ── Collection filters ─────────────────────────────────────
@@ -3102,24 +3078,32 @@ function wireFilters(ctx) {
   const isCollect = ctx === 'collection';
   const prefix    = isCollect ? 'coll-' : '';
   const rarityAttr = isCollect ? 'data-coll-rarity' : 'data-rarity';
-  const apply     = isCollect ? () => renderCollGrid() : () => applyFilters();
+  const apply     = isCollect ? () => renderCollGrid() : () => applyFilters(true);
+
+  // Search
+  const searchEl = document.getElementById(isCollect ? 'coll-search' : 'search');
+  if (searchEl) searchEl.addEventListener('input', e => {
+    if (isCollect) collSearchQuery = e.target.value;
+    else searchQuery = e.target.value;
+    apply();
+  });
 
   // Rarity pills
   document.querySelectorAll(`[${rarityAttr}]`).forEach(btn => {
     btn.addEventListener('click', () => {
       const val = btn.dataset[isCollect ? 'collRarity' : 'rarity'];
-      if (isCollect) collRarity = val; else {
-        // Explore uses Set for multi-select
-        if (val === 'all') { selectedRarities = new Set(RARITIES.map(r => r.kind)); }
-        else { selectedRarities.has(val) ? selectedRarities.delete(val) : selectedRarities.add(val); }
-        updateRarityButtons(); apply(); return;
+      const selected = isCollect ? selectedCollRarities : selectedRarities;
+      if (val === 'all') {
+        selected.clear();
+        RARITIES.forEach(rarity => selected.add(rarity.kind));
+      } else if (selected.has(val)) {
+        selected.delete(val);
+        if (selected.size === 0) selected.add(val);
+      } else {
+        selected.add(val);
       }
-      // Collection: single-select
-      document.querySelectorAll(`[${rarityAttr}]`).forEach(b => {
-        b.className = 'pill';
-        const r = b.dataset[isCollect ? 'collRarity' : 'rarity'];
-        if (r === val) b.classList.add(r === 'all' ? 'active-all' : `active-${r}`);
-      });
+      if (isCollect) collRarity = selected.size === RARITIES.length ? 'all' : [...selected].join(',');
+      updateRarityButtons(ctx);
       apply();
     });
   });
