@@ -1136,7 +1136,7 @@
   .card-viewer-overlay.open { display: flex; }
   .card-viewer-scene {
     perspective: 900px;
-    width: min(80vw, 380px);
+    width: min(80vw, 460px);
     aspect-ratio: 63/88;
     cursor: grab;
     user-select: none;
@@ -1555,7 +1555,7 @@
   /* ── Collection controls ────────────────────── */
   .coll-controls {
     padding: 1rem 0 0;
-    border-top: 1px solid var(--border);
+    /*border-top: 1px solid var(--border);*/
     margin-top: 0.25rem;
     margin-bottom: 13px;
   }
