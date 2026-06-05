@@ -257,39 +257,39 @@
   /* Pastilles de filtre alignées sur l'échelle des balls */
   /* Pastilles de filtre bicolores (dualité de chaque ball) */
   .pill.active-promo {
-  background: var(--ball-poke);
-  box-shadow: inset 0 -2px 0 var(--ball-poke-2);
-  border-color: var(--ball-poke);
-  color: white;
-}
+    background: var(--ball-poke);
+    box-shadow: inset 0 -2px 0 var(--ball-poke-2);
+    border-color: var(--ball-poke);
+    color: white;
+  }
 
-.pill.active-ir {
-  background: var(--ball-super);
-  box-shadow: inset 0 -2px 0 var(--ball-super-2);
-  border-color: var(--ball-super);
-  color: white;
-}
+  .pill.active-ir {
+    background: var(--ball-super);
+    box-shadow: inset 0 -2px 0 var(--ball-super-2);
+    border-color: var(--ball-super);
+    color: white;
+  }
 
-.pill.active-alt {
-  background: var(--ball-hyper);
-  box-shadow: inset 0 -2px 0 var(--ball-hyper-2);
-  border-color: var(--ball-hyper);
-  color: white;
-}
+  .pill.active-alt {
+    background: var(--ball-hyper);
+    box-shadow: inset 0 -2px 0 var(--ball-hyper-2);
+    border-color: var(--ball-hyper);
+    color: white;
+  }
 
-.pill.active-special {
-   background: var(--ball-hyper);
-  box-shadow: inset 0 -2px 0 var(--ball-hyper-2);
-  border-color: var(--ball-hyper);
-  color: white;
-}
+  .pill.active-special {
+    background: var(--ball-hyper);
+    box-shadow: inset 0 -2px 0 var(--ball-hyper-2);
+    border-color: var(--ball-hyper);
+    color: white;
+  }
 
-.pill.active-sir {
-  background: var(--ball-master);
-  box-shadow: inset 0 -2px 0 var(--ball-master-2);
-  border-color: var(--ball-master);
-  color: white;
-}
+  .pill.active-sir {
+    background: var(--ball-master);
+    box-shadow: inset 0 -2px 0 var(--ball-master-2);
+    border-color: var(--ball-master);
+    color: white;
+  }
   .pill.active-all { background: rgba(var(--fg-rgb),0.07); border-color: rgba(var(--fg-rgb),0.3); color: var(--text); }
 
   /* stats-bar is now an inline info-box inside the filters-row */
