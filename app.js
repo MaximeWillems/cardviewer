@@ -962,7 +962,7 @@ function renderFilterControls(ctx) {
           <select id="${prefix}tag-filter" aria-label="Filtrer par tag"><option value="all">Tous les tags</option></select>
         </div>
         ${isColl ? `
-        <div class="adv-field">
+        <div class="adv-field price-field">
           <label>Prix (€)</label>
           <div class="adv-price">
             <input type="number" id="price-min-filter" class="price-filter" placeholder="min">
@@ -1327,6 +1327,13 @@ function wireFilters(ctx) {
 /* ════════════════════════════════════════════════════════════════════════
    TOTAUX (collection) + total prix (explore)
    ════════════════════════════════════════════════════════════════════════ */
+// Reflète la visibilité des prix : variable d'affichage + classe globale
+// (pour masquer le filtre prix quand les prix sont cachés).
+function applyPricesVisible() {
+  document.documentElement.style.setProperty('--prices-display', pricesVisible ? '' : 'none');
+  document.documentElement.classList.toggle('prices-on', pricesVisible);
+}
+
 function updateCollStat() {
   document.querySelectorAll('.coll-tab-btn').forEach(btn => {
     const t = btn.dataset.coll;
@@ -1334,7 +1341,7 @@ function updateCollStat() {
   });
   const pb = document.getElementById('btn-hide-prices');
   if (pb) pb.classList.toggle('active', pricesVisible);
-  document.documentElement.style.setProperty('--prices-display', pricesVisible ? '' : 'none');
+  applyPricesVisible();
 }
 
 function computeTotal(ids) {
@@ -2320,7 +2327,7 @@ function applyImportedConfig(text) {
   closeConfig();
   showToast('✓ Configuration importée');
 
-  document.documentElement.style.setProperty('--prices-display', pricesVisible ? '' : 'none');
+  applyPricesVisible();
   document.getElementById('btn-hide-prices').classList.toggle('active', pricesVisible);
 
   if (currentLang !== prevLang) {
@@ -2453,12 +2460,12 @@ document.getElementById('btn-theme').addEventListener('click', () => {
 // 7) Affichage / masquage des prix.
 const hidePricesBtn = document.getElementById('btn-hide-prices');
 hidePricesBtn.classList.toggle('active', pricesVisible);
-document.documentElement.style.setProperty('--prices-display', pricesVisible ? '' : 'none');
+applyPricesVisible();
 hidePricesBtn.addEventListener('click', () => {
   pricesVisible = !pricesVisible;
   prefs.pricesVisible = pricesVisible;
   savePrefs();
-  document.documentElement.style.setProperty('--prices-display', pricesVisible ? '' : 'none');
+  applyPricesVisible();
   hidePricesBtn.classList.toggle('active', pricesVisible);
   showToast(pricesVisible ? '€ Prix affichés' : '€ Prix cachés', 'info');
   if (currentTab === 'collection') { renderCollection(); updateTotalsBar(); }
