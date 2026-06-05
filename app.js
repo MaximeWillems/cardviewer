@@ -119,6 +119,8 @@ let pricesMap = JSON.parse(localStorage.getItem(LS_PRICES) || '{}');
 let startedMasters = JSON.parse(localStorage.getItem(LS_MASTERS) || '[]'); // [{mode,key,label}]
 const LS_PRESETS = 'illusdex_presets';
 let filterPresets = JSON.parse(localStorage.getItem(LS_PRESETS) || '[]'); // [{id,ctx,name,...filtres}]
+const LS_TAGS = 'illusdex_tags';
+let tagsMap = JSON.parse(localStorage.getItem(LS_TAGS) || '{}'); // { cardId: [tags] }
 
 const defaultPrefs = {
   pricesVisible: true, sort: 'pokedex', collSort: 'pokedex', lang: 'fr', tab: 'explore',
@@ -133,6 +135,50 @@ function saveOwned()  { localStorage.setItem(LS_OWNED,  JSON.stringify([...owned
 function saveWanted() { localStorage.setItem(LS_WANTED, JSON.stringify([...wantedSet])); }
 function saveTrade()  { localStorage.setItem(LS_TRADE,  JSON.stringify([...tradeSet])); }
 function savePrices() { localStorage.setItem(LS_PRICES, JSON.stringify(pricesMap)); }
+function saveTags()   { localStorage.setItem(LS_TAGS,   JSON.stringify(tagsMap)); }
+
+/* ── Tags personnalisés par carte ─────────────────────────────────────── */
+function getTags(id) { return tagsMap[id] || []; }
+function addTag(id, tag) {
+  tag = (tag || '').trim();
+  if (!tag) return;
+  const t = getTags(id);
+  if (!t.includes(tag)) { tagsMap[id] = [...t, tag]; saveTags(); }
+}
+function removeTag(id, tag) {
+  const t = getTags(id).filter(x => x !== tag);
+  if (t.length) tagsMap[id] = t; else delete tagsMap[id];
+  saveTags();
+}
+function allTags() {
+  const s = new Set();
+  Object.values(tagsMap).forEach(arr => arr.forEach(t => s.add(t)));
+  return [...s].sort((a, b) => a.localeCompare(b, 'fr', { sensitivity: 'base' }));
+}
+
+// Affiche les tags d'une carte dans la modale (chips + suppression) + suggestions.
+function renderModalTags(id) {
+  const el = document.getElementById('modal-tags');
+  if (!el) return;
+  const tags = getTags(id);
+  el.innerHTML = tags.length
+    ? tags.map(t => `<span class="tag-chip">${escapeHtml(t)}<button class="tag-remove" data-tag="${escapeHtml(t)}" aria-label="Retirer le tag">×</button></span>`).join('')
+    : '<span class="tags-empty">Aucun tag</span>';
+  el.querySelectorAll('.tag-remove').forEach(b => b.addEventListener('click', () => {
+    removeTag(id, b.dataset.tag);
+    renderModalTags(id);
+    onTagsChanged();
+  }));
+  const dl = document.getElementById('tag-suggestions');
+  if (dl) dl.innerHTML = allTags().map(t => `<option value="${escapeHtml(t)}"></option>`).join('');
+}
+
+// Après modification des tags : MAJ des menus de filtre + ré-affichage si on filtre par tag.
+function onTagsChanged() {
+  refreshTagFilters();
+  const st = S[currentTab];
+  if (st && st.tag && st.tag !== 'all' && (currentTab === 'explore' || currentTab === 'collection')) refresh(currentTab);
+}
 function saveMasters() { localStorage.setItem(LS_MASTERS, JSON.stringify(startedMasters)); }
 function savePresetsLS() { localStorage.setItem(LS_PRESETS, JSON.stringify(filterPresets)); }
 
@@ -169,7 +215,7 @@ function rarityKinds() { return RARITY_KINDS; }
 function makeFilterState(sort) {
   return {
     query: '', rarities: new Set(rarityKinds()), type: 'all', artist: 'all',
-    set: 'all', series: 'all',
+    set: 'all', series: 'all', tag: 'all',
     sort: sort || 'pokedex', priceMin: '', priceMax: '', artistCounts: new Map(),
   };
 }
@@ -275,6 +321,7 @@ function filterCards(cards, st) {
     if (st.artist !== 'all' && c.illustrator !== st.artist) return false;
     if (st.set !== 'all' && (c.set?.id || '') !== st.set) return false;
     if (st.series !== 'all' && (c.set?.serie?.name || '') !== st.series) return false;
+    if (st.tag !== 'all' && !getTags(c.id).includes(st.tag)) return false;
     if (q && !(
       (c.name || '').toLowerCase().includes(q) ||
       (c.illustrator || '').toLowerCase().includes(q) ||
@@ -730,13 +777,12 @@ function renderMasterDetail() {
     `<span class="master-progress-num">${group.owned} / ${group.total}</span> <span class="master-progress-pct">${pct}%</span>
      <div class="master-bar-track" style="margin-top:6px"><div class="master-bar-fill" style="width:${pct}%"></div></div>`;
 
-  // Actions : démarrer/retirer + liste d'achat des manquantes
+  // Action : démarrer / retirer du suivi
   const started = isMasterStarted(masterMode, masterSelected);
   const actions = document.getElementById('master-detail-actions');
-  actions.innerHTML = (started
+  actions.innerHTML = started
     ? `<button class="master-start-btn started" id="master-start">✓ En cours — Retirer</button>`
-    : `<button class="master-start-btn" id="master-start">+ Démarrer ce master set</button>`)
-    + `<button class="master-start-btn shop" id="master-shop">🛒 Liste d'achat</button>`;
+    : `<button class="master-start-btn" id="master-start">+ Démarrer ce master set</button>`;
   document.getElementById('master-start').onclick = () => {
     if (isMasterStarted(masterMode, masterSelected)) {
       stopMaster(masterMode, masterSelected);
@@ -745,9 +791,6 @@ function renderMasterDetail() {
       startMaster(masterMode, masterSelected, group.label);
     }
     renderMasterDetail(); // rafraîchit le bouton + la grille (cartes à obtenir)
-  };
-  document.getElementById('master-shop').onclick = () => {
-    generateShoppingList(group.cards.filter(c => !ownedSet.has(c.id)), group.label);
   };
 
   masterCards = sortByConfig(group.cards, 'pokedex');
@@ -874,39 +917,28 @@ function renderFilterControls(ctx) {
     return `<button class="pill ${cls}" ${rarityAttr}="${kind}">${label}</button>`;
   }).join('');
 
+  const cell = (id, label, allLabel, order) => `
+    <div class="adv-field">
+      <label>${label}</label>
+      <span class="filter-cell">
+        <select id="${prefix}${id}-filter" aria-label="Filtrer par ${label.toLowerCase()}"><option value="all">${allLabel}</option></select>
+        <button class="order-btn" data-order="${order}" title="${orderTitle(ord[order])}">${orderShort(ord[order])}</button>
+      </span>
+    </div>`;
+
   root.innerHTML = `
     <div class="search-row"${searchStyle}>
       <div class="search-wrap"${wrapStyle}>
         <input type="text" id="${searchId}" placeholder="Pokémon, artiste ou extension…" autocomplete="off">
       </div>
-    </div>
-    <div class="pills-row rarity-pills"${pillsId}>
-      ${rarityButtons}
-    </div>
-    <div class="filters-row">
-      <span class="filter-cell">
-        <select id="${prefix}type-filter" aria-label="Filtrer par type"><option value="all">Tous les types</option></select>
-        <button class="order-btn" data-order="type" title="${orderTitle(ord.type)}">${orderShort(ord.type)}</button>
-      </span>
-      <span class="filter-cell">
-        <select id="${prefix}artist-filter" aria-label="Filtrer par artiste"><option value="all">Tous les artistes</option></select>
-        <button class="order-btn" data-order="artist" title="${orderTitle(ord.artist)}">${orderShort(ord.artist)}</button>
-      </span>
-      <span class="filter-cell">
-        <select id="${prefix}set-filter" aria-label="Filtrer par extension"><option value="all">Toutes les extensions</option></select>
-        <button class="order-btn" data-order="set" title="${orderTitle(ord.set)}">${orderShort(ord.set)}</button>
-      </span>
-      <span class="filter-cell">
-        <select id="${prefix}series-filter" aria-label="Filtrer par série"><option value="all">Toutes les séries</option></select>
-        <button class="order-btn" data-order="series" title="${orderTitle(ord.series)}">${orderShort(ord.series)}</button>
-      </span>
-      <select id="${sortId}" aria-label="Trier les cartes">
+      <select id="${sortId}" class="sort-select" aria-label="Trier les cartes">
         ${SORT_FILTERS_HTML}
       </select>
-      ${isColl ? `
-        <input type="number" id="price-min-filter" class="price-filter" placeholder="Prix min">
-        <input type="number" id="price-max-filter" class="price-filter" placeholder="Prix max">
-      ` : `
+      <button type="button" class="filters-toggle" id="${prefix}filters-toggle" aria-expanded="false" title="Afficher / masquer les filtres">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="6" x2="20" y2="6"/><line x1="7" y1="12" x2="17" y2="12"/><line x1="10" y1="18" x2="14" y2="18"/></svg>
+        Filtres<span class="filters-count" id="${prefix}filters-count" style="display:none"></span>
+      </button>
+      ${isColl ? '' : `
         <div class="explore-info-box" id="explore-info-box">
           <span class="stat-count" id="count">–</span>
           <span class="stat-label">cartes</span>
@@ -914,14 +946,73 @@ function renderFilterControls(ctx) {
           <span class="explore-price-total" id="explore-price-total"></span>
           <div class="divider"></div>
           <span class="stat-label" id="source-label">via TCGdex</span>
-        </div>
-      `}
+        </div>`}
     </div>
-    <div class="presets-row">
-      <select id="${prefix}preset-select" aria-label="Filtres enregistrés"><option value="">★ Filtres enregistrés…</option></select>
-      <button class="preset-btn" id="${prefix}preset-save">Enregistrer</button>
-      <button class="preset-btn" id="${prefix}preset-delete" title="Supprimer le filtre sélectionné">Suppr.</button>
+    <div class="pills-row rarity-pills"${pillsId}>
+      ${rarityButtons}
+    </div>
+    <div class="advanced-filters" id="${prefix}advanced">
+      <div class="adv-grid">
+        ${cell('type', 'Type', 'Tous les types', 'type')}
+        ${cell('artist', 'Artiste', 'Tous les artistes', 'artist')}
+        ${cell('set', 'Extension', 'Toutes les extensions', 'set')}
+        ${cell('series', 'Série', 'Toutes les séries', 'series')}
+        <div class="adv-field">
+          <label>Tag</label>
+          <select id="${prefix}tag-filter" aria-label="Filtrer par tag"><option value="all">Tous les tags</option></select>
+        </div>
+        ${isColl ? `
+        <div class="adv-field price-field">
+          <label>Prix (€)</label>
+          <div class="adv-price">
+            <input type="number" id="price-min-filter" class="price-filter" placeholder="min">
+            <input type="number" id="price-max-filter" class="price-filter" placeholder="max">
+          </div>
+        </div>` : ''}
+      </div>
+      <div class="adv-footer">
+        <div class="presets-row">
+          <select id="${prefix}preset-select" aria-label="Filtres enregistrés"><option value="">★ Filtres enregistrés…</option></select>
+          <button class="preset-btn" id="${prefix}preset-save">Enregistrer</button>
+          <button class="preset-btn" id="${prefix}preset-delete" title="Supprimer le filtre sélectionné">Suppr.</button>
+        </div>
+        <button class="preset-btn adv-reset" id="${prefix}filters-reset">Réinitialiser</button>
+      </div>
     </div>`;
+}
+
+// Compte les filtres avancés actifs (hors recherche/rareté/tri) pour le badge.
+function updateAdvCount(ctx) {
+  const st = S[ctx];
+  let n = 0;
+  if (st.type !== 'all') n++;
+  if (st.artist !== 'all') n++;
+  if (st.set !== 'all') n++;
+  if (st.series !== 'all') n++;
+  if (st.tag !== 'all') n++;
+  if (st.priceMin !== '' || st.priceMax !== '') n++;
+  const badge = document.getElementById((ctx === 'collection' ? 'coll-' : '') + 'filters-count');
+  if (badge) { badge.textContent = n || ''; badge.style.display = n ? '' : 'none'; }
+  return n;
+}
+
+// Réinitialise tous les filtres d'un contexte (garde le tri).
+function resetFilters(ctx) {
+  const st = S[ctx];
+  const prefix = ctx === 'collection' ? 'coll-' : '';
+  st.query = ''; st.rarities = new Set(rarityKinds());
+  st.type = 'all'; st.artist = 'all'; st.set = 'all'; st.series = 'all'; st.tag = 'all';
+  st.priceMin = ''; st.priceMax = '';
+  const s = document.getElementById(ctx === 'collection' ? 'coll-search' : 'search'); if (s) s.value = '';
+  ['type-filter', 'artist-filter', 'set-filter', 'series-filter', 'tag-filter'].forEach(id => {
+    const el = document.getElementById(prefix + id); if (el) el.value = 'all';
+  });
+  const mn = document.getElementById('price-min-filter'), mx = document.getElementById('price-max-filter');
+  if (mn) mn.value = ''; if (mx) mx.value = '';
+  updateRarityButtons(ctx);
+  updateAdvCount(ctx);
+  refresh(ctx);
+  showToast('Filtres réinitialisés', 'info');
 }
 
 // Remplit les listes Type / Artiste / Extension / Série / Tri à partir d'un
@@ -991,8 +1082,30 @@ function populateSelectsForCtx(ctx, sourceCards) {
     st.series = fillSelect(seriesEl, 'Toutes les séries', [...seen.values()], ord.series);
   }
 
+  populateTagSelect(ctx);
+
   const sortEl = document.getElementById(prefix ? 'coll-sort' : 'sort');
   if (sortEl) sortEl.value = st.sort;
+
+  updateAdvCount(ctx);
+}
+
+// Menu « Tag » alimenté par tous les tags existants (global, indépendant des cartes affichées).
+function populateTagSelect(ctx) {
+  const prefix = ctx === 'collection' ? 'coll-' : '';
+  const el = document.getElementById(prefix + 'tag-filter');
+  if (!el) return;
+  const prev = el.value;
+  const tags = allTags();
+  el.innerHTML = '<option value="all">Tous les tags</option>'
+    + tags.map(t => `<option value="${escapeHtml(t)}">${escapeHtml(t)}</option>`).join('');
+  el.value = tags.includes(prev) ? prev : 'all';
+  S[ctx].tag = el.value;
+}
+
+function refreshTagFilters() {
+  populateTagSelect('explore');
+  populateTagSelect('collection');
 }
 
 /* ── Ordre des listes (boutons à côté des menus) ──────────────────────── */
@@ -1048,7 +1161,7 @@ function buildPresetFromState(ctx) {
   const st = S[ctx];
   return {
     query: st.query, rarities: [...st.rarities], type: st.type, artist: st.artist,
-    set: st.set, series: st.series, sort: st.sort, priceMin: st.priceMin, priceMax: st.priceMax,
+    set: st.set, series: st.series, tag: st.tag, sort: st.sort, priceMin: st.priceMin, priceMax: st.priceMax,
     collTab: ctx === 'collection' ? st.collTab : null,
   };
 }
@@ -1110,6 +1223,7 @@ function applyPreset(ctx, p) {
   st.artist = setSel(prefix + 'artist-filter', p.artist || 'all');
   st.set    = setSel(prefix + 'set-filter', p.set || 'all');
   st.series = setSel(prefix + 'series-filter', p.series || 'all');
+  st.tag    = setSel(prefix + 'tag-filter', p.tag || 'all');
   const sortEl = document.getElementById(ctx === 'collection' ? 'coll-sort' : 'sort');
   if (sortEl) sortEl.value = st.sort;
   if (ctx === 'collection') {
@@ -1127,7 +1241,18 @@ function wireFilters(ctx) {
   const rarityAttr = isColl ? 'data-coll-rarity' : 'data-rarity';
   const dataKey    = isColl ? 'collRarity' : 'rarity';
   const st         = S[ctx];
-  const apply      = () => refresh(ctx);
+  const apply      = () => { refresh(ctx); updateAdvCount(ctx); };
+
+  // Bouton « Filtres » : ouvrir/fermer le panneau avancé
+  const toggle = document.getElementById(prefix + 'filters-toggle');
+  const panel  = document.getElementById(prefix + 'advanced');
+  if (toggle && panel) toggle.addEventListener('click', () => {
+    const open = panel.classList.toggle('open');
+    toggle.classList.toggle('active', open);
+    toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+  });
+  const resetBtn = document.getElementById(prefix + 'filters-reset');
+  if (resetBtn) resetBtn.addEventListener('click', () => resetFilters(ctx));
 
   const searchEl = document.getElementById(isColl ? 'coll-search' : 'search');
   if (searchEl) searchEl.addEventListener('input', e => { st.query = e.target.value; apply(); });
@@ -1159,6 +1284,9 @@ function wireFilters(ctx) {
 
   const seriesEl = document.getElementById(prefix + 'series-filter');
   if (seriesEl) seriesEl.addEventListener('change', e => { st.series = e.target.value; apply(); });
+
+  const tagEl = document.getElementById(prefix + 'tag-filter');
+  if (tagEl) tagEl.addEventListener('change', e => { st.tag = e.target.value; apply(); });
 
   const sortEl = document.getElementById(isColl ? 'coll-sort' : 'sort');
   if (sortEl) {
@@ -1199,6 +1327,13 @@ function wireFilters(ctx) {
 /* ════════════════════════════════════════════════════════════════════════
    TOTAUX (collection) + total prix (explore)
    ════════════════════════════════════════════════════════════════════════ */
+// Reflète la visibilité des prix : variable d'affichage + classe globale
+// (pour masquer le filtre prix quand les prix sont cachés).
+function applyPricesVisible() {
+  document.documentElement.style.setProperty('--prices-display', pricesVisible ? '' : 'none');
+  document.documentElement.classList.toggle('prices-on', pricesVisible);
+}
+
 function updateCollStat() {
   document.querySelectorAll('.coll-tab-btn').forEach(btn => {
     const t = btn.dataset.coll;
@@ -1206,10 +1341,7 @@ function updateCollStat() {
   });
   const pb = document.getElementById('btn-hide-prices');
   if (pb) pb.classList.toggle('active', pricesVisible);
-  document.documentElement.style.setProperty('--prices-display', pricesVisible ? '' : 'none');
-  // Liste d'achat : visible seulement sur l'onglet « À obtenir »
-  const sb = document.getElementById('btn-shopping');
-  if (sb) sb.style.display = S.collection.collTab === 'wanted' ? '' : 'none';
+  applyPricesVisible();
 }
 
 function computeTotal(ids) {
@@ -1765,6 +1897,15 @@ async function openModal(card, list, index) {
       <button class="modal-coll-btn ${wantedSet.has(card.id) ? 'active-wanted' : ''}" id="modal-btn-wanted">⊕ À obtenir</button>
       <button class="modal-coll-btn ${tradeSet.has(card.id) ? 'active-trade' : ''}" id="modal-btn-trade" style="${ownedSet.has(card.id) ? '' : 'opacity:.35;pointer-events:none'}">⇄ Vendre</button>
     </div>
+    <div class="tags-section">
+      <div class="tags-title">Tags</div>
+      <div class="tags-list" id="modal-tags"></div>
+      <div class="tag-input-row">
+        <input class="tag-input" id="tag-input" list="tag-suggestions" placeholder="Ajouter un tag…" autocomplete="off" maxlength="30">
+        <button class="tag-add-btn" id="tag-add">Ajouter</button>
+        <datalist id="tag-suggestions"></datalist>
+      </div>
+    </div>
     <div class="price-input-section ${ownedSet.has(card.id) ? 'visible' : ''}" id="price-section-owned">
       <div class="price-input-title">Prix payé / estimé</div>
       <div class="price-input-wrap">
@@ -1821,6 +1962,20 @@ async function openModal(card, list, index) {
   // Nom de l'illustrateur cliquable → fiche artiste (vue Master Set en mode artiste)
   const artistBtn = document.getElementById('modal-artist');
   if (artistBtn) artistBtn.onclick = () => { closeModal(); setActiveTab('master'); openMasterGroup('artist', illus); };
+
+  // Tags personnalisés
+  renderModalTags(card.id);
+  const tagInput = document.getElementById('tag-input');
+  const addCurrentTag = () => {
+    const v = tagInput.value.trim();
+    if (!v) return;
+    addTag(card.id, v);
+    tagInput.value = '';
+    renderModalTags(card.id);
+    onTagsChanged();
+  };
+  document.getElementById('tag-add').addEventListener('click', addCurrentTag);
+  tagInput.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); addCurrentTag(); } });
 
   renderCardPrice(card);
 
@@ -2133,59 +2288,13 @@ document.getElementById('btn-img').addEventListener('click', async () => {
 }
 
 /* ════════════════════════════════════════════════════════════════════════
-   LISTE D'ACHAT (cartes manquantes → page imprimable + liens Cardmarket)
-   ════════════════════════════════════════════════════════════════════════ */
-function generateShoppingList(cards, title) {
-  if (!cards || !cards.length) { showToast('Rien à acheter — c’est complet ! 🎉', 'info'); return; }
-  const list = sortByConfig(cards, 'pokedex');
-  const rows = list.map(c => {
-    const img  = c.image ? c.image + '/low.webp' : '';
-    const name = (currentLang === 'en' && c.nameEn) ? c.nameEn : (c.name || '—');
-    const set  = c.set?.name || '';
-    const num  = c.localId ? ' #' + c.localId : '';
-    const url  = buildCardmarketUrl(c);
-    return `<a class="row" href="${url}" target="_blank" rel="noopener">
-      ${img ? `<img src="${img}" alt="">` : '<div class="ph">?</div>'}
-      <div class="info"><div class="n">${escapeHtml(name)}</div><div class="m">${escapeHtml(set)}${escapeHtml(num)}</div></div>
-      <span class="cm">Cardmarket ↗</span>
-    </a>`;
-  }).join('');
-  const html = `<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Liste d'achat — ${escapeHtml(title)}</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=DM+Sans:wght@400;500&display=swap" rel="stylesheet">
-<style>
-  *{box-sizing:border-box;margin:0;padding:0}
-  body{background:#0d0d0f;color:#f0f0ee;font-family:'DM Sans',sans-serif;padding:1.5rem;max-width:760px;margin:0 auto}
-  h1{font-family:'Syne',sans-serif;font-size:1.3rem;font-weight:800}
-  .sub{font-size:12px;color:#888;margin:.3rem 0 1.25rem}
-  .row{display:flex;align-items:center;gap:12px;padding:8px 10px;border:1px solid rgba(255,255,255,.08);border-radius:10px;margin-bottom:8px;text-decoration:none;color:inherit;background:#16161a;transition:border-color .15s}
-  .row:hover{border-color:rgba(255,255,255,.25)}
-  .row img,.row .ph{width:44px;height:60px;object-fit:cover;border-radius:5px;background:#1e1e24;flex-shrink:0;display:flex;align-items:center;justify-content:center;color:#555}
-  .info{flex:1;min-width:0}
-  .n{font-family:'Syne',sans-serif;font-weight:700;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .m{font-size:11px;color:#888;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .cm{font-family:'Syne',sans-serif;font-weight:700;font-size:11px;color:#4db8f0;border:1px solid rgba(0,115,170,.45);background:rgba(0,115,170,.1);padding:6px 10px;border-radius:8px;white-space:nowrap;flex-shrink:0}
-  @media print{.cm{border:none}.row{break-inside:avoid}}
-</style></head><body>
-<h1>🛒 Liste d'achat — ${escapeHtml(title)}</h1>
-<div class="sub">${list.length} carte${list.length > 1 ? 's' : ''} manquante${list.length > 1 ? 's' : ''} · ${new Date().toLocaleDateString('fr-FR')}</div>
-${rows}
-</body></html>`;
-  const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
-  window.open(URL.createObjectURL(blob), '_blank');
-  showToast(`🛒 Liste d'achat ouverte (${list.length})`, 'info');
-}
-
-/* ════════════════════════════════════════════════════════════════════════
    IMPORT / EXPORT DE LA COLLECTION (JSON)
    ════════════════════════════════════════════════════════════════════════ */
 function buildConfigPayload() {
   return JSON.stringify({
     app: 'pikidex', version: 1, exportedAt: new Date().toISOString(),
     owned: [...ownedSet], wanted: [...wantedSet], trade: [...tradeSet],
-    prices: pricesMap, prefs, masters: startedMasters, presets: filterPresets,
+    prices: pricesMap, prefs, masters: startedMasters, presets: filterPresets, tags: tagsMap,
   }, null, 2);
 }
 
@@ -2205,6 +2314,7 @@ function applyImportedConfig(text) {
   if (data.prices && typeof data.prices === 'object') { pricesMap = data.prices; savePrices(); }
   if (Array.isArray(data.masters)) { startedMasters = data.masters; saveMasters(); }
   if (Array.isArray(data.presets)) { filterPresets = data.presets; savePresetsLS(); populatePresetSelect('explore'); populatePresetSelect('collection'); }
+  if (data.tags && typeof data.tags === 'object' && !Array.isArray(data.tags)) { tagsMap = data.tags; saveTags(); refreshTagFilters(); }
   if (data.prefs && typeof data.prefs === 'object') {
     prefs = { ...defaultPrefs, ...data.prefs };
     savePrefs();
@@ -2217,7 +2327,7 @@ function applyImportedConfig(text) {
   closeConfig();
   showToast('✓ Configuration importée');
 
-  document.documentElement.style.setProperty('--prices-display', pricesVisible ? '' : 'none');
+  applyPricesVisible();
   document.getElementById('btn-hide-prices').classList.toggle('active', pricesVisible);
 
   if (currentLang !== prevLang) {
@@ -2350,12 +2460,12 @@ document.getElementById('btn-theme').addEventListener('click', () => {
 // 7) Affichage / masquage des prix.
 const hidePricesBtn = document.getElementById('btn-hide-prices');
 hidePricesBtn.classList.toggle('active', pricesVisible);
-document.documentElement.style.setProperty('--prices-display', pricesVisible ? '' : 'none');
+applyPricesVisible();
 hidePricesBtn.addEventListener('click', () => {
   pricesVisible = !pricesVisible;
   prefs.pricesVisible = pricesVisible;
   savePrefs();
-  document.documentElement.style.setProperty('--prices-display', pricesVisible ? '' : 'none');
+  applyPricesVisible();
   hidePricesBtn.classList.toggle('active', pricesVisible);
   showToast(pricesVisible ? '€ Prix affichés' : '€ Prix cachés', 'info');
   if (currentTab === 'collection') { renderCollection(); updateTotalsBar(); }
@@ -2408,6 +2518,7 @@ document.querySelectorAll('.coll-tab-btn').forEach(btn => {
     st.artist   = 'all';
     st.set      = 'all';
     st.series   = 'all';
+    st.tag      = 'all';
     st.query    = '';
     const si = document.getElementById('coll-search'); if (si) si.value = '';
     selectedIds.clear();
@@ -2454,11 +2565,6 @@ document.getElementById('btn-deselect-all').addEventListener('click', () => {
   selectedIds.clear();
   lastClickedId = null;
   updateTotalsBar();
-});
-
-// Liste d'achat depuis la wishlist (cartes à obtenir non possédées, filtres actifs)
-document.getElementById('btn-shopping').addEventListener('click', () => {
-  generateShoppingList(getCards('collection').filter(c => !ownedSet.has(c.id)), 'Ma wishlist');
 });
 
 // Navigation tactile (swipe) dans la modale.

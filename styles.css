@@ -19,6 +19,11 @@
     --slate-rgb: 71, 85, 105;
     --shadow: rgba(20, 28, 56, 0.14);
     --radius: 12px;
+    /* Échelle des Poké Balls (rareté/valeur) — couleurs fixes, identiques en clair/sombre */
+    --ball-poke: #ee1515;   --ball-poke-2: #ffffff;   /* Poké Ball  (promo) */
+    --ball-super: #2a75bb;  --ball-super-2: #ef4444;  /* Super Ball (AR) */
+    --ball-hyper: #333a40;  --ball-hyper-2: #ffcb05;  /* Hyper Ball (ALT + spéciale) */
+    --ball-master: #7b2fbe; --ball-master-2: #ffffff; /* Master Ball (SAR) — mauve / blanc */
   }
 
   /* Thème SOMBRE — noir + blanc */
@@ -249,11 +254,13 @@
     font-family: 'DM Sans', sans-serif;
   }
   .pill:hover { border-color: rgba(var(--fg-rgb),0.2); color: var(--text); }
-  .pill.active-ir  { background: rgba(var(--accent-rgb),0.12); border-color: var(--accent); color: var(--accent); }
-  .pill.active-sir { background: rgba(var(--accent2-rgb),0.12); border-color: var(--accent2); color: var(--accent2); }
-  .pill.active-alt { background: rgba(var(--slate-rgb),0.12); border-color: var(--slate); color: var(--slate); }
-  .pill.active-special { background: rgba(var(--slate-rgb),0.12); border-color: var(--slate); color: var(--slate); }
-  .pill.active-promo { background: rgba(var(--slate-rgb),0.12); border-color: var(--slate); color: var(--slate); }
+  /* Pastilles de filtre alignées sur l'échelle des balls */
+  /* Pastilles de filtre bicolores (dualité de chaque ball) */
+  .pill.active-promo   { background: #fff;                      border-color: var(--ball-poke);    color: var(--ball-poke); }    /* Poké : blanc / rouge */
+  .pill.active-ir      { background: rgba(42,117,187,0.12);     border-color: var(--ball-super-2); color: var(--ball-super); }   /* Super : bleu / rouge */
+  .pill.active-alt     { background: var(--ball-hyper);         border-color: var(--ball-hyper-2); color: var(--ball-hyper-2); } /* Hyper : noir / jaune */
+  .pill.active-special { background: var(--ball-hyper);         border-color: var(--ball-hyper-2); color: var(--ball-hyper-2); } /* Hyper : noir / jaune */
+  .pill.active-sir     { background: #fff;                      border-color: var(--ball-master);  color: var(--ball-master); }  /* Master : blanc / mauve */
   .pill.active-all { background: rgba(var(--fg-rgb),0.07); border-color: rgba(var(--fg-rgb),0.3); color: var(--text); }
 
   /* stats-bar is now an inline info-box inside the filters-row */
@@ -421,11 +428,12 @@
   }
 
   /* .card-badge moved to collection section */
-  .badge-ir  { background: rgba(var(--accent-rgb),0.2);  color: var(--accent);  border: 1px solid rgba(var(--accent-rgb),0.35); }
-  .badge-sir { background: rgba(var(--accent2-rgb),0.2);  color: var(--accent2); border: 1px solid rgba(var(--accent2-rgb),0.35); }
-  .badge-alt { background: rgba(var(--slate-rgb),0.2); color: var(--slate); border: 1px solid rgba(var(--slate-rgb),0.35); }
-  .badge-special { background: rgba(var(--slate-rgb),0.2); color: var(--slate); border: 1px solid rgba(var(--slate-rgb),0.35); }
-  .badge-promo { background: rgba(var(--slate-rgb),0.2); color: var(--slate); border: 1px solid rgba(var(--slate-rgb),0.35); }
+  /* Badges « Poké Ball » : pastille bicolore (couleur principale + bande basse) */
+  .badge-promo   { background: var(--ball-poke);   box-shadow: inset 0 -2px 0 var(--ball-poke-2); }   /* Poké Ball */
+  .badge-ir      { background: var(--ball-super);  box-shadow: inset 0 -2px 0 var(--ball-super-2); }  /* Super Ball */
+  .badge-alt     { background: var(--ball-hyper);  box-shadow: inset 0 -2px 0 var(--ball-hyper-2); border: 1px solid rgba(var(--fg-rgb),0.28); } /* Hyper Ball */
+  .badge-special { background: var(--ball-hyper);  box-shadow: inset 0 -2px 0 var(--ball-hyper-2); border: 1px solid rgba(var(--fg-rgb),0.28); } /* Hyper Ball */
+  .badge-sir     { background: var(--ball-master); box-shadow: inset 0 -2px 0 var(--ball-master-2); } /* Master Ball */
 
   .skeleton {
     background: var(--surface);
@@ -681,10 +689,12 @@
     left: 8px;
     font-size: 9px;
     font-weight: 700;
-    padding: 2px 6px;
+    padding: 2px 6px 3px;
     border-radius: 100px;
     font-family: 'Syne', sans-serif;
     letter-spacing: 0.04em;
+    color: #fff;
+    text-shadow: 0 1px 1px rgba(0,0,0,0.4);
   }
 
   /* Price pill — inside card-body top-right */
@@ -1399,8 +1409,6 @@
   /* Bouton démarrer / retirer dans le détail */
   .master-detail-actions { margin-left: auto; flex-shrink: 0; display: flex; gap: 8px; flex-wrap: wrap; }
   .master-detail-sub { color: var(--muted); font-size: 12px; margin-top: 3px; }
-  .master-start-btn.shop { border-color: rgba(var(--slate-rgb),0.45); background: rgba(var(--slate-rgb),0.12); color: var(--slate); }
-  .master-start-btn.shop:hover { background: rgba(var(--slate-rgb),0.2); }
   .master-start-btn {
     padding: 9px 16px;
     border-radius: var(--radius);
@@ -1603,6 +1611,143 @@
     color: var(--muted);
   }
 
+  /* ── Barre de filtres réorganisée ───────────────────────────── */
+  .search-row .sort-select { flex-shrink: 0; min-width: 150px; width: auto; }
+  .filters-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 10px 14px;
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text);
+    font-family: 'Syne', sans-serif;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: all 0.15s;
+  }
+  .filters-toggle:hover { border-color: rgba(var(--fg-rgb),0.25); }
+  .filters-toggle.active { border-color: var(--accent); color: var(--accent); }
+  .filters-toggle svg { opacity: 0.8; }
+  .filters-count {
+    background: var(--accent);
+    color: #fff;
+    border-radius: 100px;
+    font-size: 10px;
+    font-weight: 700;
+    min-width: 16px;
+    height: 16px;
+    padding: 0 4px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .advanced-filters { display: none; }
+  .advanced-filters.open { display: block; padding-top: 1rem; }
+  .adv-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 12px 14px;
+  }
+  .adv-field { display: flex; flex-direction: column; gap: 5px; }
+  .adv-field > label { font-size: 11px; font-weight: 600; color: var(--muted); letter-spacing: 0.02em; }
+  .adv-field select { width: 100%; }
+  .adv-field .filter-cell { width: 100%; }
+  .adv-field .filter-cell select { flex: 1; min-width: 0; }
+  .adv-price { display: flex; gap: 8px; }
+  .adv-price .price-filter { width: auto !important; flex: 1; }
+  /* Filtre prix : visible uniquement quand les prix sont affichés */
+  .price-field { display: none; }
+  .prices-on .price-field { display: flex; }
+  .adv-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-top: 14px;
+    padding-top: 12px;
+    border-top: 1px solid var(--border);
+  }
+  .adv-footer .presets-row { padding: 0; }
+  .adv-reset { color: var(--muted); }
+
+  /* ── Tags personnalisés (modale) ───────────────────────────── */
+  .tags-section {
+    margin-top: 0.75rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid var(--border);
+  }
+  .tags-title {
+    font-size: 11px;
+    font-weight: 700;
+    font-family: 'Syne', sans-serif;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--muted);
+    margin-bottom: 8px;
+  }
+  .tags-list { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+  .tags-empty { font-size: 12px; color: var(--muted); font-style: italic; }
+  .tag-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 6px 3px 10px;
+    border-radius: 100px;
+    font-size: 12px;
+    font-weight: 600;
+    background: rgba(var(--accent-rgb), 0.12);
+    border: 1px solid rgba(var(--accent-rgb), 0.35);
+    color: var(--accent);
+  }
+  .tag-remove {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    border: none;
+    background: rgba(var(--accent-rgb), 0.18);
+    color: var(--accent);
+    cursor: pointer;
+    font-size: 13px;
+    line-height: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+  }
+  .tag-remove:hover { background: var(--accent); color: #fff; }
+  .tag-input-row { display: flex; gap: 8px; }
+  .tag-input {
+    flex: 1;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 13px;
+    padding: 7px 10px;
+    outline: none;
+  }
+  .tag-input:focus { border-color: var(--accent); }
+  .tag-add-btn {
+    padding: 7px 14px;
+    border-radius: 8px;
+    border: 1px solid rgba(var(--accent-rgb), 0.45);
+    background: rgba(var(--accent-rgb), 0.12);
+    color: var(--accent);
+    font-family: 'Syne', sans-serif;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .tag-add-btn:hover { background: rgba(var(--accent-rgb), 0.2); }
+
   /* ════════════════════════════════════════════════════════════════════
      MOBILE — améliore la lisibilité sur petit écran.
      Tout est sous media query : aucun impact sur la version bureau.
@@ -1677,8 +1822,6 @@
 
   .master-start-btn { border-color: rgba(var(--accent-rgb), 0.45); background: rgba(var(--accent-rgb), 0.12); color: var(--accent); }
   .master-start-btn:hover { background: rgba(var(--accent-rgb), 0.2); }
-  .master-start-btn.shop { border-color: rgba(var(--accent2-rgb), 0.45); background: rgba(var(--accent2-rgb), 0.12); color: var(--accent2); }
-  .master-start-btn.shop:hover { background: rgba(var(--accent2-rgb), 0.2); }
 
   .master-bar-fill { background: var(--accent); }
 
