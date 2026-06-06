@@ -2126,11 +2126,12 @@ function buildExportRows(cards) {
     const wantedLabel = wantedSet.has(c.id) ? getPriceLabel(c.id, 'wanted') : '';
     const apiLabel    = c.apiPrice != null ? fmtEur(c.apiPrice) : '';
     const statusClass = ownedSet.has(c.id) ? 'owned' : wantedSet.has(c.id) ? 'wanted' : '';
-    const badgeHtml   = rarity.toLowerCase().includes('special illustration') ? '<span class="b sir">SIR</span>'
-                      : rarity.toLowerCase().includes('illustration')          ? '<span class="b ir">IR</span>'
-                      : c.rarityKind === 'promo'                               ? '<span class="b promo">PROMO</span>'
-                      : rarity.toLowerCase().includes('ultra rare')            ? '<span class="b alt">ALT</span>'
-                      : '';
+    const badgeHtml   = c.rarityKind === 'sir'    ? '<span class="b sir">SIR</span>'
+                      : c.rarityKind === 'ir'     ? '<span class="b ir">IR</span>'
+                      : c.rarityKind === 'promo'  ? '<span class="b promo">PROMO</span>'
+                      : '<span class="b alt">ALT</span>';
+
+                      
     const priceHtml = [
       ownedLabel  ? `<span class="p own">${ownedLabel}</span>`   : '',
       wantedLabel ? `<span class="p want">${wantedLabel}</span>` : '',
