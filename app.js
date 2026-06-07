@@ -86,6 +86,17 @@ const RARITY_FILTERS = [
   { kind: 'promo', label: '★ Promo' },
 ];
 
+// Filtres de rareté disponibles dans la vue Master Set
+// 'trainer' est un pseudo-kind basé sur l'absence de dexId (carte dresseur/énergie)
+const MASTER_RARITY_FILTERS = [
+  { kind: 'trainer', label: '👤 Dresseur' },
+  { kind: 'ir',      label: '✦ AR' },
+  { kind: 'sir',     label: '✦✦ SAR' },
+  { kind: 'alt',     label: 'Alt Art' },
+  { kind: 'special', label: '◆ Spéciale' },
+  { kind: 'promo',   label: '★ Promo' },
+];
+
 const SORT_FILTERS_HTML = `
   <option value="pokedex">Pokédex</option>
   <option value="name-asc">A → Z</option>
@@ -126,9 +137,21 @@ const defaultPrefs = {
   pricesVisible: true, sort: 'pokedex', collSort: 'pokedex', lang: 'fr', tab: 'explore',
   theme: 'light',
   listOrder: { type: 'alpha', artist: 'alpha', set: 'release', series: 'release' },
+  // masterRarityExcludes : kinds exclus du comptage Master Set, par mode
+  // Stocké comme { set: [...kinds], artist: [...kinds] }
+  masterRarityExcludes: { set: [], artist: [] },
 };
 let prefs = { ...defaultPrefs, ...JSON.parse(localStorage.getItem(LS_PREFS) || '{}') };
 prefs.listOrder = { ...defaultPrefs.listOrder, ...(prefs.listOrder || {}) };
+// Assurer la présence de masterRarityExcludes (compat versions antérieures)
+if (!prefs.masterRarityExcludes || typeof prefs.masterRarityExcludes !== 'object') {
+  prefs.masterRarityExcludes = { set: [], artist: [] };
+} else {
+  prefs.masterRarityExcludes = {
+    set:    Array.isArray(prefs.masterRarityExcludes.set)    ? prefs.masterRarityExcludes.set    : [],
+    artist: Array.isArray(prefs.masterRarityExcludes.artist) ? prefs.masterRarityExcludes.artist : [],
+  };
+}
 
 function savePrefs()  { localStorage.setItem(LS_PREFS,  JSON.stringify(prefs)); }
 function saveOwned()  { localStorage.setItem(LS_OWNED,  JSON.stringify([...ownedSet])); }
@@ -637,6 +660,32 @@ function refresh(ctx) { ctx === 'collection' ? renderCollection() : applyFilters
    artiste, et montre la progression possédé/total. Réutilise le moteur de
    grille pour le détail d'un groupe.
    ════════════════════════════════════════════════════════════════════════ */
+
+/* ── Filtre de rareté Master Set ──────────────────────────────────────────
+   Les kinds exclus sont stockés dans prefs.masterRarityExcludes[mode].
+   'trainer' est un pseudo-kind : cartes sans dexId (dresseurs, énergies…).
+   ──────────────────────────────────────────────────────────────────────── */
+function getMasterExcludes(mode) {
+  return new Set(prefs.masterRarityExcludes[mode] || []);
+}
+
+function isTrainerCard(card) {
+  return !(Array.isArray(card.dexId) && card.dexId.length > 0);
+}
+
+function masterCardMatchesFilter(card, excludes) {
+  if (excludes.has('trainer') && isTrainerCard(card)) return false;
+  if (card.rarityKind && excludes.has(card.rarityKind)) return false;
+  return true;
+}
+
+// Retourne les cartes d'un groupe après application du filtre de rareté actif.
+function masterFilteredCards(cards, mode) {
+  const excludes = getMasterExcludes(mode);
+  if (excludes.size === 0) return cards;
+  return cards.filter(c => masterCardMatchesFilter(c, excludes));
+}
+
 function masterGroups(mode) {
   const groups = new Map();
   allCards.forEach(c => {
@@ -644,8 +693,13 @@ function masterGroups(mode) {
     const label = mode === 'set' ? (c.set?.name || 'Extension inconnue') : (c.illustrator || 'Artiste inconnu');
     if (!groups.has(key)) groups.set(key, { key, label, total: 0, owned: 0, cards: [] });
     const g = groups.get(key);
-    g.total++; g.cards.push(c);
-    if (ownedSet.has(c.id)) g.owned++;
+    g.cards.push(c);
+  });
+  // Recalcule total/owned en tenant compte du filtre actif
+  groups.forEach(g => {
+    const filtered = masterFilteredCards(g.cards, mode);
+    g.total = filtered.length;
+    g.owned = filtered.filter(c => ownedSet.has(c.id)).length;
   });
   return [...groups.values()];
 }
@@ -653,13 +707,14 @@ function masterGroups(mode) {
 // ── Suivi des master sets démarrés ────────────────────────────────────
 function isMasterStarted(mode, key) { return startedMasters.some(m => m.mode === mode && m.key === key); }
 
-// Démarre un master set : marque toutes ses cartes « à obtenir » (sauf celles
-// déjà possédées) et l'ajoute au suivi.
+// Démarre un master set : marque toutes ses cartes filtrées « à obtenir »
+// (sauf celles déjà possédées) et l'ajoute au suivi.
 function startMaster(mode, key, label) {
   const group = masterGroups(mode).find(g => g.key === key);
   if (!group) return;
+  const cards = masterFilteredCards(group.cards, mode);
   let added = 0;
-  group.cards.forEach(c => {
+  cards.forEach(c => {
     if (!ownedSet.has(c.id) && !wantedSet.has(c.id)) { wantedSet.add(c.id); added++; }
   });
   saveWanted();
@@ -739,8 +794,40 @@ function renderMaster() {
 
   if (groups.length === 0) { listEl.innerHTML = '<div class="master-empty">Aucun résultat</div>'; return; }
 
-  listEl.innerHTML = groups.map(g => masterRowHtml(g)).join('');
-  listEl.querySelectorAll('.master-row').forEach(row => {
+  // ── Chips de filtres de rareté Master Set (liste) ──────────────────────
+  const excludes = getMasterExcludes(masterMode);
+  const chipsHtml = MASTER_RARITY_FILTERS.map(({ kind, label }) => {
+    const excluded = excludes.has(kind);
+    return `<button class="pill master-rarity-pill${excluded ? ' master-pill-excluded' : ''}" data-master-rarity="${escapeHtml(kind)}" title="${excluded ? 'Exclure' : 'Inclus'}">${label}</button>`;
+  }).join('');
+
+  listEl.innerHTML = `
+    <div class="master-filter-row">
+      <span class="master-filter-label">Exclure du comptage :</span>
+      <div class="master-rarity-pills">${chipsHtml}</div>
+    </div>
+    <div class="master-rows-container"></div>`;
+
+  // Wire pills
+  listEl.querySelectorAll('[data-master-rarity]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const kind = btn.dataset.masterRarity;
+      const ex = new Set(prefs.masterRarityExcludes[masterMode] || []);
+      if (ex.has(kind)) ex.delete(kind); else ex.add(kind);
+      prefs.masterRarityExcludes[masterMode] = [...ex];
+      savePrefs();
+      renderMaster(); // re-render avec nouveaux filtres
+    });
+  });
+
+  const rowsContainer = listEl.querySelector('.master-rows-container');
+  // Recalcule groups avec les nouveaux excludes
+  let freshGroups = masterGroups(masterMode);
+  if (q) freshGroups = freshGroups.filter(g => g.label.toLowerCase().includes(q));
+  freshGroups.sort((a, b) => (b.owned / b.total) - (a.owned / a.total) || a.label.localeCompare(b.label, 'fr', { sensitivity: 'base' }));
+
+  rowsContainer.innerHTML = freshGroups.map(g => masterRowHtml(g)).join('');
+  rowsContainer.querySelectorAll('.master-row').forEach(row => {
     row.addEventListener('click', () => openMasterGroup(masterMode, row.dataset.key));
   });
 }
@@ -750,32 +837,70 @@ function renderMasterDetail() {
   const detail = document.getElementById('master-detail');
   const gridEl = document.getElementById('master-grid');
 
-  const group = masterGroups(masterMode).find(g => g.key === masterSelected);
-  if (!group) { masterSelected = null; renderMaster(); return; }
+  const allGroup = masterGroups(masterMode).find(g => g.key === masterSelected);
+  if (!allGroup) { masterSelected = null; renderMaster(); return; }
+
+  // Cartes filtrées selon les excludes actifs
+  const filteredGroupCards = masterFilteredCards(allGroup.cards, masterMode);
+  const ownedCount = filteredGroupCards.filter(c => ownedSet.has(c.id)).length;
+  const totalCount = filteredGroupCards.length;
+  const pct = totalCount ? Math.round(ownedCount / totalCount * 100) : 0;
 
   listEl.style.display = 'none';
   detail.style.display = '';
 
-  const pct = group.total ? Math.round(group.owned / group.total * 100) : 0;
-  document.getElementById('master-detail-title').textContent = group.label;
+  document.getElementById('master-detail-title').textContent = allGroup.label;
 
-  // Sous-titre « fiche » : artiste → nb d'extensions + période ; extension → série
+  // Sous-titre
   let subtitle = '';
   if (masterMode === 'artist') {
-    const sets = [...new Set(group.cards.map(c => c.set?.id).filter(Boolean))];
-    const ordered = group.cards.filter(c => c.set?.order != null).sort((a, b) => a.set.order - b.set.order);
+    const sets = [...new Set(allGroup.cards.map(c => c.set?.id).filter(Boolean))];
+    const ordered = allGroup.cards.filter(c => c.set?.order != null).sort((a, b) => a.set.order - b.set.order);
     const first = ordered[0]?.set?.name, last = ordered[ordered.length - 1]?.set?.name;
     subtitle = `${sets.length} extension${sets.length > 1 ? 's' : ''}`
       + (first && last && first !== last ? ` · de ${first} à ${last}` : (first ? ` · ${first}` : ''));
   } else {
-    const serie = group.cards[0]?.set?.serie?.name;
+    const serie = allGroup.cards[0]?.set?.serie?.name;
     if (serie) subtitle = `Série : ${serie}`;
   }
   document.getElementById('master-detail-sub').textContent = subtitle;
 
-  document.getElementById('master-detail-progress').innerHTML =
-    `<span class="master-progress-num">${group.owned} / ${group.total}</span> <span class="master-progress-pct">${pct}%</span>
-     <div class="master-bar-track" style="margin-top:6px"><div class="master-bar-fill" style="width:${pct}%"></div></div>`;
+  // ── Chips de filtres dans le détail ──────────────────────────────────
+  const excludes = getMasterExcludes(masterMode);
+  const chipsHtml = MASTER_RARITY_FILTERS.map(({ kind, label }) => {
+    const excluded = excludes.has(kind);
+    return `<button class="pill master-rarity-pill${excluded ? ' master-pill-excluded' : ''}" data-master-rarity="${escapeHtml(kind)}" title="${excluded ? 'Exclure' : 'Inclus'}">${label}</button>`;
+  }).join('');
+
+  // Compte les cartes affectées par chaque filtre (sur ce groupe)
+  const countsByKind = {};
+  MASTER_RARITY_FILTERS.forEach(({ kind }) => {
+    countsByKind[kind] = allGroup.cards.filter(c =>
+      kind === 'trainer' ? isTrainerCard(c) : c.rarityKind === kind
+    ).length;
+  });
+  const excludedTotal = allGroup.cards.length - filteredGroupCards.length;
+
+  document.getElementById('master-detail-progress').innerHTML = `
+    <div class="master-detail-filter-row">
+      <span class="master-filter-label">Exclure du comptage :</span>
+      <div class="master-rarity-pills">${chipsHtml}</div>
+      ${excludedTotal > 0 ? `<span class="master-excluded-note">${excludedTotal} carte${excludedTotal > 1 ? 's' : ''} exclue${excludedTotal > 1 ? 's' : ''}</span>` : ''}
+    </div>
+    <span class="master-progress-num">${ownedCount} / ${totalCount}</span> <span class="master-progress-pct">${pct}%</span>
+    <div class="master-bar-track" style="margin-top:6px"><div class="master-bar-fill" style="width:${pct}%"></div></div>`;
+
+  // Wire pills du détail
+  detail.querySelectorAll('[data-master-rarity]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const kind = btn.dataset.masterRarity;
+      const ex = new Set(prefs.masterRarityExcludes[masterMode] || []);
+      if (ex.has(kind)) ex.delete(kind); else ex.add(kind);
+      prefs.masterRarityExcludes[masterMode] = [...ex];
+      savePrefs();
+      renderMasterDetail(); // re-render le détail
+    });
+  });
 
   // Action : démarrer / retirer du suivi
   const started = isMasterStarted(masterMode, masterSelected);
@@ -788,12 +913,12 @@ function renderMasterDetail() {
       stopMaster(masterMode, masterSelected);
       showToast('Master set retiré du suivi', 'info');
     } else {
-      startMaster(masterMode, masterSelected, group.label);
+      startMaster(masterMode, masterSelected, allGroup.label);
     }
-    renderMasterDetail(); // rafraîchit le bouton + la grille (cartes à obtenir)
+    renderMasterDetail();
   };
 
-  masterCards = sortByConfig(group.cards, 'pokedex');
+  masterCards = sortByConfig(filteredGroupCards, 'pokedex');
   paintGrid(gridEl, masterCards, 'master', { sections: false });
 }
 
@@ -866,14 +991,14 @@ function renderEchangeResults(data) {
     paintGrid(grid, sortByConfig(cards, 'pokedex'), 'echange', { sections: false });
   };
   fill('echange-give-grid',    'echange-give-title',    'Ce que je peux lui céder', give);
-  fill('echange-receive-grid', 'echange-receive-title', 'Ce qu’il peut me céder', receive);
-  fill('echange-have-grid',    'echange-have-title',    'Tu possèdes ce qu’il cherche (non listé à vendre)', have);
+  fill('echange-receive-grid', 'echange-receive-title', 'Ce qu\'il peut me céder', receive);
+  fill('echange-have-grid',    'echange-have-title',    'Tu possèdes ce qu\'il cherche (non listé à vendre)', have);
   document.getElementById('echange-results').style.display = 'block';
 }
 
 function compareWith(text) {
   const data = parseFriendData(text);
-  if (!data) { showToast('⚠ Code d’échange invalide', 'info'); return; }
+  if (!data) { showToast('⚠ Code d\'échange invalide', 'info'); return; }
   if (!data.wanted.size && !data.trade.size) { showToast('Liste reçue vide', 'info'); }
   renderEchangeResults(data);
 }
@@ -1529,8 +1654,6 @@ async function fetchPromoCards() {
         const batch = cardRefs.slice(i, i + BATCH);
         const results = await Promise.all(batch.map(async (ref) => {
           if (ref.image) return { ...ref, set: setMeta, rarity: 'Promo', rarityKind: 'promo' };
-          // Pas d'image dans le listing : on récupère la fiche complète pour
-          // les détails, mais on garde la carte même sans visuel (placeholder).
           try {
             const cr = await fetch(`${API}/cards/${encodeURIComponent(ref.id)}`);
             if (cr.ok) {
@@ -1656,7 +1779,7 @@ const CM_SETS = {
   'sv010.5':  { code:'BLK',  slug:'Black-Bolt' },
   'sv11':     { code:'WHT',  slug:'White-Flare' },
   'sv11.5':   { code:'WHT',  slug:'White-Flare' },
-  // Legacy aliases (au cas où TCGdex aurait utilisé sv9pt5 avant renommage)
+  // Legacy aliases
   'sv9pt5':   { code:'DRI',  slug:'Destined-Rivals' },
   'sv9.5':    { code:'DRI',  slug:'Destined-Rivals' },
   'sv09.5':   { code:'DRI',  slug:'Destined-Rivals' },
@@ -1718,8 +1841,8 @@ const CM_SETS = {
 function normalizeSetId(raw) {
   if (!raw) return '';
   return raw
-    .replace(/^([a-z]+)0+(\d)/i, '$1$2')   // sv03pt5 → sv3pt5
-    .replace(/\./g, 'pt')                   // sv3.5 → sv3pt5
+    .replace(/^([a-z]+)0+(\d)/i, '$1$2')
+    .replace(/\./g, 'pt')
     .replace(/pt(\d)/g, 'pt$1')
     .toLowerCase();
 }
@@ -1731,7 +1854,6 @@ function buildCardmarketUrl(card) {
   const localId = card.localId || '';
 
   if (setMeta && name) {
-    // Page de l'extension filtrée par nom — évite le problème V1/V2 insoluble.
     return 'https://www.cardmarket.com/fr/Pokemon/Products/Singles/'
       + setMeta.slug
       + '?searchString=' + encodeURIComponent(name)
@@ -1739,7 +1861,6 @@ function buildCardmarketUrl(card) {
       + '&sortBy=collectorsnumber_desc';
   }
 
-  // Repli : recherche globale nom + numéro
   const query = [name, localId].filter(Boolean).join(' ');
   return 'https://www.cardmarket.com/fr/Pokemon/Products/Search?searchString='
     + encodeURIComponent(query)
@@ -1760,7 +1881,6 @@ async function renderCardPrice(card) {
 
   let pricing = card.pricing;
 
-  // Toujours récupérer la version EN pour le nom EN (Cardmarket) + le prix si manquant
   if (!card.nameEn) {
     try {
       const res = await fetch(`https://api.tcgdex.net/v2/en/cards/${encodeURIComponent(card.id)}`);
@@ -1773,7 +1893,7 @@ async function renderCardPrice(card) {
     } catch (e) {}
   }
 
-  if (!el.isConnected) return; // modale déjà fermée
+  if (!el.isConnected) return;
 
   const cm = pricing?.cardmarket;
   if (!cm) {
@@ -1793,7 +1913,6 @@ async function renderCardPrice(card) {
   const avg7   = hasHolo ? cm['avg7-holo']   : cm.avg7;
   const avg1   = hasHolo ? cm['avg1-holo']   : cm.avg1;
 
-  // Mémorisé sur la carte pour le tri par prix marché + remplissage auto
   if (trend != null && !isNaN(trend)) {
     card.apiPrice = trend;
     for (const type of ['owned', 'wanted']) {
@@ -1804,7 +1923,6 @@ async function renderCardPrice(card) {
         }
       }
     }
-    // apiPrice connu → rafraîchir totaux / tri marché (cartes hors collection aussi)
     refreshAfterPriceChange();
   }
 
@@ -1959,11 +2077,9 @@ async function openModal(card, list, index) {
 
   history.replaceState(null, '', '#card-' + encodeURIComponent(card.id));
 
-  // Nom de l'illustrateur cliquable → fiche artiste (vue Master Set en mode artiste)
   const artistBtn = document.getElementById('modal-artist');
   if (artistBtn) artistBtn.onclick = () => { closeModal(); setActiveTab('master'); openMasterGroup('artist', illus); };
 
-  // Tags personnalisés
   renderModalTags(card.id);
   const tagInput = document.getElementById('tag-input');
   const addCurrentTag = () => {
@@ -2131,7 +2247,6 @@ function buildExportRows(cards) {
                       : c.rarityKind === 'promo'  ? '<span class="b promo">PROMO</span>'
                       : '<span class="b alt">ALT</span>';
 
-                      
     const priceHtml = [
       ownedLabel  ? `<span class="p own">${ownedLabel}</span>`   : '',
       wantedLabel ? `<span class="p want">${wantedLabel}</span>` : '',
@@ -2318,6 +2433,10 @@ function applyImportedConfig(text) {
   if (data.tags && typeof data.tags === 'object' && !Array.isArray(data.tags)) { tagsMap = data.tags; saveTags(); refreshTagFilters(); }
   if (data.prefs && typeof data.prefs === 'object') {
     prefs = { ...defaultPrefs, ...data.prefs };
+    // Compat masterRarityExcludes
+    if (!prefs.masterRarityExcludes || typeof prefs.masterRarityExcludes !== 'object') {
+      prefs.masterRarityExcludes = { set: [], artist: [] };
+    }
     savePrefs();
     currentLang   = prefs.lang || 'fr';
     pricesVisible = prefs.pricesVisible !== false;
@@ -2332,7 +2451,6 @@ function applyImportedConfig(text) {
   document.getElementById('btn-hide-prices').classList.toggle('active', pricesVisible);
 
   if (currentLang !== prevLang) {
-    // La langue a changé → recharger les données dans la bonne langue
     API = API_BASE + '/' + currentLang;
     RARITY_LABELS = RARITY_LABELS_BY_LANG[currentLang];
     document.querySelectorAll('.lang-btn').forEach(b => b.classList.toggle('active', b.dataset.lang === currentLang));
@@ -2430,7 +2548,7 @@ document.addEventListener('keydown', e => {
 // 6) Export image.
 document.getElementById('btn-export').addEventListener('click', generateExport);
 
-// 6b) Actualiser les cartes (ignore le cache et recharge depuis l'API).
+// 6b) Actualiser les cartes.
 document.getElementById('btn-refresh').addEventListener('click', async () => {
   const btn = document.getElementById('btn-refresh');
   if (btn.classList.contains('spinning')) return;
@@ -2489,7 +2607,7 @@ document.querySelectorAll('.lang-btn').forEach(btn => {
   });
 });
 
-// 9) Onglets principaux (Explorer / Collection / Master Set / Échange).
+// 9) Onglets principaux.
 function setActiveTab(tab) {
   currentTab = tab;
   prefs.tab = currentTab;
@@ -2509,7 +2627,7 @@ document.querySelectorAll('.nav-tab').forEach(tab => {
   tab.addEventListener('click', () => setActiveTab(tab.dataset.view));
 });
 
-// 10) Sous-onglets Collection (owned / wanted / trade).
+// 10) Sous-onglets Collection.
 document.querySelectorAll('.coll-tab-btn').forEach(btn => {
   btn.addEventListener('click', () => {
     const st = S.collection;
@@ -2531,9 +2649,7 @@ document.querySelectorAll('.coll-tab-btn').forEach(btn => {
   });
 });
 
-// 11) Barre d'outils de sélection (collection uniquement).
-// Le mode sélection n'a de sens que dans « Ma Collection » : il est désactivé
-// dès qu'on quitte cette vue (voir l'onglet principal Explorer).
+// 11) Barre d'outils de sélection (collection).
 function setSelectionMode(on) {
   selectionMode = on;
   selectedIds.clear();
@@ -2631,7 +2747,7 @@ document.getElementById('config-file').addEventListener('change', e => {
   r.readAsText(f);
 });
 document.getElementById('config-import').addEventListener('click', () => applyImportedConfig(document.getElementById('config-text').value));
-document.getElementById('config-share-code').addEventListener('click', () => copyText(buildShareCode(), '🔗 Code d’échange copié !'));
+document.getElementById('config-share-code').addEventListener('click', () => copyText(buildShareCode(), '🔗 Code d\'échange copié !'));
 
 // 12b) Échange : code de partage + comparateur.
 document.getElementById('echange-copy-code').addEventListener('click', () => {
@@ -2647,7 +2763,7 @@ document.getElementById('echange-clear').addEventListener('click', () => {
   lastFriendData = null;
 });
 
-// 13) Navigation par hash (retour/avance navigateur).
+// 13) Navigation par hash.
 window.addEventListener('hashchange', () => {
   const hash = window.location.hash;
   if (hash.startsWith('#share=')) { handleShareLink(); return; }
@@ -2655,7 +2771,7 @@ window.addEventListener('hashchange', () => {
   handleDeepLink();
 });
 
-// 14) Démarrage : charger les cartes puis restaurer l'état.
+// 14) Démarrage.
 fetchCards().then(() => {
   if (location.hash.startsWith('#share=')) { handleShareLink(); return; }
   handleDeepLink();

@@ -1,0 +1,109 @@
+/* ════════════════════════════════════════════════════════════════════════
+   Pikidex — Master Set rarity filter patch
+   À inclure après styles.css dans index.html :
+     <link rel="stylesheet" href="master-filter-patch.css">
+   ════════════════════════════════════════════════════════════════════════ */
+
+/* ── Ligne de filtre dans la liste Master Set et dans le détail ────────── */
+.master-filter-row,
+.master-detail-filter-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 10px 14px;
+  background: var(--surface2, rgba(255,255,255,.04));
+  border: 1px solid var(--border, rgba(255,255,255,.08));
+  border-radius: 10px;
+  margin-bottom: 14px;
+}
+
+.master-detail-filter-row {
+  margin-bottom: 12px;
+}
+
+.master-filter-label {
+  font-size: 11px;
+  color: var(--muted, #888);
+  white-space: nowrap;
+  font-weight: 500;
+}
+
+/* ── Rangée de pills de rareté Master Set ─────────────────────────────── */
+.master-rarity-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+/* Pill de base (hérite de .pill existant, override spécifique) */
+.master-rarity-pill {
+  font-size: 11px;
+  padding: 3px 9px;
+  border-radius: 100px;
+  border: 1px solid var(--border, rgba(255,255,255,.12));
+  background: transparent;
+  color: var(--muted, #888);
+  cursor: pointer;
+  transition: all .15s;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.master-rarity-pill:hover {
+  border-color: var(--accent, rgba(200,240,96,.5));
+  color: var(--text, #f0f0ee);
+}
+
+/* État "exclu" : pill barrée visuellement, fond légèrement rougeâtre */
+.master-rarity-pill.master-pill-excluded {
+  background: rgba(255, 80, 80, .1);
+  border-color: rgba(255, 100, 100, .35);
+  color: rgba(255, 130, 130, .9);
+  text-decoration: line-through;
+  text-decoration-color: rgba(255, 100, 100, .6);
+}
+
+.master-rarity-pill.master-pill-excluded:hover {
+  background: rgba(255, 80, 80, .18);
+  border-color: rgba(255, 100, 100, .55);
+  text-decoration: none;
+}
+
+/* ── Note "N cartes exclues" ──────────────────────────────────────────── */
+.master-excluded-note {
+  font-size: 10px;
+  color: rgba(255, 130, 130, .75);
+  font-style: italic;
+  margin-left: auto;
+  white-space: nowrap;
+}
+
+/* ── Conteneur des lignes de groupes (séparé des pills dans la liste) ─── */
+.master-rows-container {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* ── Thème clair : ajustements ────────────────────────────────────────── */
+[data-theme="light"] .master-filter-row,
+[data-theme="light"] .master-detail-filter-row {
+  background: rgba(0,0,0,.03);
+  border-color: rgba(0,0,0,.08);
+}
+
+[data-theme="light"] .master-rarity-pill {
+  border-color: rgba(0,0,0,.14);
+  color: #666;
+}
+
+[data-theme="light"] .master-rarity-pill:hover {
+  color: #222;
+}
+
+[data-theme="light"] .master-rarity-pill.master-pill-excluded {
+  background: rgba(200, 40, 40, .07);
+  border-color: rgba(200, 40, 40, .3);
+  color: rgba(180, 50, 50, .85);
+}
