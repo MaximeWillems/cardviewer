@@ -824,6 +824,9 @@ function renderMaster() {
   // Recalcule groups avec les nouveaux excludes
   let freshGroups = masterGroups(masterMode);
   if (q) freshGroups = freshGroups.filter(g => g.label.toLowerCase().includes(q));
+  
+  // Masquer les groupes sans cartes après application des filtres de rareté
+  freshGroups = freshGroups.filter(g => g.total > 0);
   freshGroups.sort((a, b) => (b.owned / b.total) - (a.owned / a.total) || a.label.localeCompare(b.label, 'fr', { sensitivity: 'base' }));
 
   rowsContainer.innerHTML = freshGroups.map(g => masterRowHtml(g)).join('');
