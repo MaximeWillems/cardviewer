@@ -1331,8 +1331,8 @@
   .master-search-wrap { max-width: 360px; flex: 1; }
 
   #master-list {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    display: flex;
+    flex-direction: column;
     gap: 12px;
     margin: 1.25rem 0 4rem;
   }
