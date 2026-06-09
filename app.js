@@ -449,20 +449,57 @@ function fmtEur(val) {
   return new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(val);
 }
 
-function imagePlaceholder(name, isModal = false) {
+const TYPE_COLORS = {
+  Fire: '#e8654a', Feu: '#e8654a',
+  Water: '#4f9fe0', Eau: '#4f9fe0',
+  Grass: '#5bb96a', Plante: '#5bb96a',
+  Lightning: '#f0c23e', Électrique: '#f0c23e', Electrique: '#f0c23e',
+  Psychic: '#b65fc0', Psy: '#b65fc0',
+  Fighting: '#c2683e', Combat: '#c2683e',
+  Darkness: '#46506a', Obscurité: '#46506a', Obscurite: '#46506a',
+  Metal: '#8493a6', Métal: '#8493a6',
+  Dragon: '#c79b2a',
+  Fairy: '#e286bb', Fée: '#e286bb', Fee: '#e286bb',
+  Colorless: '#b3b0aa', Incolore: '#b3b0aa',
+};
+function typeAccent(types) {
+  const t = Array.isArray(types) ? types[0] : types;
+  return TYPE_COLORS[t] || 'rgba(var(--fg-rgb),0.32)';
+}
+
+// Reconstruit une « carte sans visuel » lisible à partir des métadonnées
+// disponibles (nom, numéro, extension, type) plutôt qu'un simple « ? ».
+function imagePlaceholder(card, isModal = false) {
+  const c = (card && typeof card === 'object') ? card : { name: card };
+  const name = (currentLang === 'en' && c.nameEn) ? c.nameEn : (c.name || 'Carte');
+  const num     = c.localId != null && c.localId !== '' ? `N° ${escapeHtml(String(c.localId))}` : '';
+  const setName = c.set?.name || '';
+  const mono    = (String(name).trim()[0] || '?').toUpperCase();
   return `
-    <div class="image-placeholder ${isModal ? 'modal-placeholder' : ''}">
-      <div class="placeholder-mark">?</div>
-      <div class="placeholder-title">${escapeHtml(name || 'Carte')}</div>
-      <div class="placeholder-text">Image indisponible</div>
+    <div class="image-placeholder ${isModal ? 'modal-placeholder' : ''}" style="--ph-accent:${typeAccent(c.types)}">
+      <div class="ph-head"><span class="ph-num">${num}</span></div>
+      <div class="ph-center">
+        <div class="placeholder-mark">${escapeHtml(mono)}</div>
+        <div class="placeholder-title">${escapeHtml(name)}</div>
+      </div>
+      <div class="ph-foot">
+        ${setName ? `<div class="ph-set">${escapeHtml(setName)}</div>` : ''}
+        <div class="placeholder-text">Aucun visuel disponible</div>
+      </div>
     </div>`;
 }
 
 function handleImageError(img) {
-  const name = img.alt || 'Carte';
+  const d = img.dataset;
+  const card = {
+    name: img.alt || 'Carte',
+    localId: d.phNum || '',
+    set: { name: d.phSet || '' },
+    types: d.phType ? [d.phType] : [],
+  };
   const isModal = img.classList.contains('modal-img');
   const wrapper = document.createElement('div');
-  wrapper.innerHTML = imagePlaceholder(name, isModal).trim();
+  wrapper.innerHTML = imagePlaceholder(card, isModal).trim();
   img.replaceWith(wrapper.firstElementChild);
 }
 
@@ -529,8 +566,8 @@ function buildCardEl(c, ctx, idx) {
 
   div.innerHTML = `
     ${img
-      ? `<img class="card-img" src="${img}" alt="${escapeHtml(name)}" loading="lazy" onerror="handleImageError(this)">`
-      : imagePlaceholder(name)}
+      ? `<img class="card-img" src="${img}" alt="${escapeHtml(name)}" loading="lazy" data-ph-num="${escapeHtml(c.localId ?? '')}" data-ph-set="${escapeHtml(c.set?.name ?? '')}" data-ph-type="${escapeHtml((c.types && c.types[0]) ?? '')}" onerror="handleImageError(this)">`
+      : imagePlaceholder(c)}
     <div class="card-body">
       ${getBadge(c.rarity, c.rarityKind)}
       <div class="card-price-tag">
@@ -1956,8 +1993,26 @@ async function renderCardPrice(card) {
 /* ════════════════════════════════════════════════════════════════════════
    MODALE
    ════════════════════════════════════════════════════════════════════════ */
+// Verrou de défilement : empêche la liste en arrière-plan de défiler quand la
+// modale est ouverte. La technique position:fixed marche aussi sur iOS Safari,
+// où overflow:hidden seul ne suffit pas.
+let lockedScrollY = 0;
+function lockBodyScroll() {
+  if (document.body.classList.contains('modal-open')) return;
+  lockedScrollY = window.scrollY;
+  document.body.style.top = `-${lockedScrollY}px`;
+  document.body.classList.add('modal-open');
+}
+function unlockBodyScroll() {
+  if (!document.body.classList.contains('modal-open')) return;
+  document.body.classList.remove('modal-open');
+  document.body.style.top = '';
+  window.scrollTo(0, lockedScrollY);
+}
+
 function closeModal() {
   modalOverlay.classList.remove('open');
+  unlockBodyScroll();
   currentModalIndex = -1;
   history.replaceState(null, '', window.location.pathname + window.location.search);
 }
@@ -1974,6 +2029,7 @@ function showAdjacentCard(offset) {
 }
 
 async function openModal(card, list, index) {
+  lockBodyScroll();
   if (list) modalList = list;
   if (!modalList || !modalList.length) modalList = filtered;
   currentModalIndex = (index != null) ? index : modalList.findIndex(c => c.id === card.id);
@@ -1996,8 +2052,8 @@ async function openModal(card, list, index) {
   const position = currentModalIndex >= 0 ? `${currentModalIndex + 1} / ${modalList.length}` : '';
 
   document.getElementById('modal-media').innerHTML = img
-    ? `<img class="modal-img" id="modal-img" src="${img}" alt="${escapeHtml(card.name || '')}" onerror="handleImageError(this)" style="cursor:zoom-in;transition:opacity 0.18s" title="Cliquer pour voir en 3D">`
-    : imagePlaceholder(card.name || 'Carte', true);
+    ? `<img class="modal-img" id="modal-img" src="${img}" alt="${escapeHtml(card.name || '')}" data-ph-num="${escapeHtml(card.localId ?? '')}" data-ph-set="${escapeHtml(card.set?.name ?? '')}" data-ph-type="${escapeHtml((card.types && card.types[0]) ?? '')}" onerror="handleImageError(this)" style="cursor:zoom-in;transition:opacity 0.18s" title="Cliquer pour voir en 3D">`
+    : imagePlaceholder(card, true);
   if (img) {
     setTimeout(() => {
       const mi = document.getElementById('modal-img');
@@ -2176,8 +2232,17 @@ function openCardViewer(imgUrl, altText) {
   const overlay = document.getElementById('card-viewer-overlay');
   const img     = document.getElementById('card-viewer-img');
   const inner   = document.getElementById('card-viewer-inner');
-  img.src = imgUrl.replace('/low.webp', '/high.webp');
+  // Affiche d'abord le webp (déjà en cache, instantané), puis bascule sur le
+  // PNG sans perte une fois téléchargé — plus net, sans artefacts de compression.
+  const webpUrl = imgUrl.replace(/\/(?:low|high)\.\w+$/, '/high.webp');
+  const pngUrl  = imgUrl.replace(/\/(?:low|high)\.\w+$/, '/high.png');
+  img.src = webpUrl;
   img.alt = altText || '';
+  if (pngUrl !== webpUrl) {
+    const hi = new Image();
+    hi.onload = () => { if (overlay.classList.contains('open')) img.src = pngUrl; };
+    hi.src = pngUrl;
+  }
   inner.style.transform = 'rotateY(0deg) rotateX(0deg)';
   overlay.classList.add('open');
 
