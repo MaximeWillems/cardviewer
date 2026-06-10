@@ -32,10 +32,10 @@
       <button class="icon-btn active" id="btn-hide-prices" title="Afficher / cacher les prix" aria-label="Afficher les prix">
         <span class="euro-icon">€</span>
       </button>
-      <!-- Language -->
-      <div class="lang-toggle">
-        <button class="lang-btn active" data-lang="fr">FR</button>
-        <button class="lang-btn" data-lang="en">EN</button>
+      <!-- Type de série (catalogue) + langue de la carte -->
+      <div class="catalog-toggle">
+        <select id="region-select" class="hdr-select" aria-label="Type de série" title="Type de série"></select>
+        <select id="lang-select" class="hdr-select" aria-label="Langue de la carte" title="Langue de la carte"></select>
       </div>
       <!-- Refresh data -->
       <button class="icon-btn" id="btn-refresh" title="Actualiser les cartes (recharger depuis l'API)" aria-label="Actualiser les cartes">

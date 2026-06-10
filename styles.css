@@ -1220,28 +1220,70 @@
   }
   .modal-share:hover { background: rgba(var(--fg-rgb),0.12); }
 
-  .lang-toggle {
+  /* Type de série (catalogue) + langue de la carte */
+  .catalog-toggle {
     display: flex;
-    gap: 0;
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    overflow: hidden;
+    gap: 6px;
+    align-items: center;
     flex-shrink: 0;
   }
-  .lang-btn {
-    padding: 8px 13px;
+  .hdr-select {
+    font-family: 'Syne', sans-serif;
+    font-size: 12px;
+    font-weight: 600;
+    padding: 7px 8px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--surface);
+    color: var(--text);
+    cursor: pointer;
+    max-width: 150px;
+    transition: background 0.15s;
+  }
+  .hdr-select:hover { background: var(--surface2); }
+  .hdr-select option:disabled { color: var(--muted); }
+
+  /* Drapeaux des langues possédées, en surimpression sur la vignette */
+  .card-langs {
+    position: absolute;
+    top: 6px;
+    left: 6px;
+    display: flex;
+    gap: 2px;
+    z-index: 2;
+    pointer-events: none;
+  }
+  .card-lang-flag {
+    font-size: 12px;
+    line-height: 1;
+    font-family: 'Syne', sans-serif;
+    font-weight: 700;
+    padding: 2px 4px;
+    border-radius: 5px;
+    background: rgba(0,0,0,0.5);
+    color: #fff;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.35);
+  }
+
+  /* Ligne langue dans la modale (langue éditée + langues possédées) */
+  .modal-lang-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 8px;
+    flex-wrap: wrap;
+  }
+  .modal-lang-active {
+    font-family: 'Syne', sans-serif;
     font-size: 12px;
     font-weight: 700;
-    font-family: 'Syne', sans-serif;
-    background: var(--surface);
-    color: var(--muted);
-    border: none;
-    cursor: pointer;
-    transition: all 0.15s;
-    letter-spacing: 0.04em;
+    padding: 4px 9px;
+    border-radius: 100px;
+    background: var(--surface2);
+    color: var(--text);
   }
-  .lang-btn:hover { color: var(--text); background: var(--surface2); }
-  .lang-btn.active { background: var(--surface2); color: var(--text); }
+  .modal-lang-owned { font-size: 11px; color: var(--muted); }
 
   /* ── 3D card viewer ─────────────────────────── */
   .card-viewer-overlay {
@@ -1888,7 +1930,8 @@
     .app-logo { font-size: 1.25rem; }
     .header-actions { gap: 5px; flex-wrap: wrap; justify-content: flex-end; }
     .icon-btn { width: 32px; height: 32px; }
-    .lang-btn { padding: 7px 10px; }
+    .hdr-select { padding: 6px 6px; font-size: 11px; max-width: 116px; }
+    .catalog-toggle { gap: 4px; }
 
     /* Onglets : défilement horizontal si trop larges */
     .app-nav { overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
