@@ -144,7 +144,9 @@ let wantedSet = new Set();
 let tradeSet  = new Set();
 rebuildProjections();
 
-let startedMasters = JSON.parse(localStorage.getItem(LS_MASTERS) || '[]'); // [{mode,key,label}]
+let startedMasters = JSON.parse(localStorage.getItem(LS_MASTERS) || '[]'); // [{mode,key,label,lang}]
+// Compat : les master sets suivis avant la gestion des langues sont en 'fr'.
+startedMasters = startedMasters.map(m => (m && m.lang) ? m : { ...m, lang: 'fr' });
 let filterPresets  = JSON.parse(localStorage.getItem(LS_PRESETS) || '[]'); // [{id,ctx,name,...}]
 let tagsMap        = JSON.parse(localStorage.getItem(LS_TAGS) || '{}');    // { cardId: [tags] }
 
@@ -308,6 +310,7 @@ let currentModalIndex = -1;
 let masterMode = 'set';    // 'set' | 'artist'
 let masterQuery = '';
 let masterSelected = null;  // clé du groupe ouvert en détail (null = liste)
+let masterSelectedLang = null; // langue du master ouvert (défini à l'ouverture)
 let masterCards = [];       // cartes affichées dans le détail (pour la modale)
 
 function rarityKinds() { return RARITY_KINDS; }
@@ -317,7 +320,7 @@ function rarityKinds() { return RARITY_KINDS; }
 function makeFilterState(sort) {
   return {
     query: '', rarities: new Set(rarityKinds()), type: 'all', artist: 'all',
-    set: 'all', series: 'all', tag: 'all',
+    set: 'all', series: 'all', tag: 'all', lang: 'all',
     sort: sort || 'pokedex', priceMin: '', priceMax: '', artistCounts: new Map(),
   };
 }
@@ -503,6 +506,14 @@ function getCards(ctx) {
   let cards = allCards;
   const ms = membershipSet(ctx);
   if (ms) cards = cards.filter(c => ms.has(c.id));
+  // Filtre de langue (Collection) : restreint à l'appartenance DANS cette langue
+  // pour le sous-onglet courant (possédée / à obtenir / à vendre).
+  if (ctx === 'collection' && st.lang && st.lang !== 'all') {
+    const tab = st.collTab;
+    cards = cards.filter(c =>
+      tab === 'owned' ? isOwned(c.id, st.lang) :
+      tab === 'wanted' ? isWanted(c.id, st.lang) : isTrade(c.id, st.lang));
+  }
   return sortByConfig(filterCards(cards, st), st.sort, st.artistCounts);
 }
 
@@ -876,7 +887,7 @@ function masterFilteredCards(cards, mode) {
   return cards.filter(c => masterCardMatchesFilter(c, excludes));
 }
 
-function masterGroups(mode) {
+function masterGroups(mode, lang = currentLang) {
   const groups = new Map();
   allCards.forEach(c => {
     const key   = mode === 'set' ? (c.set?.id || '__?') : (c.illustrator || '__?');
@@ -885,36 +896,38 @@ function masterGroups(mode) {
     const g = groups.get(key);
     g.cards.push(c);
   });
-  // Recalcule total/owned en tenant compte du filtre actif
+  // Recalcule total/owned : possession comptée DANS LA LANGUE du master set.
   groups.forEach(g => {
     const filtered = masterFilteredCards(g.cards, mode);
     g.total = filtered.length;
-    g.owned = filtered.filter(c => ownedSet.has(c.id)).length;
+    g.owned = filtered.filter(c => isOwned(c.id, lang)).length;
   });
   return [...groups.values()];
 }
 
 // ── Suivi des master sets démarrés ────────────────────────────────────
-function isMasterStarted(mode, key) { return startedMasters.some(m => m.mode === mode && m.key === key); }
+function isMasterStarted(mode, key, lang) {
+  return startedMasters.some(m => m.mode === mode && m.key === key && (m.lang || 'fr') === lang);
+}
 
-// Démarre un master set : marque toutes ses cartes filtrées « à obtenir »
-// (sauf celles déjà possédées) et l'ajoute au suivi.
-function startMaster(mode, key, label) {
-  const group = masterGroups(mode).find(g => g.key === key);
+// Démarre un master set DANS UNE LANGUE : marque ses cartes « à obtenir » dans
+// cette langue (sauf celles déjà possédées/voulues dans la même langue).
+function startMaster(mode, key, label, lang = currentLang) {
+  const group = masterGroups(mode, lang).find(g => g.key === key);
   if (!group) return;
   const cards = masterFilteredCards(group.cards, mode);
   let added = 0;
   cards.forEach(c => {
-    if (!ownedSet.has(c.id) && !wantedSet.has(c.id)) { setWanted(c.id, currentLang, true); added++; }
+    if (!isOwned(c.id, lang) && !isWanted(c.id, lang)) { setWanted(c.id, lang, true); added++; }
   });
   rebuildProjections(); saveCollection();
-  if (!isMasterStarted(mode, key)) { startedMasters.push({ mode, key, label }); saveMasters(); }
+  if (!isMasterStarted(mode, key, lang)) { startedMasters.push({ mode, key, label, lang }); saveMasters(); }
   updateCollStat();
-  showToast(`✓ Master set démarré — ${added} carte${added > 1 ? 's' : ''} à obtenir`);
+  showToast(`✓ Master set ${LANG_FLAGS[lang] || ''} démarré — ${added} carte${added > 1 ? 's' : ''} à obtenir`);
 }
 
-function stopMaster(mode, key) {
-  startedMasters = startedMasters.filter(m => !(m.mode === mode && m.key === key));
+function stopMaster(mode, key, lang) {
+  startedMasters = startedMasters.filter(m => !(m.mode === mode && m.key === key && (m.lang || 'fr') === lang));
   saveMasters();
 }
 
@@ -922,10 +935,11 @@ function masterRowHtml(g, extraClass = '', removable = false) {
   const pct = g.total ? Math.round(g.owned / g.total * 100) : 0;
   const done = g.total > 0 && g.owned === g.total;
   const icon = removable ? (g.mode === 'set' ? '📦 ' : '🎨 ') : '';
-  const remove = removable ? `<button class="master-remove" data-mode="${escapeHtml(g.mode)}" data-key="${escapeHtml(g.key)}" title="Retirer du suivi">×</button>` : '';
-  return `<div class="master-row${done ? ' done' : ''}${extraClass}" data-mode="${escapeHtml(g.mode || masterMode)}" data-key="${escapeHtml(g.key)}">
+  const flag = g.lang ? `<span class="master-row-flag" title="${escapeHtml(LANG_LABELS[g.lang] || g.lang)}">${LANG_FLAGS[g.lang] || ''}</span> ` : '';
+  const remove = removable ? `<button class="master-remove" data-mode="${escapeHtml(g.mode)}" data-key="${escapeHtml(g.key)}" data-lang="${escapeHtml(g.lang || '')}" title="Retirer du suivi">×</button>` : '';
+  return `<div class="master-row${done ? ' done' : ''}${extraClass}" data-mode="${escapeHtml(g.mode || masterMode)}" data-key="${escapeHtml(g.key)}" data-lang="${escapeHtml(g.lang || '')}">
     <div class="master-row-top">
-      <span class="master-row-label">${icon}${escapeHtml(g.label)}</span>
+      <span class="master-row-label">${icon}${flag}${escapeHtml(g.label)}</span>
       <span class="master-row-count">${g.owned} / ${g.total}${done ? ' ✓' : ''}</span>
     </div>
     <div class="master-bar-track"><div class="master-bar-fill" style="width:${pct}%"></div></div>
@@ -933,32 +947,37 @@ function masterRowHtml(g, extraClass = '', removable = false) {
   </div>`;
 }
 
-function openMasterGroup(mode, key) {
+function openMasterGroup(mode, key, lang = currentLang) {
   masterMode = mode;
   masterSelected = key;
+  masterSelectedLang = lang;
   document.querySelectorAll('.master-mode-btn').forEach(b => b.classList.toggle('active', b.dataset.mode === masterMode));
   renderMaster();
 }
 
 function renderStartedMasters(el) {
-  if (!startedMasters.length) { el.style.display = 'none'; el.innerHTML = ''; return; }
+  // On ne montre que les master sets du catalogue courant (les cartes des autres
+  // régions ne sont pas chargées → progression incalculable ici).
+  const visible = startedMasters.filter(m => regionOfLang(m.lang || 'fr') === currentRegion);
+  if (!visible.length) { el.style.display = 'none'; el.innerHTML = ''; return; }
   el.style.display = '';
-  const rows = startedMasters.map(m => {
-    const group = masterGroups(m.mode).find(g => g.key === m.key) || { key: m.key, label: m.label, owned: 0, total: 0 };
-    return masterRowHtml({ ...group, mode: m.mode, label: m.label }, ' started', true);
+  const rows = visible.map(m => {
+    const lang = m.lang || 'fr';
+    const group = masterGroups(m.mode, lang).find(g => g.key === m.key) || { key: m.key, label: m.label, owned: 0, total: 0 };
+    return masterRowHtml({ ...group, mode: m.mode, label: m.label, lang }, ' started', true);
   }).join('');
   el.innerHTML = `<div class="master-section-title">★ Mes master sets en cours</div><div class="master-started-grid">${rows}</div>`;
 
   el.querySelectorAll('.master-row.started').forEach(row => {
     row.addEventListener('click', e => {
       if (e.target.closest('.master-remove')) return;
-      openMasterGroup(row.dataset.mode, row.dataset.key);
+      openMasterGroup(row.dataset.mode, row.dataset.key, row.dataset.lang || 'fr');
     });
   });
   el.querySelectorAll('.master-remove').forEach(btn => {
     btn.addEventListener('click', e => {
       e.stopPropagation();
-      stopMaster(btn.dataset.mode, btn.dataset.key);
+      stopMaster(btn.dataset.mode, btn.dataset.key, btn.dataset.lang || 'fr');
       renderMaster();
       showToast('Master set retiré du suivi', 'info');
     });
@@ -1030,19 +1049,21 @@ function renderMasterDetail() {
   const detail = document.getElementById('master-detail');
   const gridEl = document.getElementById('master-grid');
 
-  const allGroup = masterGroups(masterMode).find(g => g.key === masterSelected);
+  const lang = masterSelectedLang || currentLang;
+  const allGroup = masterGroups(masterMode, lang).find(g => g.key === masterSelected);
   if (!allGroup) { masterSelected = null; renderMaster(); return; }
 
   // Cartes filtrées selon les excludes actifs
   const filteredGroupCards = masterFilteredCards(allGroup.cards, masterMode);
-  const ownedCount = filteredGroupCards.filter(c => ownedSet.has(c.id)).length;
+  const ownedCount = filteredGroupCards.filter(c => isOwned(c.id, lang)).length;
   const totalCount = filteredGroupCards.length;
   const pct = totalCount ? Math.round(ownedCount / totalCount * 100) : 0;
 
   listEl.style.display = 'none';
   detail.style.display = '';
 
-  document.getElementById('master-detail-title').textContent = allGroup.label;
+  document.getElementById('master-detail-title').innerHTML =
+    `<span class="master-detail-flag" title="${escapeHtml(LANG_LABELS[lang] || lang)}">${LANG_FLAGS[lang] || ''}</span> ${escapeHtml(allGroup.label)}`;
 
   // Sous-titre
   let subtitle = '';
@@ -1095,18 +1116,18 @@ function renderMasterDetail() {
     });
   });
 
-  // Action : démarrer / retirer du suivi
-  const started = isMasterStarted(masterMode, masterSelected);
+  // Action : démarrer / retirer du suivi (dans la langue du master ouvert)
+  const started = isMasterStarted(masterMode, masterSelected, lang);
   const actions = document.getElementById('master-detail-actions');
   actions.innerHTML = started
     ? `<button class="master-start-btn started" id="master-start">✓ En cours — Retirer</button>`
-    : `<button class="master-start-btn" id="master-start">+ Démarrer ce master set</button>`;
+    : `<button class="master-start-btn" id="master-start">+ Démarrer ce master set ${LANG_FLAGS[lang] || ''}</button>`;
   document.getElementById('master-start').onclick = () => {
-    if (isMasterStarted(masterMode, masterSelected)) {
-      stopMaster(masterMode, masterSelected);
+    if (isMasterStarted(masterMode, masterSelected, lang)) {
+      stopMaster(masterMode, masterSelected, lang);
       showToast('Master set retiré du suivi', 'info');
     } else {
-      startMaster(masterMode, masterSelected, allGroup.label);
+      startMaster(masterMode, masterSelected, allGroup.label, lang);
     }
     renderMasterDetail();
   };
@@ -1144,8 +1165,26 @@ function decodeShare(str) {
   return JSON.parse(decodeURIComponent(escape(atob(s))));
 }
 
-function buildShareCode() { return encodeShare({ v: 1, w: [...wantedSet], t: [...tradeSet] }); }
+// Liste des paires [id, langue] portant un flag (wanted / trade), pour le partage.
+function pairList(flag) {
+  const out = [];
+  for (const id in collection) {
+    const byLang = collection[id];
+    for (const lang in byLang) if (byLang[lang][flag]) out.push([id, lang]);
+  }
+  return out;
+}
+function buildShareCode() { return encodeShare({ v: 2, w: pairList('wanted'), t: pairList('trade') }); }
 function buildShareLink() { return location.origin + location.pathname + '#share=' + buildShareCode(); }
+
+// Convertit une liste reçue en Set de clés "id|langue". Accepte l'ancien format
+// (tableau d'ids → langue joker '*', compatible avec les codes v1) et le v2
+// (tableau de [id, langue]).
+function toPairSet(arr) {
+  const s = new Set();
+  (arr || []).forEach(item => s.add(Array.isArray(item) ? `${item[0]}|${item[1]}` : `${item}|*`));
+  return s;
+}
 
 // Tolérant : code base64, lien #share=…, ou JSON d'export complet → { wanted, trade }
 function parseFriendData(text) {
@@ -1154,21 +1193,34 @@ function parseFriendData(text) {
   try {
     const d = JSON.parse(raw); // JSON direct (export complet ou {w,t})
     if (Array.isArray(d.wanted) || Array.isArray(d.trade) || Array.isArray(d.w) || Array.isArray(d.t)) {
-      return { wanted: new Set(d.wanted || d.w || []), trade: new Set(d.trade || d.t || []) };
+      return { wanted: toPairSet(d.wanted || d.w), trade: toPairSet(d.trade || d.t) };
     }
   } catch (e) {}
   try {
     const d = decodeShare(raw); // code / lien base64
-    return { wanted: new Set(d.w || d.wanted || []), trade: new Set(d.t || d.trade || []) };
+    return { wanted: toPairSet(d.w || d.wanted), trade: toPairSet(d.t || d.trade) };
   } catch (e) {}
   return null;
 }
 
+// Correspondances en tenant compte de la LANGUE : un Dracaufeu FR voulu ne
+// matche pas un Dracaufeu JP proposé. '*' (ancien format) matche n'importe quelle langue.
 function computeMatches(theirWanted, theirTrade) {
+  const theirHas = (set, id, lang) => set.has(`${id}|${lang}`) || set.has(`${id}|*`);
+  const matches = (id, myFlag, theirSet) => {
+    const byLang = collection[id];
+    if (!byLang) return false;
+    for (const lang in byLang) {
+      const r = byLang[lang];
+      const mine = myFlag === 'owned' ? r.qty > 0 : r[myFlag];
+      if (mine && theirHas(theirSet, id, lang)) return true;
+    }
+    return false;
+  };
   return {
-    give:    allCards.filter(c => tradeSet.has(c.id) && theirWanted.has(c.id)),
-    receive: allCards.filter(c => wantedSet.has(c.id) && theirTrade.has(c.id)),
-    have:    allCards.filter(c => ownedSet.has(c.id) && !tradeSet.has(c.id) && theirWanted.has(c.id)),
+    give:    allCards.filter(c => matches(c.id, 'trade',  theirWanted)),
+    receive: allCards.filter(c => matches(c.id, 'wanted', theirTrade)),
+    have:    allCards.filter(c => matches(c.id, 'owned',  theirWanted) && !matches(c.id, 'trade', theirWanted)),
   };
 }
 
@@ -1279,6 +1331,14 @@ function renderFilterControls(ctx) {
           <label>Tag</label>
           <select id="${prefix}tag-filter" aria-label="Filtrer par tag"><option value="all">Tous les tags</option></select>
         </div>
+        ${isColl && REGIONS[currentRegion].langs.length > 1 ? `
+        <div class="adv-field">
+          <label>Langue</label>
+          <select id="coll-lang-filter" aria-label="Filtrer par langue">
+            <option value="all">Toutes les langues</option>
+            ${REGIONS[currentRegion].langs.map(l => `<option value="${l}"${st.lang === l ? ' selected' : ''}>${LANG_FLAGS[l] || ''} ${LANG_LABELS[l] || l}</option>`).join('')}
+          </select>
+        </div>` : ''}
         ${isColl ? `
         <div class="adv-field price-field">
           <label>Prix (€)</label>
@@ -1308,6 +1368,7 @@ function updateAdvCount(ctx) {
   if (st.set !== 'all') n++;
   if (st.series !== 'all') n++;
   if (st.tag !== 'all') n++;
+  if (st.lang && st.lang !== 'all') n++;
   if (st.priceMin !== '' || st.priceMax !== '') n++;
   const badge = document.getElementById((ctx === 'collection' ? 'coll-' : '') + 'filters-count');
   if (badge) { badge.textContent = n || ''; badge.style.display = n ? '' : 'none'; }
@@ -1319,12 +1380,13 @@ function resetFilters(ctx) {
   const st = S[ctx];
   const prefix = ctx === 'collection' ? 'coll-' : '';
   st.query = ''; st.rarities = new Set(rarityKinds());
-  st.type = 'all'; st.artist = 'all'; st.set = 'all'; st.series = 'all'; st.tag = 'all';
+  st.type = 'all'; st.artist = 'all'; st.set = 'all'; st.series = 'all'; st.tag = 'all'; st.lang = 'all';
   st.priceMin = ''; st.priceMax = '';
   const s = document.getElementById(ctx === 'collection' ? 'coll-search' : 'search'); if (s) s.value = '';
   ['type-filter', 'artist-filter', 'set-filter', 'series-filter', 'tag-filter'].forEach(id => {
     const el = document.getElementById(prefix + id); if (el) el.value = 'all';
   });
+  const lf = document.getElementById('coll-lang-filter'); if (lf) lf.value = 'all';
   const mn = document.getElementById('price-min-filter'), mx = document.getElementById('price-max-filter');
   if (mn) mn.value = ''; if (mx) mx.value = '';
   updateRarityButtons(ctx);
@@ -1605,6 +1667,12 @@ function wireFilters(ctx) {
 
   const tagEl = document.getElementById(prefix + 'tag-filter');
   if (tagEl) tagEl.addEventListener('change', e => { st.tag = e.target.value; apply(); });
+
+  const langFilterEl = document.getElementById('coll-lang-filter');
+  if (langFilterEl) {
+    langFilterEl.value = st.lang;
+    langFilterEl.addEventListener('change', e => { st.lang = e.target.value; apply(); });
+  }
 
   const sortEl = document.getElementById(isColl ? 'coll-sort' : 'sort');
   if (sortEl) {
@@ -2487,6 +2555,8 @@ function buildExportRows(cards) {
     const illus  = c.illustrator || '';
     const ownedLabel  = ownedSet.has(c.id)  ? getPriceLabel(c.id, 'owned')  : '';
     const wantedLabel = wantedSet.has(c.id) ? getPriceLabel(c.id, 'wanted') : '';
+    const langFlags   = [...new Set([...langsWith(c.id, 'qty'), ...langsWith(c.id, 'wanted'), ...langsWith(c.id, 'trade')])]
+                          .map(l => LANG_FLAGS[l] || '').join('');
     const apiLabel    = c.apiPrice != null ? fmtEur(c.apiPrice) : '';
     const statusClass = ownedSet.has(c.id) ? 'owned' : wantedSet.has(c.id) ? 'wanted' : '';
     const badgeHtml   = c.rarityKind === 'sir'    ? '<span class="b sir">SIR</span>'
@@ -2504,7 +2574,7 @@ function buildExportRows(cards) {
       ${img ? `<img src="${img}" alt="" crossorigin="anonymous">` : '<div class="no-img">?</div>'}
       <div class="info">
         ${badgeHtml}
-        <div class="name">${name}</div>
+        <div class="name">${name}${langFlags ? ` <span class="langflags">${langFlags}</span>` : ''}</div>
         <div class="meta">${set}${num ? ' #' + num : ''}</div>
         ${illus ? `<div class="artist">${illus}</div>` : ''}
         ${priceHtml ? `<div class="prices">${priceHtml}</div>` : ''}
@@ -2681,7 +2751,7 @@ function applyImportedConfig(text) {
     collection = legacyToCollection(data.owned, data.wanted, data.trade, data.prices);
     rebuildProjections(); saveCollection();
   }
-  if (Array.isArray(data.masters)) { startedMasters = data.masters; saveMasters(); }
+  if (Array.isArray(data.masters)) { startedMasters = data.masters.map(m => (m && m.lang) ? m : { ...m, lang: 'fr' }); saveMasters(); }
   if (Array.isArray(data.presets)) { filterPresets = data.presets; savePresetsLS(); populatePresetSelect('explore'); populatePresetSelect('collection'); }
   if (data.tags && typeof data.tags === 'object' && !Array.isArray(data.tags)) { tagsMap = data.tags; saveTags(); refreshTagFilters(); }
   if (data.prefs && typeof data.prefs === 'object') {
@@ -2870,8 +2940,13 @@ function syncCatalogSelects() { buildRegionOptions(); buildLangOptions(); }
 function applyCatalogChange() {
   API = API_BASE + '/' + currentLang;
   RARITY_LABELS = RARITY_LABELS_BY_LANG[currentLang] || RARITY_LABELS_BY_LANG.en;
+  S.collection.lang = 'all'; // le filtre langue dépend de la région courante
   allCards = [];
-  fetchCards();
+  fetchCards().then(() => {
+    // Master & Collection dépendent du catalogue courant → rafraîchir si actifs.
+    if (currentTab === 'master') { masterSelected = null; renderMaster(); }
+    if (currentTab === 'collection') { populateFilters('collection'); renderCollection(); updateTotalsBar(); }
+  });
 }
 
 document.getElementById('region-select').addEventListener('change', e => {

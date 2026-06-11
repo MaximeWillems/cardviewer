@@ -1484,6 +1484,14 @@
     gap: 10px;
     margin-bottom: 9px;
   }
+  .master-row-flag, .master-detail-flag {
+    font-size: 0.85em;
+    font-weight: 800;
+    padding: 1px 5px;
+    border-radius: 5px;
+    background: var(--surface2);
+    color: var(--text);
+  }
   .master-row-label {
     font-family: 'Syne', sans-serif;
     font-weight: 700;
