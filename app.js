@@ -16,7 +16,7 @@ const PAGE_SIZE = 24;
 
 // Cache des cartes dans IndexedDB (gros volume → pas le plafond ~5 Mo du
 // localStorage). Bump CACHE_VERSION si la logique de récupération change.
-const CACHE_VERSION = 3;
+const CACHE_VERSION = 4;
 const CACHE_TTL = 7 * 24 * 3600 * 1000; // 7 jours
 
 // Types de rareté filtrables (dimension des pastilles). 'promo' n'a pas de
@@ -329,6 +329,7 @@ const S = {
   collection: makeFilterState(prefs.collSort),
 };
 S.collection.collTab = 'owned'; // 'owned' | 'wanted' | 'trade'
+coerceAsianSort(); // si on démarre déjà sur le catalogue asiatique
 
 /* ── Références DOM (assignées dans init) ─────────────────────────────── */
 let grid, countEl, loadMoreBtn, errorMsg, sourceLabel, modalOverlay,
@@ -473,6 +474,50 @@ function membershipSet(ctx) {
   return t === 'owned' ? ownedSet : t === 'wanted' ? wantedSet : tradeSet;
 }
 
+/* ── Translittération katakana/hiragana → romaji ──────────────────────────
+   Permet de chercher une carte japonaise en alphabet latin (ex. « rizaado »
+   pour リザードン). Couvre les noms de Pokémon (kana) ; les kanji (noms de
+   dresseurs / d'extensions) ne sont pas convertis (nécessiterait un dico).
+   ──────────────────────────────────────────────────────────────────────── */
+const KATA_COMBO = {
+  'キャ':'kya','キュ':'kyu','キョ':'kyo','シャ':'sha','シュ':'shu','ショ':'sho',
+  'チャ':'cha','チュ':'chu','チョ':'cho','ニャ':'nya','ニュ':'nyu','ニョ':'nyo',
+  'ヒャ':'hya','ヒュ':'hyu','ヒョ':'hyo','ミャ':'mya','ミュ':'myu','ミョ':'myo',
+  'リャ':'rya','リュ':'ryu','リョ':'ryo','ギャ':'gya','ギュ':'gyu','ギョ':'gyo',
+  'ジャ':'ja','ジュ':'ju','ジョ':'jo','ビャ':'bya','ビュ':'byu','ビョ':'byo',
+  'ピャ':'pya','ピュ':'pyu','ピョ':'pyo','ファ':'fa','フィ':'fi','フェ':'fe','フォ':'fo',
+  'ティ':'ti','ディ':'di','チェ':'che','ジェ':'je','シェ':'she','ヴァ':'va','ヴィ':'vi','ヴェ':'ve','ヴォ':'vo',
+};
+const KATA_MAP = {
+  'ア':'a','イ':'i','ウ':'u','エ':'e','オ':'o','カ':'ka','キ':'ki','ク':'ku','ケ':'ke','コ':'ko',
+  'サ':'sa','シ':'shi','ス':'su','セ':'se','ソ':'so','タ':'ta','チ':'chi','ツ':'tsu','テ':'te','ト':'to',
+  'ナ':'na','ニ':'ni','ヌ':'nu','ネ':'ne','ノ':'no','ハ':'ha','ヒ':'hi','フ':'fu','ヘ':'he','ホ':'ho',
+  'マ':'ma','ミ':'mi','ム':'mu','メ':'me','モ':'mo','ヤ':'ya','ユ':'yu','ヨ':'yo',
+  'ラ':'ra','リ':'ri','ル':'ru','レ':'re','ロ':'ro','ワ':'wa','ヲ':'wo','ン':'n',
+  'ガ':'ga','ギ':'gi','グ':'gu','ゲ':'ge','ゴ':'go','ザ':'za','ジ':'ji','ズ':'zu','ゼ':'ze','ゾ':'zo',
+  'ダ':'da','ヂ':'ji','ヅ':'zu','デ':'de','ド':'do','バ':'ba','ビ':'bi','ブ':'bu','ベ':'be','ボ':'bo',
+  'パ':'pa','ピ':'pi','プ':'pu','ペ':'pe','ポ':'po','ヴ':'vu',
+};
+function toRomaji(str) {
+  if (!str) return '';
+  // Hiragana → katakana (décalage de 0x60) pour réutiliser la même table.
+  const s = String(str).replace(/[ぁ-ゖ]/g, ch => String.fromCharCode(ch.charCodeAt(0) + 0x60));
+  let out = '';
+  for (let i = 0; i < s.length; i++) {
+    const combo = KATA_COMBO[s.substr(i, 2)];
+    if (combo) { out += combo; i++; continue; }
+    const ch = s[i];
+    if (ch === 'ッ') { // sokuon : double la consonne suivante
+      const nr = KATA_COMBO[s.substr(i + 1, 2)] || KATA_MAP[s[i + 1]];
+      if (nr) out += nr[0];
+      continue;
+    }
+    if (ch === 'ー') { const last = out[out.length - 1]; if ('aeiou'.includes(last)) out += last; continue; }
+    out += KATA_MAP[ch] || ch;
+  }
+  return out.toLowerCase();
+}
+
 function filterCards(cards, st) {
   const q   = st.query.toLowerCase().trim();
   const min = st.priceMin !== '' ? Number(st.priceMin) : null;
@@ -487,6 +532,7 @@ function filterCards(cards, st) {
     if (st.tag !== 'all' && !getTags(c.id).includes(st.tag)) return false;
     if (q && !(
       (c.name || '').toLowerCase().includes(q) ||
+      (c.romaji && c.romaji.includes(q)) ||
       (c.illustrator || '').toLowerCase().includes(q) ||
       (c.set?.name || '').toLowerCase().includes(q) ||
       (c.set?.serie?.name || '').toLowerCase().includes(q)
@@ -520,6 +566,13 @@ function getCards(ctx) {
 /* ════════════════════════════════════════════════════════════════════════
    TRI + SECTIONS (partagés)
    ════════════════════════════════════════════════════════════════════════ */
+// Catalogue asiatique : pas de n° Pokédex dans les briefs → tri par extension.
+function defaultSort() { return currentRegion === 'asian' ? 'set' : 'pokedex'; }
+function coerceAsianSort() {
+  if (currentRegion !== 'asian') return;
+  ['explore', 'collection'].forEach(ctx => { if (S[ctx].sort === 'pokedex') S[ctx].sort = 'set'; });
+}
+
 function getDexNumber(card) {
   return Array.isArray(card.dexId) && card.dexId.length ? Math.min(...card.dexId) : Number.MAX_SAFE_INTEGER;
 }
@@ -1132,7 +1185,7 @@ function renderMasterDetail() {
     renderMasterDetail();
   };
 
-  masterCards = sortByConfig(filteredGroupCards, 'pokedex');
+  masterCards = sortByConfig(filteredGroupCards, defaultSort());
   paintGrid(gridEl, masterCards, 'master', { sections: false });
 }
 
@@ -1233,7 +1286,7 @@ function renderEchangeResults(data) {
     document.getElementById(titleId).textContent = `${label} (${cards.length})`;
     const grid = document.getElementById(gridId);
     if (cards.length === 0) { grid.innerHTML = '<div class="echange-empty">Aucune carte</div>'; return; }
-    paintGrid(grid, sortByConfig(cards, 'pokedex'), 'echange', { sections: false });
+    paintGrid(grid, sortByConfig(cards, defaultSort()), 'echange', { sections: false });
   };
   fill('echange-give-grid',    'echange-give-title',    'Ce que je peux lui céder', give);
   fill('echange-receive-grid', 'echange-receive-title', 'Ce qu\'il peut me céder', receive);
@@ -1934,6 +1987,33 @@ async function fetchPromoCards() {
   return allPromos;
 }
 
+// Catalogue asiatique : ingestion PAR SET (les briefs de set contiennent les
+// images), car beaucoup de cartes JP ont un champ rareté vide → introuvables
+// par rareté. On garde toutes les cartes imagées. Détails (illustrateur, dexId,
+// prix) chargés à l'ouverture d'une carte. Le nom romaji est précalculé.
+async function fetchAsianCatalog() {
+  const res = await fetch(`${API}/sets`);
+  if (!res.ok) throw new Error('sets');
+  const sets = await res.json();
+  const cards = [];
+  const BATCH = 12;
+  for (let i = 0; i < sets.length; i += BATCH) {
+    const batch = sets.slice(i, i + BATCH);
+    const results = await Promise.all(batch.map(async (s) => {
+      try {
+        const r = await fetch(`${API}/sets/${encodeURIComponent(s.id)}`);
+        if (!r.ok) return [];
+        const data = await r.json();
+        const setMeta = { id: data.id, name: data.name, serie: data.serie || null };
+        return (data.cards || []).filter(c => c.image).map(c => ({ ...c, set: setMeta, region: 'asian' }));
+      } catch (e) { return []; }
+    }));
+    results.forEach(arr => cards.push(...arr));
+    if (sourceLabel) sourceLabel.textContent = `chargement des sets japonais… ${Math.min(i + BATCH, sets.length)}/${sets.length}`;
+  }
+  return cards;
+}
+
 async function fetchCards({ force = false } = {}) {
   showSkeletons();
   sourceLabel = document.getElementById('source-label');
@@ -1957,20 +2037,30 @@ async function fetchCards({ force = false } = {}) {
   // 2) Sinon, récupération réseau complète
   if (sourceLabel) sourceLabel.textContent = 'chargement des cartes…';
   try {
-    const [rarityResults, promoCards, seriesMap] = await Promise.all([
-      Promise.all(RARITY_LABELS.map(r => fetchCardsByRarity(r).catch(() => []))),
-      fetchPromoCards().catch(() => []),
-      fetchSeriesMap(),
-    ]);
-
-    allCards = [...rarityResults.flat(), ...promoCards];
+    if (currentRegion === 'asian') {
+      // Ingestion par set + enrichissement série, sans hydratation (briefs only).
+      const [asianCards, seriesMap] = await Promise.all([
+        fetchAsianCatalog(),
+        fetchSeriesMap().catch(() => null),
+      ]);
+      enrichSeries(asianCards, seriesMap);
+      asianCards.forEach(c => { c.romaji = toRomaji(c.name); });
+      allCards = asianCards;
+    } else {
+      const [rarityResults, promoCards, seriesMap] = await Promise.all([
+        Promise.all(RARITY_LABELS.map(r => fetchCardsByRarity(r).catch(() => []))),
+        fetchPromoCards().catch(() => []),
+        fetchSeriesMap(),
+      ]);
+      allCards = [...rarityResults.flat(), ...promoCards];
+      if (allCards.length === 0) throw new Error('empty');
+      if (sourceLabel) sourceLabel.textContent = 'tri Pokédex en préparation…';
+      allCards = await hydrateCards(allCards);
+      enrichSeries(allCards, seriesMap);
+    }
     if (allCards.length === 0) throw new Error('empty');
 
     countEl.textContent = allCards.length;
-    if (sourceLabel) sourceLabel.textContent = 'tri Pokédex en préparation…';
-    allCards = await hydrateCards(allCards);
-    enrichSeries(allCards, seriesMap);
-
     idbSet(cacheKey(), { cards: allCards, savedAt: Date.now() }); // sauvegarde en arrière-plan
 
     populateFilters('explore');
@@ -2941,6 +3031,14 @@ function applyCatalogChange() {
   API = API_BASE + '/' + currentLang;
   RARITY_LABELS = RARITY_LABELS_BY_LANG[currentLang] || RARITY_LABELS_BY_LANG.en;
   S.collection.lang = 'all'; // le filtre langue dépend de la région courante
+  if (currentRegion === 'asian') {
+    coerceAsianSort();       // JP : pas de Pokédex → tri par extension
+  } else {                   // retour international : on restaure le tri préféré
+    S.explore.sort    = prefs.sort || 'pokedex';
+    S.collection.sort = prefs.collSort || 'pokedex';
+  }
+  const se = document.getElementById('sort'); if (se) se.value = S.explore.sort;
+  const cse = document.getElementById('coll-sort'); if (cse) cse.value = S.collection.sort;
   allCards = [];
   fetchCards().then(() => {
     // Master & Collection dépendent du catalogue courant → rafraîchir si actifs.
