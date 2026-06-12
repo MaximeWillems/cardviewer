@@ -59,6 +59,7 @@
     <button class="nav-tab active" data-view="explore">Explorer</button>
     <button class="nav-tab" data-view="collection">Ma Collection</button>
     <button class="nav-tab" data-view="master">Master Set</button>
+    <button class="nav-tab" data-view="binder">Classeur</button>
     <button class="nav-tab" data-view="echange">Échange</button>
   </nav>
 
@@ -141,6 +142,32 @@
       <div class="master-detail-actions" id="master-detail-actions"></div>
     </div>
     <div id="master-grid"></div>
+  </div>
+</div>
+
+<!-- ── CLASSEUR ─────────────────────────────────── -->
+<div class="binder-view" id="binder-view">
+  <div class="binder-bar">
+    <button class="binder-nav" id="binder-prev" aria-label="Page précédente">‹</button>
+    <span class="binder-pageinfo" id="binder-pageinfo">Page 1 / 5</span>
+    <button class="binder-nav" id="binder-next" aria-label="Page suivante">›</button>
+    <button class="binder-addpage" id="binder-addpage" title="Ajouter une page">+ page</button>
+  </div>
+  <div class="binder-palette" id="binder-palette"></div>
+  <div class="binder-grid" id="binder-grid"></div>
+</div>
+
+<!-- Sélecteur de carte pour le classeur -->
+<div class="config-overlay" id="binder-picker">
+  <div class="config-modal" role="dialog" aria-modal="true">
+    <div class="config-head">
+      <div class="config-title">Choisir une carte</div>
+      <button class="config-close" id="binder-picker-close" aria-label="Fermer">✕</button>
+    </div>
+    <div class="config-body">
+      <input class="binder-picker-search" id="binder-picker-search" type="text" placeholder="Rechercher dans ma collection…" autocomplete="off">
+      <div class="binder-picker-grid" id="binder-picker-grid"></div>
+    </div>
   </div>
 </div>
 

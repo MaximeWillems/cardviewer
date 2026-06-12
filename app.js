@@ -128,6 +128,7 @@ const LS_PRESETS = 'illusdex_presets';
 const LS_TAGS = 'illusdex_tags';
 const LS_COLLECTION = 'illusdex_collection';
 const LS_CARDSNAP = 'illusdex_cardsnap';
+const LS_BINDER = 'illusdex_binder';
 
 /* ── Collection par (carte × langue) ──────────────────────────────────────
    Source de vérité unique :
@@ -156,6 +157,12 @@ let tagsMap        = JSON.parse(localStorage.getItem(LS_TAGS) || '{}');    // { 
 // quand le catalogue asiatique est chargé, et inversement).
 let cardSnapshots  = JSON.parse(localStorage.getItem(LS_CARDSNAP) || '{}');
 function saveCardSnapshots() { localStorage.setItem(LS_CARDSNAP, JSON.stringify(cardSnapshots)); }
+
+// Classeur : pages de 9 emplacements (3×3). slot = { id, lang } ou null.
+let binder = JSON.parse(localStorage.getItem(LS_BINDER) || 'null');
+if (!binder || !Array.isArray(binder.slots)) binder = { pages: 5, slots: new Array(45).fill(null) };
+let binderPage = 0;
+function saveBinder() { localStorage.setItem(LS_BINDER, JSON.stringify(binder)); }
 function snapshotCard(c) {
   return {
     id: c.id, image: c.image, name: c.name, nameEn: c.nameEn, romaji: c.romaji,
@@ -1336,6 +1343,107 @@ function renderMasterDetail() {
 
   masterCards = sortByConfig(filteredGroupCards, defaultSort());
   paintGrid(gridEl, masterCards, 'master', { sections: false });
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   CLASSEUR (pages 3×3 d'emplacements où ranger ses cartes)
+   ════════════════════════════════════════════════════════════════════════ */
+function lookupCard(id) { return allCards.find(c => c.id === id) || cardSnapshots[id] || null; }
+let binderPickSlot = -1; // emplacement en cours d'attribution
+
+// 16 couleurs communes pour le fond du classeur (thèmes).
+const BINDER_COLORS = ['#c0392b', '#e67e22', '#f39c12', '#f1c40f', '#7cb342', '#27ae60', '#16a085', '#0aa3c2',
+                       '#2980b9', '#3f51b5', '#8e44ad', '#e84393', '#7b2d3a', '#8d6e63', '#607d8b', '#95a5a6'];
+function applyBinderBg() {
+  const grid = document.getElementById('binder-grid');
+  if (grid) grid.style.background = binder.bg || '';
+}
+function renderBinderPalette() {
+  const el = document.getElementById('binder-palette');
+  if (!el) return;
+  el.innerHTML = BINDER_COLORS.map(col =>
+    `<button class="binder-swatch${binder.bg === col ? ' selected' : ''}" style="background:${col}" data-col="${col}" aria-label="Fond ${col}"></button>`
+  ).join('');
+  el.querySelectorAll('.binder-swatch').forEach(b => b.addEventListener('click', () => {
+    binder.bg = (binder.bg === b.dataset.col) ? null : b.dataset.col; // re-clic = retour au fond neutre
+    saveBinder(); renderBinderPalette(); applyBinderBg();
+  }));
+}
+
+function renderBinder() {
+  const grid = document.getElementById('binder-grid');
+  const info = document.getElementById('binder-pageinfo');
+  if (!grid) return;
+  if (binderPage >= binder.pages) binderPage = binder.pages - 1;
+  if (binderPage < 0) binderPage = 0;
+  if (info) info.textContent = `Page ${binderPage + 1} / ${binder.pages}`;
+  renderBinderPalette();
+  applyBinderBg();
+  grid.innerHTML = '';
+  const start = binderPage * 9;
+  for (let i = 0; i < 9; i++) grid.appendChild(buildBinderSlot(start + i));
+}
+
+function buildBinderSlot(slotIndex) {
+  const slot = binder.slots[slotIndex];
+  const div = document.createElement('div');
+  div.className = 'binder-slot' + (slot ? ' filled' : '');
+  if (slot) {
+    const c = lookupCard(slot.id);
+    const img = c && c.image ? c.image + '/low.webp' : '';
+    div.innerHTML = `
+      ${img ? `<img class="binder-slot-img" src="${escapeHtml(img)}" alt="" loading="lazy" onerror="handleImageError(this)">` : imagePlaceholder(c || { name: slot.id })}
+      ${slot.lang && LANG_FLAGS[slot.lang] ? `<span class="binder-slot-flag">${LANG_FLAGS[slot.lang]}</span>` : ''}
+      <button class="binder-slot-remove" title="Retirer">×</button>`;
+    div.querySelector('.binder-slot-remove').addEventListener('click', e => {
+      e.stopPropagation();
+      binder.slots[slotIndex] = null; saveBinder(); renderBinder();
+    });
+    div.addEventListener('click', () => { if (c) openModal(c, [c], 0); });
+  } else {
+    div.innerHTML = '<span class="binder-slot-plus">+</span>';
+    div.addEventListener('click', () => openBinderPicker(slotIndex));
+  }
+  return div;
+}
+
+function openBinderPicker(slotIndex) {
+  binderPickSlot = slotIndex;
+  document.getElementById('binder-picker-search').value = '';
+  renderBinderPicker('');
+  document.getElementById('binder-picker').classList.add('open');
+}
+function closeBinderPicker() {
+  document.getElementById('binder-picker').classList.remove('open');
+  binderPickSlot = -1;
+}
+
+function renderBinderPicker(query) {
+  const grid = document.getElementById('binder-picker-grid');
+  if (!grid) return;
+  const q = (query || '').toLowerCase().trim();
+  let cards = getCollectionPool().filter(c => ownedSet.has(c.id));
+  if (q) cards = cards.filter(c =>
+    (c.name || '').toLowerCase().includes(q) ||
+    (c.romaji && c.romaji.includes(q)) ||
+    String(c.localId || '').includes(q));
+  cards = sortByConfig(cards, 'set').slice(0, 120);
+  if (!cards.length) { grid.innerHTML = '<div class="scan-empty">Aucune carte possédée.</div>'; return; }
+  grid.innerHTML = '';
+  cards.forEach(c => {
+    const lang = ownedLangs(c.id)[0] || currentLang;
+    const img = c.image ? c.image + '/low.webp' : '';
+    const el = document.createElement('button');
+    el.type = 'button';
+    el.className = 'binder-pick';
+    el.innerHTML = `${img ? `<img src="${escapeHtml(img)}" alt="" loading="lazy" onerror="handleImageError(this)">` : imagePlaceholder(c)}
+      <span class="binder-pick-name">${escapeHtml(c.name || '—')}</span>`;
+    el.addEventListener('click', () => {
+      binder.slots[binderPickSlot] = { id: c.id, lang };
+      saveBinder(); closeBinderPicker(); renderBinder();
+    });
+    grid.appendChild(el);
+  });
 }
 
 /* ════════════════════════════════════════════════════════════════════════
@@ -3581,16 +3689,29 @@ function setActiveTab(tab) {
   document.getElementById('explore-view').classList.toggle('hidden', currentTab !== 'explore');
   document.getElementById('collection-view').classList.toggle('active', currentTab === 'collection');
   document.getElementById('master-view').classList.toggle('active', currentTab === 'master');
+  document.getElementById('binder-view').classList.toggle('active', currentTab === 'binder');
   document.getElementById('echange-view').classList.toggle('active', currentTab === 'echange');
   document.getElementById('explore-controls').style.display = currentTab === 'explore' ? '' : 'none';
   if (currentTab !== 'collection' && selectionMode) setSelectionMode(false);
   if (currentTab === 'collection') { populateFilters('collection'); renderCollection(); }
   if (currentTab === 'master') { masterSelected = null; renderMaster(); }
+  if (currentTab === 'binder') renderBinder();
   if (currentTab === 'echange') renderEchange();
 }
 document.querySelectorAll('.nav-tab').forEach(tab => {
   tab.addEventListener('click', () => setActiveTab(tab.dataset.view));
 });
+
+// Classeur : navigation entre pages + ajout de page + sélecteur de carte.
+document.getElementById('binder-prev').addEventListener('click', () => { if (binderPage > 0) { binderPage--; renderBinder(); } });
+document.getElementById('binder-next').addEventListener('click', () => { if (binderPage < binder.pages - 1) { binderPage++; renderBinder(); } });
+document.getElementById('binder-addpage').addEventListener('click', () => {
+  binder.pages++; binder.slots.push(...new Array(9).fill(null));
+  saveBinder(); binderPage = binder.pages - 1; renderBinder();
+});
+document.getElementById('binder-picker-close').addEventListener('click', closeBinderPicker);
+document.getElementById('binder-picker').addEventListener('click', e => { if (e.target === e.currentTarget) closeBinderPicker(); });
+document.getElementById('binder-picker-search').addEventListener('input', e => renderBinderPicker(e.target.value));
 
 // 10) Sous-onglets Collection.
 document.querySelectorAll('.coll-tab-btn').forEach(btn => {
