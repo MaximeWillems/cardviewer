@@ -3077,12 +3077,13 @@ async function startCamera() {
     setScanStatus('Caméra non supportée — saisis le N° ci-dessous.'); return;
   }
   try {
-    scanStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' } } });
+    scanStream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } },
+    });
     const v = document.getElementById('scan-video');
     v.srcObject = scanStream;
     await v.play();
-    setScanStatus('Place la carte dans le cadre — capture automatique.');
-    startScanLoop();
+    setScanStatus('Approche la carte et tape l\'écran pour lire le N°.');
   } catch (e) {
     setScanStatus('Caméra refusée — saisis le N° ci-dessous.');
   }
@@ -3164,7 +3165,8 @@ function cropCardRegion(v, rx, ry, rw, rh, upscale = 3) {
   return preprocessForOcr(c);
 }
 
-// On lit UNIQUEMENT le numéro (le plus fiable) ; le nom n'est plus utilisé.
+// On lit UNIQUEMENT le numéro (le plus fiable). On vise large (bas de la carte)
+// et on affiche ce qui a été capturé/lu (debug) pour pouvoir régler le tir.
 async function captureAndOcr() {
   const v = document.getElementById('scan-video');
   if (!v || !v.videoWidth) return;
@@ -3172,15 +3174,24 @@ async function captureAndOcr() {
   setScanStatus(window.Tesseract ? 'Lecture…' : 'Chargement de l\'OCR (1ère fois)…');
   try {
     const worker = await getOcrWorker(lang);
-    await worker.setParameters({ tessedit_char_whitelist: '0123456789/', tessedit_pageseg_mode: '7' });
-    const numText = (await worker.recognize(cropCardRegion(v, 0, 0.88, 1, 0.11))).data.text.replace(/\s+/g, '');
-    const m = numText.match(/(\d{1,3})\/(\d{1,3})/) || numText.match(/(\d{1,3})/);
+    const crop = cropCardRegion(v, 0, 0.66, 1, 0.32, 3); // tout le bas de la carte
+    await worker.setParameters({ tessedit_char_whitelist: '0123456789/', tessedit_pageseg_mode: '6' });
+    const raw = (await worker.recognize(crop)).data.text || '';
+    const compact = raw.replace(/\s+/g, '');
+    const m = compact.match(/(\d{1,3})\/(\d{1,3})/) || compact.match(/(\d{1,3})/);
+    // Debug visible : l'image exacte lue + le texte brut reconnu.
+    const dbg = document.getElementById('scan-debug');
+    if (dbg) {
+      dbg.hidden = false;
+      document.getElementById('scan-debug-img').src = crop.toDataURL('image/png');
+      document.getElementById('scan-debug-text').textContent = 'lu : « ' + (raw.trim().replace(/\n/g, ' ') || '(rien)') + ' »';
+    }
     if (m) {
       document.getElementById('scan-num').value = m[2] ? `${m[1]}/${m[2]}` : m[1];
       renderScanCandidates();
-      setScanStatus(`N° lu : ${m[2] ? m[1] + '/' + m[2] : m[1]} — tape la bonne carte ↓`);
+      setScanStatus(`N° ${m[2] ? m[1] + '/' + m[2] : m[1]} — tape la bonne carte ↓`);
     } else {
-      setScanStatus('Numéro illisible — rapproche/recadre, ou saisis-le.');
+      setScanStatus('Numéro non lu — vois la zone capturée ci-dessous.');
     }
   } catch (e) {
     setScanStatus('Lecture impossible — saisis le N° ci-dessous.');
