@@ -560,6 +560,63 @@ function toRomaji(str) {
   return out.toLowerCase();
 }
 
+/* ── Moteur de correspondance pour le scan ────────────────────────────────
+   À partir de signaux lus sur la carte (nom, numéro X, total Y), classe les
+   cartes du catalogue chargé par vraisemblance. Renvoie les meilleures pour
+   laisser l'utilisateur choisir en cas de doute. 100 % local (hors-ligne).
+   ──────────────────────────────────────────────────────────────────────── */
+function normalizeForMatch(s) {
+  // garde lettres latines, chiffres et caractères japonais (hiragana/katakana/kanji)
+  return String(s || '').toLowerCase().replace(/[^a-z0-9぀-ヿ一-鿿]/g, '');
+}
+function diceSimilarity(a, b) {
+  a = normalizeForMatch(a); b = normalizeForMatch(b);
+  if (!a || !b) return 0;
+  if (a === b) return 1;
+  if (a.length < 2 || b.length < 2) return a === b ? 1 : 0;
+  const map = new Map();
+  for (let i = 0; i < a.length - 1; i++) { const g = a.substr(i, 2); map.set(g, (map.get(g) || 0) + 1); }
+  let inter = 0, total = (a.length - 1) + (b.length - 1);
+  for (let i = 0; i < b.length - 1; i++) { const g = b.substr(i, 2); const c = map.get(g); if (c > 0) { inter++; map.set(g, c - 1); } }
+  return (2 * inter) / total;
+}
+// Similarité d'un nom lu vs une carte : compare au nom ET au romaji (et au
+// romaji du nom lu, si l'OCR a rendu du katakana).
+function nameScore(query, card) {
+  if (!query) return 0;
+  let best = Math.max(diceSimilarity(query, card.name), card.nameEn ? diceSimilarity(query, card.nameEn) : 0);
+  if (card.romaji) best = Math.max(best, diceSimilarity(query, card.romaji), diceSimilarity(toRomaji(query), card.romaji));
+  return best;
+}
+function setOfficialCount(card) {
+  const cc = card.set && card.set.cardCount;
+  return cc ? (cc.official != null ? cc.official : cc.total) : null;
+}
+const normNum = v => String(v == null ? '' : v).replace(/^0+/, '').toLowerCase();
+
+// signals: { name?, number? (X), total? (Y) }
+function findScanCandidates(signals, pool, limit = 8) {
+  pool = pool || allCards;
+  const X = (signals.number != null && signals.number !== '') ? normNum(signals.number) : null;
+  const Y = (signals.total != null && signals.total !== '') ? Number(signals.total) : null;
+  const name = signals.name ? String(signals.name).trim() : '';
+
+  // On part des cartes au bon numéro ; si rien et qu'on a un nom, on élargit.
+  let base = X != null ? pool.filter(c => normNum(c.localId) === X) : pool;
+  if (X != null && name && base.length === 0) base = pool;
+
+  const scored = [];
+  for (const c of base) {
+    let score = 0;
+    if (X != null && normNum(c.localId) === X) score += 5;
+    if (Y != null && setOfficialCount(c) === Y) score += 3;
+    if (name) score += nameScore(name, c) * 6;
+    if (score > 0) scored.push({ card: c, score });
+  }
+  scored.sort((a, b) => b.score - a.score);
+  return scored.slice(0, limit);
+}
+
 function filterCards(cards, st) {
   const q   = st.query.toLowerCase().trim();
   const min = st.priceMin !== '' ? Number(st.priceMin) : null;
@@ -2063,7 +2120,7 @@ async function fetchAsianCatalog() {
         const r = await fetch(`${API}/sets/${encodeURIComponent(s.id)}`);
         if (!r.ok) return [];
         const data = await r.json();
-        const setMeta = { id: data.id, name: data.name, serie: data.serie || null };
+        const setMeta = { id: data.id, name: data.name, serie: data.serie || null, cardCount: data.cardCount || null };
         return (data.cards || []).filter(c => c.image).map(c => ({ ...c, set: setMeta, region: 'asian' }));
       } catch (e) { return []; }
     }));
@@ -2892,6 +2949,175 @@ function buildConfigPayload() {
 function openConfig()  { document.getElementById('config-overlay').classList.add('open'); }
 function closeConfig() { document.getElementById('config-overlay').classList.remove('open'); }
 
+/* ── Panneau d'ajout / scan de cartes ─────────────────────────────────────
+   Saisie du numéro (+ total / nom si doute) → candidats du catalogue courant
+   via findScanCandidates → tap pour ajouter à la collection. La caméra (OCR)
+   viendra alimenter les mêmes champs.
+   ──────────────────────────────────────────────────────────────────────── */
+let scanSessionCount = 0;
+
+function addOwnedFromScan(card) {
+  const lang = cardLangFor(card);
+  if (isOwned(card.id, lang)) { showToast('Déjà en collection', 'info'); return; }
+  ensureRec(card.id, lang).qty = 1;
+  snapshotById(card.id);
+  afterCollectionChange();
+  scanSessionCount++;
+  showToast('✦ Ajoutée : ' + (card.name || ''));
+  // Prêt pour la carte suivante : on vide les champs et on recentre le numéro.
+  ['scan-num', 'scan-total', 'scan-name'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+  renderScanCandidates();
+  updateScanSession();
+  const numEl = document.getElementById('scan-num'); if (numEl) numEl.focus();
+}
+
+function buildScanCandidateEl(card) {
+  const lang = cardLangFor(card);
+  const owned = isOwned(card.id, lang);
+  const img = card.image ? card.image + '/low.webp' : '';
+  const sub = `${card.set?.name || ''}${card.localId ? ' · N°' + card.localId : ''}`;
+  const el = document.createElement('button');
+  el.type = 'button';
+  el.className = 'scan-cand' + (owned ? ' owned' : '');
+  el.innerHTML = `
+    ${img ? `<img class="scan-cand-img" src="${escapeHtml(img)}" alt="" loading="lazy" onerror="this.style.visibility='hidden'">` : '<div class="scan-cand-noimg">?</div>'}
+    <div class="scan-cand-info">
+      <div class="scan-cand-name">${LANG_FLAGS[lang] || ''} ${escapeHtml(card.name || '—')}</div>
+      <div class="scan-cand-sub">${escapeHtml(sub)}</div>
+    </div>
+    <span class="scan-cand-add">${owned ? '✓' : '+'}</span>`;
+  el.addEventListener('click', () => { if (!isOwned(card.id, lang)) addOwnedFromScan(card); });
+  return el;
+}
+
+function renderScanCandidates() {
+  const results = document.getElementById('scan-results');
+  if (!results) return;
+  const num   = document.getElementById('scan-num').value.trim();
+  const total = document.getElementById('scan-total').value.trim();
+  const name  = document.getElementById('scan-name').value.trim();
+  if (!num && !name) { results.innerHTML = ''; return; }
+  if (!allCards.length) { results.innerHTML = '<div class="scan-empty">Catalogue non chargé.</div>'; return; }
+  const cands = findScanCandidates({ number: num, total, name }, allCards, 12);
+  if (!cands.length) { results.innerHTML = '<div class="scan-empty">Aucune carte trouvée dans ce catalogue.</div>'; return; }
+  results.innerHTML = '';
+  cands.forEach(c => results.appendChild(buildScanCandidateEl(c.card)));
+}
+
+function updateScanSession() {
+  const el = document.getElementById('scan-session');
+  if (el) el.textContent = scanSessionCount
+    ? `✦ ${scanSessionCount} carte${scanSessionCount > 1 ? 's' : ''} ajoutée${scanSessionCount > 1 ? 's' : ''} dans cette session`
+    : '';
+}
+
+function openScanPanel() {
+  scanSessionCount = 0;
+  const ctx = document.getElementById('scan-context');
+  if (ctx) ctx.innerHTML = `Ajout au catalogue <b>${escapeHtml(REGIONS[currentRegion].label)}</b> · ${LANG_FLAGS[currentLang] || ''} ${escapeHtml(LANG_LABELS[currentLang] || currentLang)}`;
+  ['scan-num', 'scan-total', 'scan-name'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+  renderScanCandidates();
+  updateScanSession();
+  document.getElementById('scan-overlay').classList.add('open');
+  lockBodyScroll();
+  setTimeout(() => { const n = document.getElementById('scan-num'); if (n) n.focus(); }, 60);
+}
+
+function closeScanPanel() {
+  stopCamera();
+  document.getElementById('scan-overlay').classList.remove('open');
+  unlockBodyScroll();
+  if (currentTab === 'collection') { populateFilters('collection'); renderCollection(); updateTotalsBar(); }
+}
+
+/* ── Caméra + OCR (Tesseract.js chargé à la demande) ──────────────────────
+   La caméra ne fait que LIRE le numéro / le nom et remplir les champs du
+   panneau — le matching et l'ajout restent ceux de l'étape A. L'OCR est un
+   accélérateur : si la lecture rate, la saisie manuelle prend le relais.
+   ──────────────────────────────────────────────────────────────────────── */
+let scanStream = null, ocrWorker = null, ocrWorkerLang = null, tesseractLoading = null;
+
+function setScanStatus(msg) { const el = document.getElementById('scan-cam-status'); if (el) el.textContent = msg || ''; }
+
+function loadTesseract() {
+  if (window.Tesseract) return Promise.resolve();
+  if (!tesseractLoading) {
+    tesseractLoading = new Promise((resolve, reject) => {
+      const s = document.createElement('script');
+      s.src = 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
+      s.onload = resolve; s.onerror = reject;
+      document.head.appendChild(s);
+    });
+  }
+  return tesseractLoading;
+}
+async function getOcrWorker(lang) {
+  await loadTesseract();
+  if (ocrWorker && ocrWorkerLang === lang) return ocrWorker;
+  if (ocrWorker) { try { await ocrWorker.terminate(); } catch (e) {} ocrWorker = null; }
+  ocrWorker = await Tesseract.createWorker(lang);
+  ocrWorkerLang = lang;
+  return ocrWorker;
+}
+
+async function startCamera() {
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    showToast('Caméra non supportée par ce navigateur', 'info'); return;
+  }
+  try {
+    scanStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' } } });
+    const v = document.getElementById('scan-video');
+    v.srcObject = scanStream;
+    await v.play();
+    document.getElementById('scan-cam-btn').hidden = true;
+    document.getElementById('scan-cam-live').hidden = false;
+    setScanStatus('Cadre la carte entière, puis « Capturer ».');
+  } catch (e) {
+    showToast('Caméra indisponible (autorisation refusée ?)', 'info');
+  }
+}
+function stopCamera() {
+  if (scanStream) { scanStream.getTracks().forEach(t => t.stop()); scanStream = null; }
+  const live = document.getElementById('scan-cam-live'); if (live) live.hidden = true;
+  const btn = document.getElementById('scan-cam-btn'); if (btn) btn.hidden = false;
+  setScanStatus('');
+}
+
+// Recadre une bande horizontale de la vidéo (agrandie ×2) pour l'OCR.
+function videoStripCanvas(v, topFrac, hFrac) {
+  const vw = v.videoWidth, vh = v.videoHeight, scale = 2;
+  const sy = Math.floor(vh * topFrac), sh = Math.floor(vh * hFrac);
+  const c = document.createElement('canvas');
+  c.width = vw * scale; c.height = sh * scale;
+  c.getContext('2d').drawImage(v, 0, sy, vw, sh, 0, 0, c.width, c.height);
+  return c;
+}
+
+async function captureAndOcr() {
+  const v = document.getElementById('scan-video');
+  if (!v || !v.videoWidth) return;
+  const lang = currentRegion === 'asian' ? 'jpn' : 'eng';
+  setScanStatus(window.Tesseract ? 'Lecture de la carte…' : 'Chargement de l\'OCR (1ère fois)…');
+  try {
+    const worker = await getOcrWorker(lang);
+    // 1) Numéro (bas de la carte) : chiffres + « / » uniquement.
+    await worker.setParameters({ tessedit_char_whitelist: '0123456789/ ' });
+    const numText = (await worker.recognize(videoStripCanvas(v, 0.80, 0.18))).data.text;
+    const m = numText.replace(/\s+/g, '').match(/(\d{1,3})\/(\d{1,3})/);
+    // 2) Nom (haut de la carte) : jeu de caractères complet.
+    await worker.setParameters({ tessedit_char_whitelist: '' });
+    const nameRaw = (await worker.recognize(videoStripCanvas(v, 0.04, 0.20))).data.text || '';
+    const nameLine = nameRaw.split('\n').map(s => s.trim()).filter(Boolean).sort((a, b) => b.length - a.length)[0] || '';
+
+    if (m) { document.getElementById('scan-num').value = m[1]; document.getElementById('scan-total').value = m[2]; }
+    if (nameLine) document.getElementById('scan-name').value = nameLine;
+    renderScanCandidates();
+    setScanStatus(m || nameLine ? 'Vérifie et tape la bonne carte ↓' : 'Rien lu — saisis le numéro à la main.');
+  } catch (e) {
+    setScanStatus('Lecture impossible — saisis le numéro à la main.');
+  }
+}
+
 function applyImportedConfig(text) {
   let data;
   try { data = JSON.parse(text); }
@@ -3238,6 +3464,17 @@ document.querySelectorAll('.master-mode-btn').forEach(btn => {
 });
 document.getElementById('master-search').addEventListener('input', e => { masterQuery = e.target.value; renderMaster(); });
 document.getElementById('master-back').addEventListener('click', () => { masterSelected = null; renderMaster(); });
+
+// 11b) Ajout / scan de cartes.
+document.getElementById('btn-scan').addEventListener('click', openScanPanel);
+document.getElementById('scan-close').addEventListener('click', closeScanPanel);
+document.getElementById('scan-overlay').addEventListener('click', e => { if (e.target === e.currentTarget) closeScanPanel(); });
+['scan-num', 'scan-total', 'scan-name'].forEach(id => {
+  document.getElementById(id).addEventListener('input', renderScanCandidates);
+});
+document.getElementById('scan-cam-btn').addEventListener('click', startCamera);
+document.getElementById('scan-capture').addEventListener('click', captureAndOcr);
+document.getElementById('scan-cam-stop').addEventListener('click', stopCamera);
 
 // 12) Import / export de la collection (JSON).
 document.getElementById('btn-config').addEventListener('click', () => {

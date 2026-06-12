@@ -1180,6 +1180,103 @@
     gap: 8px;
     flex-wrap: wrap;
   }
+
+  /* ── Panneau d'ajout / scan de cartes ─────────────────────── */
+  .scan-context { font-size: 12px; color: var(--muted); margin-bottom: 10px; }
+  .scan-context b { color: var(--text); }
+  .scan-camera-slot { margin-bottom: 12px; }
+  .scan-cam-btn {
+    width: 100%;
+    padding: 12px;
+    border-radius: var(--radius);
+    border: 1px dashed var(--border);
+    background: var(--surface2);
+    color: var(--text);
+    font-family: 'Syne', sans-serif;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+  }
+  .scan-cam-btn:hover { border-color: rgba(var(--accent-rgb),0.5); }
+  .scan-cam-view {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 3 / 4;
+    background: #000;
+    border-radius: var(--radius);
+    overflow: hidden;
+  }
+  .scan-cam-view video { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .scan-cam-frame {
+    position: absolute;
+    inset: 8% 12%;
+    border: 2px solid rgba(255,255,255,0.85);
+    border-radius: 10px;
+    box-shadow: 0 0 0 100vmax rgba(0,0,0,0.25);
+    pointer-events: none;
+  }
+  .scan-cam-controls { display: flex; gap: 8px; margin-top: 8px; }
+  .scan-cam-controls .config-btn { flex: 1; }
+  .scan-cam-status { font-size: 12px; color: var(--muted); margin-top: 6px; min-height: 15px; text-align: center; }
+  .scan-fields { display: flex; gap: 8px; flex-wrap: wrap; }
+  .scan-field { display: flex; flex-direction: column; gap: 3px; flex: 0 0 auto; }
+  .scan-field-name { flex: 1 1 140px; }
+  .scan-field label { font-size: 11px; color: var(--muted); font-weight: 600; }
+  .scan-field input {
+    width: 90px;
+    padding: 10px;
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
+    background: var(--input-bg);
+    color: var(--text);
+    font-size: 15px;
+  }
+  .scan-field-name input { width: 100%; }
+  .scan-hint { font-size: 11px; color: var(--muted); margin: 8px 0 4px; line-height: 1.4; }
+  .scan-results {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-top: 10px;
+    max-height: 48vh;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+  .scan-empty { font-size: 13px; color: var(--muted); padding: 12px; text-align: center; }
+  .scan-cand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 10px 6px 6px;
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
+    background: var(--surface);
+    cursor: pointer;
+    text-align: left;
+    transition: border-color 0.15s, background 0.15s;
+  }
+  .scan-cand:hover { border-color: rgba(var(--accent-rgb),0.5); background: var(--surface2); }
+  .scan-cand.owned { opacity: 0.55; cursor: default; }
+  .scan-cand-img { width: 42px; height: 58px; object-fit: cover; border-radius: 4px; flex: none; background: var(--surface2); }
+  .scan-cand-noimg {
+    width: 42px; height: 58px; border-radius: 4px; flex: none;
+    background: var(--surface2); color: var(--muted);
+    display: flex; align-items: center; justify-content: center; font-weight: 800;
+  }
+  .scan-cand-info { flex: 1; min-width: 0; }
+  .scan-cand-name {
+    font-family: 'Syne', sans-serif; font-weight: 700; font-size: 13px; color: var(--text);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .scan-cand-sub { font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .scan-cand-add {
+    flex: none; width: 28px; height: 28px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    background: rgba(var(--accent-rgb),0.14); color: var(--accent);
+    font-weight: 800; font-size: 16px;
+  }
+  .scan-cand.owned .scan-cand-add { background: rgba(var(--fg-rgb),0.1); color: var(--muted); }
+  .scan-session { font-size: 12px; font-weight: 700; color: var(--accent); margin-top: 10px; min-height: 16px; }
   .config-btn {
     padding: 9px 14px;
     border-radius: var(--radius);
