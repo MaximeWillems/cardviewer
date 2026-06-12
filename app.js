@@ -1351,9 +1351,10 @@ function renderMasterDetail() {
 function lookupCard(id) { return allCards.find(c => c.id === id) || cardSnapshots[id] || null; }
 let binderPickSlot = -1; // emplacement en cours d'attribution
 
-// 16 couleurs communes pour le fond du classeur (thèmes).
+// Couleurs communes pour le fond du classeur (thèmes), + blanc cassé et noir cassé.
 const BINDER_COLORS = ['#c0392b', '#e67e22', '#f39c12', '#f1c40f', '#7cb342', '#27ae60', '#16a085', '#0aa3c2',
-                       '#2980b9', '#3f51b5', '#8e44ad', '#e84393', '#7b2d3a', '#8d6e63', '#607d8b', '#95a5a6'];
+                       '#2980b9', '#3f51b5', '#8e44ad', '#e84393', '#7b2d3a', '#8d6e63', '#607d8b', '#95a5a6',
+                       '#ecf0f1', '#2b2b2b'];
 function applyBinderBg() {
   const grid = document.getElementById('binder-grid');
   if (grid) grid.style.background = binder.bg || '';
