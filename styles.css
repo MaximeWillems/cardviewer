@@ -829,7 +829,8 @@
     line-height: 1.4;
   }
   .card.owned  .card-price-pill.owned-price,
-  .card.wanted .card-price-pill.wanted-price { display: var(--prices-display, inline-block); }
+  .card.wanted .card-price-pill.wanted-price,
+  .card.trade  .card-price-pill.sell-price { display: var(--prices-display, inline-block); }
 
   /* Trade badge on card */
   .card.trade::after {
@@ -848,6 +849,7 @@
   }
   .card-price-pill.owned-price  { color: var(--accent); background: rgba(var(--accent-rgb),0.12); }
   .card-price-pill.wanted-price { color: var(--accent2);       background: rgba(var(--accent2-rgb),0.12); }
+  .card-price-pill.sell-price   { color: var(--slate); background: rgba(var(--slate-rgb),0.16); }
 
   /* Price input in modal */
   .price-input-wrap {
@@ -1389,6 +1391,45 @@
     color: #fff;
     box-shadow: 0 1px 2px rgba(0,0,0,0.35);
   }
+  /* Badge « ×N » (plusieurs exemplaires) — bas-gauche de la vignette */
+  .card-qty {
+    position: absolute;
+    bottom: 72px;
+    left: 6px;
+    z-index: 2;
+    font-family: 'Syne', sans-serif;
+    font-weight: 800;
+    font-size: 12px;
+    padding: 2px 6px;
+    border-radius: 6px;
+    background: var(--accent);
+    color: #fff;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.35);
+    pointer-events: none;
+  }
+
+  /* Compteur d'exemplaires dans la modale */
+  .modal-qty {
+    display: none;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin: 10px 0 0;
+  }
+  .modal-qty.visible { display: flex; }
+  .modal-qty-label { font-size: 13px; color: var(--muted); font-weight: 600; }
+  .modal-qty-stepper { display: flex; align-items: center; gap: 12px; }
+  .qty-btn {
+    width: 34px; height: 34px;
+    border-radius: 50%;
+    border: 1px solid var(--border);
+    background: var(--surface2);
+    color: var(--text);
+    font-size: 20px; font-weight: 700; line-height: 1;
+    cursor: pointer;
+  }
+  .qty-btn:hover { border-color: rgba(var(--accent-rgb),0.5); }
+  .qty-val { font-family: 'Syne', sans-serif; font-weight: 800; font-size: 18px; min-width: 22px; text-align: center; }
 
   /* Ligne langue dans la modale (langue éditée + langues possédées) */
   .modal-lang-row {

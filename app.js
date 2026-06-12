@@ -353,7 +353,7 @@ function rarityKinds() { return RARITY_KINDS; }
 function makeFilterState(sort) {
   return {
     query: '', rarities: new Set(rarityKinds()), type: 'all', artist: 'all',
-    set: 'all', series: 'all', tag: 'all', lang: 'all',
+    set: 'all', series: 'all', tag: 'all', lang: 'all', dupOnly: false,
     sort: sort || 'pokedex', priceMin: '', priceMax: '', artistCounts: new Map(),
   };
 }
@@ -375,14 +375,14 @@ let grid, countEl, loadMoreBtn, errorMsg, sourceLabel, modalOverlay,
 function collRec(id, lang) { return collection[id] && collection[id][lang]; }
 function ensureRec(id, lang) {
   const byLang = (collection[id] || (collection[id] = {}));
-  return (byLang[lang] || (byLang[lang] = { qty: 0, wanted: false, trade: false, paid: {}, target: {} }));
+  return (byLang[lang] || (byLang[lang] = { qty: 0, wanted: false, trade: false, paid: {}, target: {}, sell: {} }));
 }
 function hasPriceData(p) { return !!(p && (p.val || p.min || p.max)); }
 // Supprime un enregistrement (id,langue) devenu vide pour ne pas laisser de scories.
 function pruneRec(id, lang) {
   const r = collRec(id, lang);
   if (!r) return;
-  if (!r.qty && !r.wanted && !r.trade && !hasPriceData(r.paid) && !hasPriceData(r.target)) {
+  if (!r.qty && !r.wanted && !r.trade && !hasPriceData(r.paid) && !hasPriceData(r.target) && !hasPriceData(r.sell)) {
     delete collection[id][lang];
     if (collection[id] && Object.keys(collection[id]).length === 0) delete collection[id];
   }
@@ -397,6 +397,8 @@ function langsWith(id, flag) {
   return Object.keys(byLang).filter(l => flag === 'qty' ? byLang[l].qty > 0 : byLang[l][flag]);
 }
 function ownedLangs(id) { return langsWith(id, 'qty'); }
+// Langue dans laquelle une carte est mise en vente (pour son prix de vente).
+function tradeLangOf(id) { return langsWith(id, 'trade')[0] || currentLang; }
 
 // Reconstruit les projections « toutes langues » depuis collection (mutation en place).
 function rebuildProjections() {
@@ -442,6 +444,22 @@ function toggleTrade(id, lang = currentLang) {
   snapshotById(id);
   afterCollectionChange();
 }
+// Quantité d'exemplaires possédés (par langue).
+function qtyOf(id, lang) { return (collRec(id, lang) || {}).qty || 0; }
+function totalQty(id) {
+  const byLang = collection[id]; if (!byLang) return 0;
+  let n = 0; for (const l in byLang) n += byLang[l].qty || 0; return n;
+}
+function setQty(id, lang, n) {
+  n = Math.max(0, n | 0);
+  const r = ensureRec(id, lang);
+  r.qty = n;
+  if (n === 0) r.trade = false; // plus possédée → plus à vendre
+  pruneRec(id, lang);
+  snapshotById(id);
+  afterCollectionChange();
+}
+
 // Marque/retire « à obtenir » sans rebuild (utilisé en masse par startMaster).
 function setWanted(id, lang, val) {
   const r = ensureRec(id, lang);
@@ -449,9 +467,11 @@ function setWanted(id, lang, val) {
   pruneRec(id, lang);
 }
 
+// type : 'owned' (prix payé) · 'wanted' (budget cible) · 'trade' (prix de vente)
+function priceKeyOf(type) { return type === 'owned' ? 'paid' : type === 'wanted' ? 'target' : 'sell'; }
 function setPriceData(cardId, type, data, lang = currentLang) {
   const r = ensureRec(cardId, lang);
-  if (type === 'owned') r.paid = data; else r.target = data;
+  r[priceKeyOf(type)] = data;
   pruneRec(cardId, lang);
   saveCollection();
   const gridCard = document.querySelector(`.card[data-id="${cardId}"]`);
@@ -460,11 +480,11 @@ function setPriceData(cardId, type, data, lang = currentLang) {
 }
 function getPriceData(cardId, type, lang = currentLang) {
   const r = collRec(cardId, lang);
-  const p = r ? (type === 'owned' ? r.paid : r.target) : null;
+  const p = r ? r[priceKeyOf(type)] : null;
   return { val: (p && p.val) || '', min: (p && p.min) || '', max: (p && p.max) || '' };
 }
-function getPriceLabel(cardId, type) {
-  const d = getPriceData(cardId, type);
+function getPriceLabel(cardId, type, lang = currentLang) {
+  const d = getPriceData(cardId, type, lang);
   if (d.val) return fmtEur(parseFloat(d.val));
   if (d.min && d.max) return `${fmtEur(parseFloat(d.min))}–${fmtEur(parseFloat(d.max))}`;
   if (d.min) return `≥${fmtEur(parseFloat(d.min))}`;
@@ -474,8 +494,10 @@ function getPriceLabel(cardId, type) {
 function updateCardPricePill(el, cardId) {
   const ownedPill  = el.querySelector('.owned-price');
   const wantedPill = el.querySelector('.wanted-price');
+  const sellPill   = el.querySelector('.sell-price');
   if (ownedPill)  ownedPill.textContent  = getPriceLabel(cardId, 'owned');
   if (wantedPill) wantedPill.textContent = getPriceLabel(cardId, 'wanted');
+  if (sellPill)   sellPill.textContent   = getPriceLabel(cardId, 'trade', tradeLangOf(cardId));
 }
 
 function getBestPrice(cardId) {
@@ -661,6 +683,8 @@ function getCards(ctx) {
       tab === 'owned' ? isOwned(c.id, st.lang) :
       tab === 'wanted' ? isWanted(c.id, st.lang) : isTrade(c.id, st.lang));
   }
+  // Doublons : ne garder que les cartes possédées en ≥ 2 exemplaires.
+  if (ctx === 'collection' && st.dupOnly) cards = cards.filter(c => totalQty(c.id) >= 2);
   return sortByConfig(filterCards(cards, st), st.sort, st.artistCounts);
 }
 
@@ -828,6 +852,12 @@ function langFlagsHtml(id) {
     `<span class="card-lang-flag" title="${escapeHtml(LANG_LABELS[l] || l)}">${LANG_FLAGS[l] || '🏳️'}</span>`
   ).join('')}</div>`;
 }
+// Badge « ×N » quand on possède plusieurs exemplaires (toutes langues).
+function qtyBadgeHtml(id) {
+  const n = totalQty(id);
+  return n >= 2 ? `<div class="card-qty">×${n}</div>` : '';
+}
+
 // Rappel textuel des langues possédées (affiché dans la modale).
 function ownedLangsHint(id) {
   const langs = ownedLangs(id);
@@ -887,6 +917,7 @@ function buildCardEl(c, ctx, idx) {
   const isSelected = ctx === 'collection' && selectedIds.has(c.id);
   const ownedLabel  = getPriceLabel(c.id, 'owned');
   const wantedLabel = getPriceLabel(c.id, 'wanted');
+  const sellLabel   = getPriceLabel(c.id, 'trade', tradeLangOf(c.id));
 
   const div = document.createElement('div');
   div.className = 'card'
@@ -901,11 +932,13 @@ function buildCardEl(c, ctx, idx) {
       ? `<img class="card-img" src="${img}" alt="${escapeHtml(name)}" loading="lazy" data-ph-num="${escapeHtml(c.localId ?? '')}" data-ph-set="${escapeHtml(c.set?.name ?? '')}" data-ph-type="${escapeHtml((c.types && c.types[0]) ?? '')}" onerror="handleImageError(this)">`
       : imagePlaceholder(c)}
     ${langFlagsHtml(c.id)}
+    ${qtyBadgeHtml(c.id)}
     <div class="card-body">
       ${getBadge(c.rarity, c.rarityKind)}
       <div class="card-price-tag">
         <span class="card-price-pill owned-price">${ownedLabel}</span>
         <span class="card-price-pill wanted-price">${wantedLabel}</span>
+        <span class="card-price-pill sell-price">${sellLabel}</span>
       </div>
       <div class="card-name">${escapeHtml(name)}</div>
       <div class="card-meta">${escapeHtml(meta)}</div>
@@ -1896,6 +1929,15 @@ function updateCollStat() {
   });
   const pb = document.getElementById('btn-hide-prices');
   if (pb) pb.classList.toggle('active', pricesVisible);
+  // « Partager la liste » : seulement sur l'onglet À vendre, avec des cartes.
+  const shareBtn = document.getElementById('btn-share-sell');
+  if (shareBtn) shareBtn.style.display = (S.collection.collTab === 'trade' && tradeSet.size > 0) ? '' : 'none';
+  // « Doublons » : seulement sur l'onglet possédé.
+  const dupBtn = document.getElementById('btn-dup-only');
+  if (dupBtn) {
+    dupBtn.style.display = S.collection.collTab === 'owned' ? '' : 'none';
+    dupBtn.classList.toggle('active', !!S.collection.dupOnly);
+  }
   applyPricesVisible();
 }
 
@@ -1929,12 +1971,33 @@ function updateTotalsBar() {
   } else {
     const cards = getCards('collection');
     countEl.textContent = cards.length;
+    const tab = S.collection.collTab;
+    // En « possédé », afficher aussi le nombre total d'exemplaires (doublons compris).
+    const labelEl = document.querySelector('.coll-info-label');
+    if (labelEl) {
+      const copies = tab === 'owned' ? cards.reduce((s, c) => s + totalQty(c.id), 0) : 0;
+      labelEl.textContent = (tab === 'owned' && copies > cards.length) ? `cartes · ${copies} ex.` : 'cartes';
+    }
     if (pricesVisible && cards.length > 0) {
-      const { sum } = computeTotal(new Set(cards.map(c => c.id)));
-      const cls = S.collection.collTab === 'owned' ? 'green' : S.collection.collTab === 'wanted' ? 'blue' : 'orange';
+      // En « À vendre », le total = somme des PRIX DE VENTE saisis (repli marché).
+      let sum;
+      if (tab === 'trade') sum = computeSellTotal(cards);
+      else sum = computeTotal(new Set(cards.map(c => c.id))).sum;
+      const cls = tab === 'owned' ? 'green' : tab === 'wanted' ? 'blue' : 'orange';
       sum > 0 ? showPrice(sum, cls) : hidePrice();
     } else hidePrice();
   }
+}
+
+// Total potentiel de la liste de vente : prix de vente saisi, sinon prix marché.
+function computeSellTotal(cards) {
+  let sum = 0;
+  cards.forEach(c => {
+    const d = getPriceData(c.id, 'trade', tradeLangOf(c.id));
+    const v = d.val ? parseFloat(d.val) : (d.min ? parseFloat(d.min) : (c.apiPrice != null ? c.apiPrice : null));
+    if (v != null && !isNaN(v)) sum += v;
+  });
+  return sum;
 }
 
 function updateExplorePriceTotal() {
@@ -2508,6 +2571,7 @@ async function openModal(card, list, index) {
 
   const oPrices = getPriceData(card.id, 'owned', mlang);
   const wPrices = getPriceData(card.id, 'wanted', mlang);
+  const tPrices = getPriceData(card.id, 'trade', mlang);
   document.getElementById('modal-info').innerHTML = `
     <div class="modal-position">${position}</div>
     <div class="modal-name">${escapeHtml(card.name || '—')}</div>
@@ -2522,6 +2586,14 @@ async function openModal(card, list, index) {
       <button class="modal-coll-btn ${isOwned(card.id, mlang) ? 'active-owned' : ''}" id="modal-btn-owned">✦ En collection</button>
       <button class="modal-coll-btn ${isWanted(card.id, mlang) ? 'active-wanted' : ''}" id="modal-btn-wanted">⊕ À obtenir</button>
       <button class="modal-coll-btn ${isTrade(card.id, mlang) ? 'active-trade' : ''}" id="modal-btn-trade" style="${isOwned(card.id, mlang) ? '' : 'opacity:.35;pointer-events:none'}">⇄ Vendre</button>
+    </div>
+    <div class="modal-qty ${isOwned(card.id, mlang) ? 'visible' : ''}" id="modal-qty">
+      <span class="modal-qty-label">Exemplaires possédés</span>
+      <div class="modal-qty-stepper">
+        <button class="qty-btn" id="qty-minus" aria-label="Retirer un exemplaire">−</button>
+        <span class="qty-val" id="qty-val">${qtyOf(card.id, mlang)}</span>
+        <button class="qty-btn" id="qty-plus" aria-label="Ajouter un exemplaire">+</button>
+      </div>
     </div>
     <div class="tags-section">
       <div class="tags-title">Tags</div>
@@ -2566,6 +2638,24 @@ async function openModal(card, list, index) {
           <input class="price-input" id="pi-wanted-max" type="number" min="0" step="0.01" placeholder="max" value="${escapeHtml(wPrices.max)}">
         </div>
         <button class="price-input-save" id="pi-wanted-save">OK</button>
+      </div>
+    </div>
+    <div class="price-input-section ${isTrade(card.id, mlang) ? 'visible' : ''}" id="price-section-trade">
+      <div class="price-input-title">Prix de vente</div>
+      <div class="price-input-wrap">
+        <div class="price-input-group">
+          <div class="price-input-label">Valeur fixe (€)</div>
+          <input class="price-input" id="pi-trade-val" type="number" min="0" step="0.01" placeholder="ex: 5.00" value="${escapeHtml(tPrices.val)}">
+        </div>
+        <div class="price-input-group">
+          <div class="price-input-label">Min (€)</div>
+          <input class="price-input" id="pi-trade-min" type="number" min="0" step="0.01" placeholder="min" value="${escapeHtml(tPrices.min)}">
+        </div>
+        <div class="price-input-group">
+          <div class="price-input-label">Max (€)</div>
+          <input class="price-input" id="pi-trade-max" type="number" min="0" step="0.01" placeholder="max" value="${escapeHtml(tPrices.max)}">
+        </div>
+        <button class="price-input-save" id="pi-trade-save">OK</button>
       </div>
     </div>
     <div class="price-block" id="price-block">
@@ -2629,8 +2719,14 @@ async function openModal(card, list, index) {
     }
     const so = document.getElementById('price-section-owned');
     const sw = document.getElementById('price-section-wanted');
+    const stp = document.getElementById('price-section-trade');
     if (so) so.classList.toggle('visible', owned);
     if (sw) sw.classList.toggle('visible', isWanted(id, mlang));
+    if (stp) stp.classList.toggle('visible', isTrade(id, mlang));
+    const mq = document.getElementById('modal-qty');
+    if (mq) mq.classList.toggle('visible', owned);
+    const qv = document.getElementById('qty-val');
+    if (qv) qv.textContent = qtyOf(id, mlang);
     const hint = document.getElementById('modal-lang-owned');
     if (hint) hint.textContent = ownedLangsHint(id);
     // Vignette : classes « toutes langues » + rafraîchissement des drapeaux.
@@ -2639,12 +2735,13 @@ async function openModal(card, list, index) {
       gridCard.classList.toggle('owned',  ownedSet.has(id));
       gridCard.classList.toggle('wanted', wantedSet.has(id));
       gridCard.classList.toggle('trade',  tradeSet.has(id));
-      const existing = gridCard.querySelector('.card-langs');
-      if (existing) existing.remove();
+      const body = gridCard.querySelector('.card-body');
+      gridCard.querySelector('.card-langs')?.remove();
+      gridCard.querySelector('.card-qty')?.remove();
       const wrap = document.createElement('div');
-      wrap.innerHTML = langFlagsHtml(id);
-      const flags = wrap.firstElementChild;
-      if (flags) gridCard.insertBefore(flags, gridCard.querySelector('.card-body'));
+      wrap.innerHTML = langFlagsHtml(id) + qtyBadgeHtml(id);
+      [...wrap.children].forEach(el => gridCard.insertBefore(el, body));
+      updateCardPricePill(gridCard, id);
     }
   };
 
@@ -2664,6 +2761,14 @@ async function openModal(card, list, index) {
     if (currentTab === 'collection') { populateFilters('collection'); renderCollection(); }
     if (currentTab === 'echange' && lastFriendData) renderEchangeResults(lastFriendData);
   });
+  const onQty = (delta) => {
+    setQty(card.id, mlang, qtyOf(card.id, mlang) + delta);
+    syncModalBtns(card.id);
+    if (currentTab === 'collection') { populateFilters('collection'); renderCollection(); }
+    if (currentTab === 'master') renderMaster();
+  };
+  document.getElementById('qty-minus')?.addEventListener('click', () => onQty(-1));
+  document.getElementById('qty-plus')?.addEventListener('click', () => onQty(1));
 
   document.getElementById('pi-owned-save')?.addEventListener('click', () => {
     setPriceData(card.id, 'owned', {
@@ -2680,6 +2785,14 @@ async function openModal(card, list, index) {
       max: document.getElementById('pi-wanted-max').value,
     }, mlang);
     showToast('⊕ Budget cible sauvegardé');
+  });
+  document.getElementById('pi-trade-save')?.addEventListener('click', () => {
+    setPriceData(card.id, 'trade', {
+      val: document.getElementById('pi-trade-val').value,
+      min: document.getElementById('pi-trade-min').value,
+      max: document.getElementById('pi-trade-max').value,
+    }, mlang);
+    showToast('⇄ Prix de vente sauvegardé');
   });
 
   modalOverlay.classList.add('open');
@@ -3198,6 +3311,23 @@ async function captureAndOcr() {
   }
 }
 
+// Construit et copie une liste lisible des cartes à vendre (nom, set, n°, prix).
+function shareSellList() {
+  const cards = sortByConfig(getCollectionPool().filter(c => tradeSet.has(c.id)), 'set');
+  if (!cards.length) { showToast('Aucune carte à vendre', 'info'); return; }
+  let total = 0;
+  const lines = cards.map(c => {
+    const lang = tradeLangOf(c.id);
+    const d = getPriceData(c.id, 'trade', lang);
+    const v = d.val ? parseFloat(d.val) : (d.min ? parseFloat(d.min) : (c.apiPrice != null ? c.apiPrice : null));
+    if (v != null && !isNaN(v)) total += v;
+    const priceTxt = getPriceLabel(c.id, 'trade', lang) || (c.apiPrice != null ? `~${fmtEur(c.apiPrice)}` : 'à définir');
+    return `• ${c.name || '—'} ${LANG_FLAGS[lang] || ''} — ${c.set?.name || ''}${c.localId ? ' #' + c.localId : ''} — ${priceTxt}`;
+  });
+  const text = `Cartes à vendre (${cards.length}) — total ~${fmtEur(total)}\n\n${lines.join('\n')}`;
+  copyText(text, '📋 Liste de vente copiée');
+}
+
 function applyImportedConfig(text) {
   let data;
   try { data = JSON.parse(text); }
@@ -3501,6 +3631,11 @@ function setSelectionMode(on) {
   updateTotalsBar();
 }
 document.getElementById('btn-select-mode').addEventListener('click', () => setSelectionMode(!selectionMode));
+document.getElementById('btn-share-sell').addEventListener('click', shareSellList);
+document.getElementById('btn-dup-only').addEventListener('click', () => {
+  S.collection.dupOnly = !S.collection.dupOnly;
+  updateCollStat(); renderCollection(); updateTotalsBar();
+});
 document.getElementById('btn-select-all').addEventListener('click', () => {
   getCards('collection').forEach(c => {
     selectedIds.add(c.id);
