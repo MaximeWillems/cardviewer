@@ -2964,11 +2964,11 @@ function addOwnedFromScan(card) {
   afterCollectionChange();
   scanSessionCount++;
   showToast('✦ Ajoutée : ' + (card.name || ''));
-  // Prêt pour la carte suivante : on vide les champs et on recentre le numéro.
-  ['scan-num', 'scan-total', 'scan-name'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+  // Prêt pour la carte suivante : on vide le numéro et on réarme l'auto-capture.
+  const numEl = document.getElementById('scan-num'); if (numEl) numEl.value = '';
+  lastCapturedSig = null;
   renderScanCandidates();
   updateScanSession();
-  const numEl = document.getElementById('scan-num'); if (numEl) numEl.focus();
 }
 
 function buildScanCandidateEl(card) {
@@ -2990,15 +2990,22 @@ function buildScanCandidateEl(card) {
   return el;
 }
 
+// Lit le champ N° : accepte « 45 » ou « 45/198 ».
+function parseScanNum() {
+  const raw = (document.getElementById('scan-num').value || '').trim();
+  const m = raw.match(/(\d{1,3})\s*\/\s*(\d{1,3})/);
+  if (m) return { number: m[1], total: m[2] };
+  const n = raw.match(/\d{1,3}/);
+  return { number: n ? n[0] : '', total: '' };
+}
+
 function renderScanCandidates() {
   const results = document.getElementById('scan-results');
   if (!results) return;
-  const num   = document.getElementById('scan-num').value.trim();
-  const total = document.getElementById('scan-total').value.trim();
-  const name  = document.getElementById('scan-name').value.trim();
-  if (!num && !name) { results.innerHTML = ''; return; }
+  const { number, total } = parseScanNum();
+  if (!number) { results.innerHTML = ''; return; }
   if (!allCards.length) { results.innerHTML = '<div class="scan-empty">Catalogue non chargé.</div>'; return; }
-  const cands = findScanCandidates({ number: num, total, name }, allCards, 12);
+  const cands = findScanCandidates({ number, total }, allCards, 12);
   if (!cands.length) { results.innerHTML = '<div class="scan-empty">Aucune carte trouvée dans ce catalogue.</div>'; return; }
   results.innerHTML = '';
   cands.forEach(c => results.appendChild(buildScanCandidateEl(c.card)));
@@ -3015,12 +3022,12 @@ function openScanPanel() {
   scanSessionCount = 0;
   const ctx = document.getElementById('scan-context');
   if (ctx) ctx.innerHTML = `Ajout au catalogue <b>${escapeHtml(REGIONS[currentRegion].label)}</b> · ${LANG_FLAGS[currentLang] || ''} ${escapeHtml(LANG_LABELS[currentLang] || currentLang)}`;
-  ['scan-num', 'scan-total', 'scan-name'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
-  renderScanCandidates();
+  const n = document.getElementById('scan-num'); if (n) n.value = '';
+  document.getElementById('scan-results').innerHTML = '';
   updateScanSession();
   document.getElementById('scan-overlay').classList.add('open');
   lockBodyScroll();
-  setTimeout(() => { const n = document.getElementById('scan-num'); if (n) n.focus(); }, 60);
+  startCamera(); // scanner photo : la caméra démarre tout de suite
 }
 
 function closeScanPanel() {
@@ -3036,6 +3043,11 @@ function closeScanPanel() {
    accélérateur : si la lecture rate, la saisie manuelle prend le relais.
    ──────────────────────────────────────────────────────────────────────── */
 let scanStream = null, ocrWorker = null, ocrWorkerLang = null, tesseractLoading = null;
+// Auto-capture : on déclenche quand la carte est nette/détaillée ET immobile.
+let scanLoopId = null, lastSig = null, lastCapturedSig = null, stableCount = 0, scanBusy = false;
+const SCAN_CONTENT_VAR = 320;  // variance mini = la zone contient bien une carte
+const SCAN_STABLE_DIFF = 7;    // diff inter-images mini = immobile
+const SCAN_NEW_DIFF    = 16;   // diff vs dernière capturée = nouvelle carte
 
 function setScanStatus(msg) { const el = document.getElementById('scan-cam-status'); if (el) el.textContent = msg || ''; }
 
@@ -3062,25 +3074,56 @@ async function getOcrWorker(lang) {
 
 async function startCamera() {
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-    showToast('Caméra non supportée par ce navigateur', 'info'); return;
+    setScanStatus('Caméra non supportée — saisis le N° ci-dessous.'); return;
   }
   try {
     scanStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' } } });
     const v = document.getElementById('scan-video');
     v.srcObject = scanStream;
     await v.play();
-    document.getElementById('scan-cam-btn').hidden = true;
-    document.getElementById('scan-cam-live').hidden = false;
-    setScanStatus('Cadre la carte entière, puis « Capturer ».');
+    setScanStatus('Place la carte dans le cadre — capture automatique.');
+    startScanLoop();
   } catch (e) {
-    showToast('Caméra indisponible (autorisation refusée ?)', 'info');
+    setScanStatus('Caméra refusée — saisis le N° ci-dessous.');
   }
 }
 function stopCamera() {
+  stopScanLoop();
   if (scanStream) { scanStream.getTracks().forEach(t => t.stop()); scanStream = null; }
-  const live = document.getElementById('scan-cam-live'); if (live) live.hidden = true;
-  const btn = document.getElementById('scan-cam-btn'); if (btn) btn.hidden = false;
   setScanStatus('');
+}
+
+// Petite empreinte (24×33 niveaux de gris) de la zone-carte + sa variance,
+// pour détecter présence (détail) et immobilité (faible écart entre images).
+function frameSignature(v) {
+  const r = cardRectInVideo(v), W = 24, H = 33;
+  const c = document.createElement('canvas'); c.width = W; c.height = H;
+  c.getContext('2d').drawImage(v, r.x, r.y, r.w, r.h, 0, 0, W, H);
+  const d = c.getContext('2d').getImageData(0, 0, W, H).data;
+  const arr = new Uint8Array(W * H); let sum = 0;
+  for (let i = 0, j = 0; i < d.length; i += 4, j++) { const g = (d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114) | 0; arr[j] = g; sum += g; }
+  const mean = sum / arr.length; let varr = 0;
+  for (let j = 0; j < arr.length; j++) { const dd = arr[j] - mean; varr += dd * dd; }
+  return { arr, variance: varr / arr.length };
+}
+function sigDiff(a, b) { let s = 0; for (let i = 0; i < a.length; i++) s += Math.abs(a[i] - b[i]); return s / a.length; }
+
+function scanTick() {
+  const v = document.getElementById('scan-video');
+  if (!v || !v.videoWidth || scanBusy) return;
+  const sig = frameSignature(v);
+  const stable = lastSig && sigDiff(sig.arr, lastSig) < SCAN_STABLE_DIFF;
+  const isNew  = !lastCapturedSig || sigDiff(sig.arr, lastCapturedSig) > SCAN_NEW_DIFF;
+  lastSig = sig.arr;
+  if (sig.variance > SCAN_CONTENT_VAR && stable && isNew) {
+    if (++stableCount >= 2) { lastCapturedSig = sig.arr; stableCount = 0; autoCapture(); }
+  } else stableCount = 0;
+}
+function startScanLoop() { stopScanLoop(); lastSig = lastCapturedSig = null; stableCount = 0; scanLoopId = setInterval(scanTick, 350); }
+function stopScanLoop() { if (scanLoopId) { clearInterval(scanLoopId); scanLoopId = null; } }
+async function autoCapture() {
+  scanBusy = true;
+  try { await captureAndOcr(); } finally { scanBusy = false; }
 }
 
 // Position de la carte (zone du cadre-guide) en pixels RÉELS de la vidéo, en
@@ -3121,30 +3164,26 @@ function cropCardRegion(v, rx, ry, rw, rh, upscale = 3) {
   return preprocessForOcr(c);
 }
 
-const NAME_WHITELIST = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyzÀÂÄÇÉÈÊËÎÏÔÖÙÛÜàâäçéèêëîïôöùûü'- ";
-
+// On lit UNIQUEMENT le numéro (le plus fiable) ; le nom n'est plus utilisé.
 async function captureAndOcr() {
   const v = document.getElementById('scan-video');
   if (!v || !v.videoWidth) return;
   const lang = currentRegion === 'asian' ? 'jpn' : 'eng';
-  setScanStatus(window.Tesseract ? 'Lecture de la carte…' : 'Chargement de l\'OCR (1ère fois)…');
+  setScanStatus(window.Tesseract ? 'Lecture…' : 'Chargement de l\'OCR (1ère fois)…');
   try {
     const worker = await getOcrWorker(lang);
-    // 1) Numéro : bande basse, ligne unique, chiffres + « / ».
     await worker.setParameters({ tessedit_char_whitelist: '0123456789/', tessedit_pageseg_mode: '7' });
     const numText = (await worker.recognize(cropCardRegion(v, 0, 0.88, 1, 0.11))).data.text.replace(/\s+/g, '');
     const m = numText.match(/(\d{1,3})\/(\d{1,3})/) || numText.match(/(\d{1,3})/);
-    // 2) Nom : haut-gauche, ligne unique, lettres seulement.
-    await worker.setParameters({ tessedit_char_whitelist: NAME_WHITELIST, tessedit_pageseg_mode: '7' });
-    const nameRaw = (await worker.recognize(cropCardRegion(v, 0.03, 0.03, 0.74, 0.12))).data.text || '';
-    const nameLine = nameRaw.split('\n').map(s => s.trim()).filter(s => s.length >= 3).sort((a, b) => b.length - a.length)[0] || '';
-
-    if (m) { document.getElementById('scan-num').value = m[1]; if (m[2]) document.getElementById('scan-total').value = m[2]; }
-    if (nameLine) document.getElementById('scan-name').value = nameLine;
-    renderScanCandidates();
-    setScanStatus((m || nameLine) ? 'Vérifie et tape la bonne carte ↓' : 'Rien lu — recadre mieux ou saisis le numéro.');
+    if (m) {
+      document.getElementById('scan-num').value = m[2] ? `${m[1]}/${m[2]}` : m[1];
+      renderScanCandidates();
+      setScanStatus(`N° lu : ${m[2] ? m[1] + '/' + m[2] : m[1]} — tape la bonne carte ↓`);
+    } else {
+      setScanStatus('Numéro illisible — rapproche/recadre, ou saisis-le.');
+    }
   } catch (e) {
-    setScanStatus('Lecture impossible — saisis le numéro à la main.');
+    setScanStatus('Lecture impossible — saisis le N° ci-dessous.');
   }
 }
 
@@ -3499,12 +3538,9 @@ document.getElementById('master-back').addEventListener('click', () => { masterS
 document.getElementById('btn-scan').addEventListener('click', openScanPanel);
 document.getElementById('scan-close').addEventListener('click', closeScanPanel);
 document.getElementById('scan-overlay').addEventListener('click', e => { if (e.target === e.currentTarget) closeScanPanel(); });
-['scan-num', 'scan-total', 'scan-name'].forEach(id => {
-  document.getElementById(id).addEventListener('input', renderScanCandidates);
-});
-document.getElementById('scan-cam-btn').addEventListener('click', startCamera);
-document.getElementById('scan-capture').addEventListener('click', captureAndOcr);
-document.getElementById('scan-cam-stop').addEventListener('click', stopCamera);
+document.getElementById('scan-num').addEventListener('input', renderScanCandidates);
+// Capture auto quand la carte est bien placée ; tap sur la vidéo = capture forcée.
+document.getElementById('scan-cam-view').addEventListener('click', () => { if (!scanBusy) autoCapture(); });
 
 // 12) Import / export de la collection (JSON).
 document.getElementById('btn-config').addEventListener('click', () => {

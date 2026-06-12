@@ -32,8 +32,10 @@
       <button class="icon-btn active" id="btn-hide-prices" title="Afficher / cacher les prix" aria-label="Afficher les prix">
         <span class="euro-icon">€</span>
       </button>
-      <!-- Add / scan cards -->
-      <button class="icon-btn" id="btn-scan" title="Ajouter des cartes (numéro / scan)" aria-label="Ajouter des cartes">＋</button>
+      <!-- Scan / add cards -->
+      <button class="icon-btn" id="btn-scan" title="Scanner des cartes" aria-label="Scanner des cartes">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+      </button>
       <!-- Type de série (catalogue) + langue de la carte -->
       <div class="catalog-toggle">
         <select id="region-select" class="hdr-select" aria-label="Type de série" title="Type de série"></select>
@@ -224,31 +226,20 @@
 <div class="config-overlay scan-overlay" id="scan-overlay">
   <div class="config-modal scan-modal" role="dialog" aria-modal="true" aria-labelledby="scan-title">
     <div class="config-head">
-      <div class="config-title" id="scan-title">Ajouter des cartes</div>
+      <div class="config-title" id="scan-title">Scanner des cartes</div>
       <button class="config-close" id="scan-close" aria-label="Fermer">✕</button>
     </div>
     <div class="config-body">
       <div class="scan-context" id="scan-context"></div>
-      <div class="scan-camera-slot">
-        <button class="scan-cam-btn" id="scan-cam-btn">📷 Scanner avec la caméra</button>
-        <div class="scan-cam-live" id="scan-cam-live" hidden>
-          <div class="scan-cam-view">
-            <video id="scan-video" playsinline muted></video>
-            <div class="scan-cam-frame"></div>
-          </div>
-          <div class="scan-cam-controls">
-            <button class="config-btn primary" id="scan-capture">Capturer</button>
-            <button class="config-btn" id="scan-cam-stop">Fermer la caméra</button>
-          </div>
-          <div class="scan-cam-status" id="scan-cam-status"></div>
-        </div>
+      <div class="scan-cam-view" id="scan-cam-view">
+        <video id="scan-video" playsinline muted></video>
+        <div class="scan-cam-frame"></div>
+        <div class="scan-cam-status" id="scan-cam-status"></div>
       </div>
-      <div class="scan-fields">
-        <div class="scan-field"><label for="scan-num">N°</label><input id="scan-num" type="text" inputmode="numeric" placeholder="ex. 185" autocomplete="off"></div>
-        <div class="scan-field"><label for="scan-total">/ total</label><input id="scan-total" type="text" inputmode="numeric" placeholder="165" autocomplete="off"></div>
-        <div class="scan-field scan-field-name"><label for="scan-name">Nom</label><input id="scan-name" type="text" placeholder="optionnel (si doute)" autocomplete="off"></div>
+      <div class="scan-manual">
+        <label for="scan-num">ou saisis le N°</label>
+        <input id="scan-num" type="text" inputmode="numeric" placeholder="ex. 45 ou 45/198" autocomplete="off">
       </div>
-      <div class="scan-hint" id="scan-hint">Saisis le numéro imprimé en bas de la carte. Ajoute le nom si plusieurs cartes correspondent, puis tape la bonne.</div>
       <div class="scan-results" id="scan-results"></div>
       <div class="scan-session" id="scan-session"></div>
     </div>
