@@ -3083,15 +3083,45 @@ function stopCamera() {
   setScanStatus('');
 }
 
-// Recadre une bande horizontale de la vidéo (agrandie ×2) pour l'OCR.
-function videoStripCanvas(v, topFrac, hFrac) {
-  const vw = v.videoWidth, vh = v.videoHeight, scale = 2;
-  const sy = Math.floor(vh * topFrac), sh = Math.floor(vh * hFrac);
-  const c = document.createElement('canvas');
-  c.width = vw * scale; c.height = sh * scale;
-  c.getContext('2d').drawImage(v, 0, sy, vw, sh, 0, 0, c.width, c.height);
-  return c;
+// Position de la carte (zone du cadre-guide) en pixels RÉELS de la vidéo, en
+// tenant compte du recadrage object-fit:cover de l'affichage.
+function cardRectInVideo(v) {
+  const view = document.querySelector('.scan-cam-view');
+  const cw = view.clientWidth, ch = view.clientHeight;
+  const vw = v.videoWidth, vh = v.videoHeight;
+  const scale = Math.max(cw / vw, ch / vh);
+  const offX = (vw * scale - cw) / 2, offY = (vh * scale - ch) / 2;
+  // cadre-guide : inset 8% vertical, 12% horizontal (cf. .scan-cam-frame)
+  const fl = 0.12 * cw, ft = 0.08 * ch, fw = 0.76 * cw, fh = 0.84 * ch;
+  return { x: (fl + offX) / scale, y: (ft + offY) / scale, w: fw / scale, h: fh / scale };
 }
+
+// Niveaux de gris + étirement de contraste : aide nettement Tesseract.
+function preprocessForOcr(canvas) {
+  const ctx = canvas.getContext('2d');
+  const im = ctx.getImageData(0, 0, canvas.width, canvas.height), d = im.data;
+  for (let i = 0; i < d.length; i += 4) {
+    let g = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+    g = (g - 128) * 1.5 + 128;
+    g = g < 0 ? 0 : g > 255 ? 255 : g;
+    d[i] = d[i + 1] = d[i + 2] = g;
+  }
+  ctx.putImageData(im, 0, 0);
+  return canvas;
+}
+
+// Recadre une sous-zone (fractions DANS la carte) et la pré-traite pour l'OCR.
+function cropCardRegion(v, rx, ry, rw, rh, upscale = 3) {
+  const r = cardRectInVideo(v);
+  const sx = r.x + rx * r.w, sy = r.y + ry * r.h, sw = rw * r.w, sh = rh * r.h;
+  const c = document.createElement('canvas');
+  c.width = Math.max(1, Math.round(sw * upscale));
+  c.height = Math.max(1, Math.round(sh * upscale));
+  c.getContext('2d').drawImage(v, sx, sy, sw, sh, 0, 0, c.width, c.height);
+  return preprocessForOcr(c);
+}
+
+const NAME_WHITELIST = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyzÀÂÄÇÉÈÊËÎÏÔÖÙÛÜàâäçéèêëîïôöùûü'- ";
 
 async function captureAndOcr() {
   const v = document.getElementById('scan-video');
@@ -3100,19 +3130,19 @@ async function captureAndOcr() {
   setScanStatus(window.Tesseract ? 'Lecture de la carte…' : 'Chargement de l\'OCR (1ère fois)…');
   try {
     const worker = await getOcrWorker(lang);
-    // 1) Numéro (bas de la carte) : chiffres + « / » uniquement.
-    await worker.setParameters({ tessedit_char_whitelist: '0123456789/ ' });
-    const numText = (await worker.recognize(videoStripCanvas(v, 0.80, 0.18))).data.text;
-    const m = numText.replace(/\s+/g, '').match(/(\d{1,3})\/(\d{1,3})/);
-    // 2) Nom (haut de la carte) : jeu de caractères complet.
-    await worker.setParameters({ tessedit_char_whitelist: '' });
-    const nameRaw = (await worker.recognize(videoStripCanvas(v, 0.04, 0.20))).data.text || '';
-    const nameLine = nameRaw.split('\n').map(s => s.trim()).filter(Boolean).sort((a, b) => b.length - a.length)[0] || '';
+    // 1) Numéro : bande basse, ligne unique, chiffres + « / ».
+    await worker.setParameters({ tessedit_char_whitelist: '0123456789/', tessedit_pageseg_mode: '7' });
+    const numText = (await worker.recognize(cropCardRegion(v, 0, 0.88, 1, 0.11))).data.text.replace(/\s+/g, '');
+    const m = numText.match(/(\d{1,3})\/(\d{1,3})/) || numText.match(/(\d{1,3})/);
+    // 2) Nom : haut-gauche, ligne unique, lettres seulement.
+    await worker.setParameters({ tessedit_char_whitelist: NAME_WHITELIST, tessedit_pageseg_mode: '7' });
+    const nameRaw = (await worker.recognize(cropCardRegion(v, 0.03, 0.03, 0.74, 0.12))).data.text || '';
+    const nameLine = nameRaw.split('\n').map(s => s.trim()).filter(s => s.length >= 3).sort((a, b) => b.length - a.length)[0] || '';
 
-    if (m) { document.getElementById('scan-num').value = m[1]; document.getElementById('scan-total').value = m[2]; }
+    if (m) { document.getElementById('scan-num').value = m[1]; if (m[2]) document.getElementById('scan-total').value = m[2]; }
     if (nameLine) document.getElementById('scan-name').value = nameLine;
     renderScanCandidates();
-    setScanStatus(m || nameLine ? 'Vérifie et tape la bonne carte ↓' : 'Rien lu — saisis le numéro à la main.');
+    setScanStatus((m || nameLine) ? 'Vérifie et tape la bonne carte ↓' : 'Rien lu — recadre mieux ou saisis le numéro.');
   } catch (e) {
     setScanStatus('Lecture impossible — saisis le numéro à la main.');
   }
