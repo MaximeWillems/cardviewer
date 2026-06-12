@@ -127,6 +127,7 @@ const LS_MASTERS = 'illusdex_masters';
 const LS_PRESETS = 'illusdex_presets';
 const LS_TAGS = 'illusdex_tags';
 const LS_COLLECTION = 'illusdex_collection';
+const LS_CARDSNAP = 'illusdex_cardsnap';
 
 /* ── Collection par (carte × langue) ──────────────────────────────────────
    Source de vérité unique :
@@ -149,6 +150,38 @@ let startedMasters = JSON.parse(localStorage.getItem(LS_MASTERS) || '[]'); // [{
 startedMasters = startedMasters.map(m => (m && m.lang) ? m : { ...m, lang: 'fr' });
 let filterPresets  = JSON.parse(localStorage.getItem(LS_PRESETS) || '[]'); // [{id,ctx,name,...}]
 let tagsMap        = JSON.parse(localStorage.getItem(LS_TAGS) || '{}');    // { cardId: [tags] }
+
+// Instantanés des cartes possédées/voulues, pour afficher « Ma Collection »
+// quel que soit le catalogue chargé (les cartes JP ne sont dans allCards que
+// quand le catalogue asiatique est chargé, et inversement).
+let cardSnapshots  = JSON.parse(localStorage.getItem(LS_CARDSNAP) || '{}');
+function saveCardSnapshots() { localStorage.setItem(LS_CARDSNAP, JSON.stringify(cardSnapshots)); }
+function snapshotCard(c) {
+  return {
+    id: c.id, image: c.image, name: c.name, nameEn: c.nameEn, romaji: c.romaji,
+    localId: c.localId, rarity: c.rarity, rarityKind: c.rarityKind,
+    types: c.types, dexId: c.dexId, illustrator: c.illustrator,
+    apiPrice: c.apiPrice, region: c.region,
+    set: c.set ? { id: c.set.id, name: c.set.name, order: c.set.order,
+                   serie: c.set.serie ? { name: c.set.serie.name } : null } : null,
+  };
+}
+// Met à jour les instantanés pour toutes les cartes de la collection présentes
+// dans le catalogue courant. Appelé après chaque chargement de catalogue.
+function snapshotCollectionCards() {
+  const ids = new Set([...ownedSet, ...wantedSet, ...tradeSet]);
+  if (!ids.size) return;
+  let changed = false;
+  allCards.forEach(c => { if (ids.has(c.id)) { cardSnapshots[c.id] = snapshotCard(c); changed = true; } });
+  if (changed) saveCardSnapshots();
+}
+// Pool de la collection : données vivantes du catalogue courant + instantanés
+// pour les cartes des autres régions → la collection est inter-régions.
+function getCollectionPool() {
+  const ids = new Set([...ownedSet, ...wantedSet, ...tradeSet]);
+  const live = new Map(allCards.map(c => [c.id, c]));
+  return [...ids].map(id => live.get(id) || cardSnapshots[id]).filter(Boolean);
+}
 
 // Construit une collection neuve depuis l'ancien format (tableaux d'ids +
 // pricesMap). Tout est rangé en langue 'fr' (collection existante = FR/INT).
@@ -379,18 +412,26 @@ function rebuildProjections() {
   }
 }
 function afterCollectionChange() { rebuildProjections(); saveCollection(); updateCollStat(); }
+// Mémorise les données d'affichage d'une carte qu'on vient d'ajouter à la
+// collection, pour qu'elle reste visible depuis l'autre catalogue.
+function snapshotById(id) {
+  const c = allCards.find(x => x.id === id);
+  if (c) { cardSnapshots[id] = snapshotCard(c); saveCardSnapshots(); }
+}
 
 function toggleOwned(id, lang = currentLang) {
   const r = ensureRec(id, lang);
   r.qty = r.qty > 0 ? 0 : 1;
   if (!r.qty) r.trade = false; // plus possédée → plus à vendre
   pruneRec(id, lang);
+  snapshotById(id);
   afterCollectionChange();
 }
 function toggleWanted(id, lang = currentLang) {
   const r = ensureRec(id, lang);
   r.wanted = !r.wanted;
   pruneRec(id, lang);
+  snapshotById(id);
   afterCollectionChange();
 }
 function toggleTrade(id, lang = currentLang) {
@@ -398,6 +439,7 @@ function toggleTrade(id, lang = currentLang) {
   const r = ensureRec(id, lang);
   r.trade = !r.trade;
   pruneRec(id, lang);
+  snapshotById(id);
   afterCollectionChange();
 }
 // Marque/retire « à obtenir » sans rebuild (utilisé en masse par startMaster).
@@ -549,7 +591,9 @@ function filterCards(cards, st) {
 // Source → filtre → tri. Unique point d'entrée pour les deux vues.
 function getCards(ctx) {
   const st = S[ctx];
-  let cards = allCards;
+  // Ma Collection : pool inter-régions (toutes les cartes possédées, quel que
+  // soit le catalogue chargé). Explorer : catalogue courant uniquement.
+  let cards = ctx === 'collection' ? getCollectionPool() : allCards;
   const ms = membershipSet(ctx);
   if (ms) cards = cards.filter(c => ms.has(c.id));
   // Filtre de langue (Collection) : restreint à l'appartenance DANS cette langue
@@ -566,6 +610,21 @@ function getCards(ctx) {
 /* ════════════════════════════════════════════════════════════════════════
    TRI + SECTIONS (partagés)
    ════════════════════════════════════════════════════════════════════════ */
+// Région d'une carte (l'asiatique est taguée à l'ingestion ; sinon international).
+function cardRegionOf(card) { return (card && card.region) === 'asian' ? 'asian' : 'international'; }
+// Langue de collection à utiliser pour une carte donnée (utile en collection
+// inter-régions : une carte JP s'édite en 'ja' même si on affiche l'international).
+function cardLangFor(card) {
+  if (cardRegionOf(card) === 'asian') return 'ja';
+  return REGIONS.international.langs.includes(currentLang) ? currentLang : 'fr';
+}
+// Base d'API correspondant à la région de la carte (pour ouvrir une carte d'un
+// autre catalogue que celui affiché, depuis la collection inter-régions).
+function cardApiBase(card) {
+  if (cardRegionOf(card) === 'asian') return API_BASE + '/ja';
+  return API_BASE + '/' + (REGIONS.international.langs.includes(currentLang) ? currentLang : 'fr');
+}
+
 // Catalogue asiatique : pas de n° Pokédex dans les briefs → tri par extension.
 function defaultSort() { return currentRegion === 'asian' ? 'set' : 'pokedex'; }
 function coerceAsianSort() {
@@ -1570,7 +1629,7 @@ function cycleListOrder(list) {
 function populateFilters(ctx) {
   if (ctx === 'collection') {
     const ms = membershipSet('collection');
-    populateSelectsForCtx('collection', allCards.filter(c => ms.has(c.id)));
+    populateSelectsForCtx('collection', getCollectionPool().filter(c => ms.has(c.id)));
   } else {
     populateSelectsForCtx('explore', allCards);
   }
@@ -2024,6 +2083,7 @@ async function fetchCards({ force = false } = {}) {
     if (cached && Array.isArray(cached.cards) && cached.cards.length &&
         (Date.now() - cached.savedAt) < CACHE_TTL) {
       allCards = cached.cards;
+      snapshotCollectionCards();
       countEl.textContent = allCards.length;
       populateFilters('explore');
       updateRarityButtons('explore');
@@ -2060,6 +2120,7 @@ async function fetchCards({ force = false } = {}) {
     }
     if (allCards.length === 0) throw new Error('empty');
 
+    snapshotCollectionCards();
     countEl.textContent = allCards.length;
     idbSet(cacheKey(), { cards: allCards, savedAt: Date.now() }); // sauvegarde en arrière-plan
 
@@ -2234,23 +2295,25 @@ async function renderCardPrice(card) {
   if (!el) return;
 
   let pricing = card.pricing;
+  // Endpoint choisi selon la RÉGION de la carte (et pas du catalogue affiché) :
+  // une carte JP ouverte depuis la collection inter-régions reste interrogée en /ja.
+  const base = cardRegionOf(card) === 'asian' ? API_BASE + '/ja' : API_BASE + '/en';
 
-  if (currentRegion === 'asian') {
-    // Les ids JP n'existent pas en /en → on récupère le prix depuis le catalogue courant (/ja).
+  if (cardRegionOf(card) === 'asian') {
     if (!pricing) {
       try {
-        const res = await fetch(`${API}/cards/${encodeURIComponent(card.id)}`);
+        const res = await fetch(`${base}/cards/${encodeURIComponent(card.id)}`);
         if (res.ok) pricing = (await res.json()).pricing;
       } catch (e) {}
     }
   } else if (!card.nameEn) {
     try {
-      const res = await fetch(`https://api.tcgdex.net/v2/en/cards/${encodeURIComponent(card.id)}`);
+      const res = await fetch(`${base}/cards/${encodeURIComponent(card.id)}`);
       if (res.ok) { const data = await res.json(); card.nameEn = data.name || card.name; if (!pricing) pricing = data.pricing; }
     } catch (e) {}
   } else if (!pricing) {
     try {
-      const res = await fetch(`https://api.tcgdex.net/v2/en/cards/${encodeURIComponent(card.id)}`);
+      const res = await fetch(`${base}/cards/${encodeURIComponent(card.id)}`);
       if (res.ok) { const data = await res.json(); pricing = data.pricing; }
     } catch (e) {}
   }
@@ -2277,11 +2340,12 @@ async function renderCardPrice(card) {
 
   if (trend != null && !isNaN(trend)) {
     card.apiPrice = trend;
+    const plang = cardLangFor(card);
     for (const type of ['owned', 'wanted']) {
-      if ((type === 'owned' && isOwned(card.id, currentLang)) || (type === 'wanted' && isWanted(card.id, currentLang))) {
-        const existing = getPriceData(card.id, type);
+      if ((type === 'owned' && isOwned(card.id, plang)) || (type === 'wanted' && isWanted(card.id, plang))) {
+        const existing = getPriceData(card.id, type, plang);
         if (!existing.val && !existing.min && !existing.max) {
-          setPriceData(card.id, type, { val: trend.toFixed(2), min: '', max: '' });
+          setPriceData(card.id, type, { val: trend.toFixed(2), min: '', max: '' }, plang);
         }
       }
     }
@@ -2358,11 +2422,13 @@ async function openModal(card, list, index) {
 
   try {
     if (!card.detailsLoaded) {
-      const res = await fetch(`${API}/cards/${encodeURIComponent(card.id)}`);
+      const res = await fetch(`${cardApiBase(card)}/cards/${encodeURIComponent(card.id)}`);
       if (res.ok) { const details = await res.json(); card = { ...card, ...details, rarity: card.rarity || details.rarity }; }
     }
   } catch (e) {}
 
+  // Langue de collection de CETTE carte (asiatique → 'ja' même en affichage international).
+  const mlang = cardLangFor(card);
   const img    = card.image ? card.image + '/high.webp' : '';
   const rarity = card.rarity || '—';
   const set    = card.set?.name || '—';
@@ -2383,8 +2449,8 @@ async function openModal(card, list, index) {
     }, 0);
   }
 
-  const oPrices = getPriceData(card.id, 'owned');
-  const wPrices = getPriceData(card.id, 'wanted');
+  const oPrices = getPriceData(card.id, 'owned', mlang);
+  const wPrices = getPriceData(card.id, 'wanted', mlang);
   document.getElementById('modal-info').innerHTML = `
     <div class="modal-position">${position}</div>
     <div class="modal-name">${escapeHtml(card.name || '—')}</div>
@@ -2392,13 +2458,13 @@ async function openModal(card, list, index) {
       <span style="font-size:13px;color:var(--muted)">${escapeHtml(rarity)}</span>
     </div>
     <div class="modal-lang-row">
-      <span class="modal-lang-active" title="Langue de la carte que vous éditez">${LANG_FLAGS[currentLang] || ''} ${escapeHtml(LANG_LABELS[currentLang] || currentLang)}</span>
+      <span class="modal-lang-active" title="Langue de la carte que vous éditez">${LANG_FLAGS[mlang] || ''} ${escapeHtml(LANG_LABELS[mlang] || mlang)}</span>
       <span class="modal-lang-owned" id="modal-lang-owned">${ownedLangsHint(card.id)}</span>
     </div>
     <div class="modal-collection-btns">
-      <button class="modal-coll-btn ${isOwned(card.id, currentLang) ? 'active-owned' : ''}" id="modal-btn-owned">✦ En collection</button>
-      <button class="modal-coll-btn ${isWanted(card.id, currentLang) ? 'active-wanted' : ''}" id="modal-btn-wanted">⊕ À obtenir</button>
-      <button class="modal-coll-btn ${isTrade(card.id, currentLang) ? 'active-trade' : ''}" id="modal-btn-trade" style="${isOwned(card.id, currentLang) ? '' : 'opacity:.35;pointer-events:none'}">⇄ Vendre</button>
+      <button class="modal-coll-btn ${isOwned(card.id, mlang) ? 'active-owned' : ''}" id="modal-btn-owned">✦ En collection</button>
+      <button class="modal-coll-btn ${isWanted(card.id, mlang) ? 'active-wanted' : ''}" id="modal-btn-wanted">⊕ À obtenir</button>
+      <button class="modal-coll-btn ${isTrade(card.id, mlang) ? 'active-trade' : ''}" id="modal-btn-trade" style="${isOwned(card.id, mlang) ? '' : 'opacity:.35;pointer-events:none'}">⇄ Vendre</button>
     </div>
     <div class="tags-section">
       <div class="tags-title">Tags</div>
@@ -2409,7 +2475,7 @@ async function openModal(card, list, index) {
         <datalist id="tag-suggestions"></datalist>
       </div>
     </div>
-    <div class="price-input-section ${isOwned(card.id, currentLang) ? 'visible' : ''}" id="price-section-owned">
+    <div class="price-input-section ${isOwned(card.id, mlang) ? 'visible' : ''}" id="price-section-owned">
       <div class="price-input-title">Prix payé / estimé</div>
       <div class="price-input-wrap">
         <div class="price-input-group">
@@ -2427,7 +2493,7 @@ async function openModal(card, list, index) {
         <button class="price-input-save" id="pi-owned-save">OK</button>
       </div>
     </div>
-    <div class="price-input-section ${isWanted(card.id, currentLang) ? 'visible' : ''}" id="price-section-wanted">
+    <div class="price-input-section ${isWanted(card.id, mlang) ? 'visible' : ''}" id="price-section-wanted">
       <div class="price-input-title">Budget cible</div>
       <div class="price-input-wrap">
         <div class="price-input-group">
@@ -2495,19 +2561,19 @@ async function openModal(card, list, index) {
     const bw = document.getElementById('modal-btn-wanted');
     const bt = document.getElementById('modal-btn-trade');
     if (!bo || !bw) return;
-    // Boutons & sections prix : état pour la LANGUE active (la copie qu'on édite).
-    const owned = isOwned(id, currentLang);
+    // Boutons & sections prix : état pour la langue de CETTE carte (mlang).
+    const owned = isOwned(id, mlang);
     bo.className = 'modal-coll-btn' + (owned ? ' active-owned' : '');
-    bw.className = 'modal-coll-btn' + (isWanted(id, currentLang) ? ' active-wanted' : '');
+    bw.className = 'modal-coll-btn' + (isWanted(id, mlang) ? ' active-wanted' : '');
     if (bt) {
-      bt.className = 'modal-coll-btn' + (isTrade(id, currentLang) ? ' active-trade' : '');
+      bt.className = 'modal-coll-btn' + (isTrade(id, mlang) ? ' active-trade' : '');
       bt.style.opacity = owned ? '1' : '0.35';
       bt.style.pointerEvents = owned ? '' : 'none';
     }
     const so = document.getElementById('price-section-owned');
     const sw = document.getElementById('price-section-wanted');
     if (so) so.classList.toggle('visible', owned);
-    if (sw) sw.classList.toggle('visible', isWanted(id, currentLang));
+    if (sw) sw.classList.toggle('visible', isWanted(id, mlang));
     const hint = document.getElementById('modal-lang-owned');
     if (hint) hint.textContent = ownedLangsHint(id);
     // Vignette : classes « toutes langues » + rafraîchissement des drapeaux.
@@ -2526,18 +2592,18 @@ async function openModal(card, list, index) {
   };
 
   document.getElementById('modal-btn-owned').addEventListener('click', () => {
-    toggleOwned(card.id); syncModalBtns(card.id);
+    toggleOwned(card.id, mlang); syncModalBtns(card.id);
     if (currentTab === 'collection') { populateFilters('collection'); renderCollection(); }
     if (currentTab === 'master') renderMaster();
     if (currentTab === 'echange' && lastFriendData) renderEchangeResults(lastFriendData);
   });
   document.getElementById('modal-btn-wanted').addEventListener('click', () => {
-    toggleWanted(card.id); syncModalBtns(card.id);
+    toggleWanted(card.id, mlang); syncModalBtns(card.id);
     if (currentTab === 'collection') { populateFilters('collection'); renderCollection(); }
     if (currentTab === 'echange' && lastFriendData) renderEchangeResults(lastFriendData);
   });
   document.getElementById('modal-btn-trade')?.addEventListener('click', () => {
-    toggleTrade(card.id); syncModalBtns(card.id);
+    toggleTrade(card.id, mlang); syncModalBtns(card.id);
     if (currentTab === 'collection') { populateFilters('collection'); renderCollection(); }
     if (currentTab === 'echange' && lastFriendData) renderEchangeResults(lastFriendData);
   });
@@ -2547,7 +2613,7 @@ async function openModal(card, list, index) {
       val: document.getElementById('pi-owned-val').value,
       min: document.getElementById('pi-owned-min').value,
       max: document.getElementById('pi-owned-max').value,
-    });
+    }, mlang);
     showToast('✦ Prix collection sauvegardé');
   });
   document.getElementById('pi-wanted-save')?.addEventListener('click', () => {
@@ -2555,7 +2621,7 @@ async function openModal(card, list, index) {
       val: document.getElementById('pi-wanted-val').value,
       min: document.getElementById('pi-wanted-min').value,
       max: document.getElementById('pi-wanted-max').value,
-    });
+    }, mlang);
     showToast('⊕ Budget cible sauvegardé');
   });
 
