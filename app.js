@@ -3900,46 +3900,7 @@ function cropAbs(v, rect, upscale = 6) {
   return preprocessForOcr(c);
 }
 
-// Image complète de la zone-carte avec une grille de repères en % — me permet de
-// lire la position réelle du numéro et de caler les coordonnées de crop.
-function fullCardDebugCanvas(v, cb, numRects, nameRect) {
-  const r = cardRectInVideo(v);
-  const W = 300, H = Math.max(1, Math.round(W * r.h / r.w));
-  const c = document.createElement('canvas'); c.width = W; c.height = H;
-  const ctx = c.getContext('2d');
-  ctx.drawImage(v, r.x, r.y, r.w, r.h, 0, 0, W, H);
-  ctx.strokeStyle = 'rgba(0,200,255,0.5)'; ctx.lineWidth = 1;
-  for (let p = 10; p < 100; p += 10) {
-    const x = W * p / 100, y = H * p / 100;
-    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
-  }
-  ctx.fillStyle = 'rgba(0,220,255,0.95)'; ctx.font = 'bold 10px monospace';
-  for (let p = 0; p <= 100; p += 20) { ctx.fillText(String(p), W * p / 100 + 1, 9); ctx.fillText(String(p), 1, H * p / 100 + 9); }
-  const toCv = rc => ({ x: (rc.x - r.x) / r.w * W, y: (rc.y - r.y) / r.h * H, w: rc.w / r.w * W, h: rc.h / r.h * H });
-  if (cb) { const b = toCv(cb); ctx.strokeStyle = cb.detected ? 'lime' : 'orange'; ctx.lineWidth = 2; ctx.strokeRect(b.x, b.y, b.w, b.h); } // carte détectée (verte) / repli (orange)
-  if (numRects) { ctx.strokeStyle = 'rgba(255,110,0,0.95)'; ctx.lineWidth = 1.5; numRects.forEach(rc => { const b = toCv(rc); ctx.strokeRect(b.x, b.y, b.w, b.h); }); } // zones-numéro (orange)
-  if (nameRect) { ctx.strokeStyle = 'yellow'; ctx.lineWidth = 1.5; const b = toCv(nameRect); ctx.strokeRect(b.x, b.y, b.w, b.h); } // zone-nom (jaune)
-  return c;
-}
-
-function renderScanDebug(attempts, best, full) {
-  const dbg = document.getElementById('scan-debug');
-  if (!dbg) return;
-  dbg.hidden = false;
-  const fullHtml = full
-    ? `<div class="scan-dbg-full"><img src="${full.toDataURL('image/png')}" alt="carte captée"><div class="scan-dbg-cap">Carte captée — repères en % (x en haut, y à gauche)</div></div>`
-    : '';
-  dbg.innerHTML = fullHtml + attempts.map((a, i) => {
-    const read = a.isName ? (a.raw || '—') : (a.parsed ? (a.parsed.total ? `${a.parsed.number}/${a.parsed.total}` : a.parsed.number) : '—');
-    const tag = a.isName ? 'nom' : 'n°';
-    return `<div class="scan-dbg-item${(best && a.parsed === best) ? ' chosen' : ''}">
-      <img src="${a.crop.toDataURL('image/png')}" alt="zone ${i + 1}">
-      <div class="scan-debug-text"><b>${escapeHtml(read)}</b> <span class="scan-dbg-raw">(${tag})</span></div>
-    </div>`;
-  }).join('');
-}
-
-// Canvas de la carte détectée (≤ maxW de large) pour l'OCR cloud / le debug.
+// Canvas de la carte détectée (≤ maxW de large) pour l'OCR cloud.
 function cardImageCanvas(v, cb, maxW = 1000) {
   const scale = Math.min(1, maxW / cb.w);
   const c = document.createElement('canvas');
@@ -3990,7 +3951,6 @@ async function captureAndOcr() {
     lastScanName = parsed.name;
     if (parsed.number) document.getElementById('scan-num').value = parsed.total ? `${parsed.number}/${parsed.total}` : parsed.number;
     renderScanCandidates();
-    renderScanDebug([{ crop: cardCanvas, raw: text, parsed: null, isName: true }], null, fullCardDebugCanvas(v, cb, [], null));
     setScanStatus(`${parsed.name ? '« ' + parsed.name + ' »' : 'Nom ?'}${parsed.number ? ' · N° ' + parsed.number + (parsed.total ? '/' + parsed.total : '') : ''} — tape la bonne carte ↓`);
   } catch (e) {
     setScanStatus('OCR cloud indispo — lecture locale…');
@@ -4008,7 +3968,6 @@ async function captureAndOcrLocal() {
   try {
     const worker = await getOcrWorker(lang);
     const cb = detectCardRect(v);                 // bords de la carte (pas le cadre)
-    const attempts = [];
 
     // 1) NOM (gros texte du haut) — signal de matching le plus fiable.
     const nameReg = relRect(cb, SCAN_NAME_REGIONS[currentRegion] || SCAN_NAME_REGIONS.international);
@@ -4018,25 +3977,20 @@ async function captureAndOcrLocal() {
       const nameCrop = cropAbs(v, nameReg, 4);
       adaptiveThreshold(nameCrop); // seuillage local : isole le nom du fond illustré
       nameText = cleanNameOcr((await worker.recognize(nameCrop)).data.text || '');
-      attempts.push({ crop: nameCrop, raw: nameText || '(rien)', parsed: null, isName: true });
     } catch (e) {}
     lastScanName = nameText;
 
     // 2) NUMÉRO (bas-gauche de la carte) — bonus.
     await worker.setParameters({ tessedit_char_whitelist: '0123456789/', tessedit_pageseg_mode: '7' });
-    const regions = numberCropsForCard(cb);
     let best = null;
-    for (const reg of regions) {
+    for (const reg of numberCropsForCard(cb)) {
       const crop = cropAbs(v, reg, 6);
-      adaptiveThreshold(crop, 0.3, 10); // seuillage local (fenêtre plus large pour le n°)
-      const raw = ((await worker.recognize(crop)).data.text || '').trim();
-      const parsed = parseNumFromText(raw);
-      attempts.push({ crop, raw, parsed });
+      adaptiveThreshold(crop, 0.3, 10);
+      const parsed = parseNumFromText(((await worker.recognize(crop)).data.text || '').trim());
       if (parsed && parsed.xy) { best = parsed; break; }
+      if (parsed && !best) best = parsed;
     }
-    if (!best) { const a = attempts.find(x => x.parsed && !x.isName); if (a) best = a.parsed; }
 
-    renderScanDebug(attempts, best, fullCardDebugCanvas(v, cb, regions, nameReg));
     if (best) document.getElementById('scan-num').value = best.total ? `${best.number}/${best.total}` : best.number;
     renderScanCandidates(); // utilise lastScanName + le champ numéro
     const nLabel = best ? (best.total ? best.number + '/' + best.total : best.number) : '?';
