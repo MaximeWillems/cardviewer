@@ -3595,12 +3595,12 @@ function closeScanPanel() {
   if (currentTab === 'collection') { populateFilters('collection'); renderCollection(); updateTotalsBar(); }
 }
 
-/* ── Caméra + OCR (Tesseract.js chargé à la demande) ──────────────────────
-   La caméra ne fait que LIRE le numéro / le nom et remplir les champs du
-   panneau — le matching et l'ajout restent ceux de l'étape A. L'OCR est un
-   accélérateur : si la lecture rate, la saisie manuelle prend le relais.
+/* ── Caméra + OCR cloud (OCR.space via le Worker) ─────────────────────────
+   La caméra capture la carte ; l'image est envoyée au Worker qui interroge
+   OCR.space → on en tire nom + numéro pour le matching. Repli : saisie
+   manuelle du N° si l'OCR cloud n'est pas disponible.
    ──────────────────────────────────────────────────────────────────────── */
-let scanStream = null, ocrWorker = null, ocrWorkerLang = null, tesseractLoading = null;
+let scanStream = null;
 let lastScanName = ''; // nom lu par OCR à la dernière capture (signal de matching)
 // Auto-capture : on déclenche quand la carte est nette/détaillée ET immobile.
 let scanLoopId = null, lastSig = null, lastCapturedSig = null, stableCount = 0, scanBusy = false;
@@ -3609,27 +3609,6 @@ const SCAN_STABLE_DIFF = 18;   // diff inter-images tolérée = immobile (tolèr
 const SCAN_NEW_DIFF    = 16;   // diff vs dernière capturée = nouvelle carte
 
 function setScanStatus(msg) { const el = document.getElementById('scan-cam-status'); if (el) el.textContent = msg || ''; }
-
-function loadTesseract() {
-  if (window.Tesseract) return Promise.resolve();
-  if (!tesseractLoading) {
-    tesseractLoading = new Promise((resolve, reject) => {
-      const s = document.createElement('script');
-      s.src = 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
-      s.onload = resolve; s.onerror = reject;
-      document.head.appendChild(s);
-    });
-  }
-  return tesseractLoading;
-}
-async function getOcrWorker(lang) {
-  await loadTesseract();
-  if (ocrWorker && ocrWorkerLang === lang) return ocrWorker;
-  if (ocrWorker) { try { await ocrWorker.terminate(); } catch (e) {} ocrWorker = null; }
-  ocrWorker = await Tesseract.createWorker(lang);
-  ocrWorkerLang = lang;
-  return ocrWorker;
-}
 
 async function startCamera() {
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
@@ -3733,132 +3712,10 @@ function cardRectInVideo(v) {
   return { x: (fl + offX) / scale, y: (ft + offY) / scale, w: fw / scale, h: fh / scale };
 }
 
-// Niveaux de gris + étirement de contraste : aide nettement Tesseract.
-function preprocessForOcr(canvas) {
-  const ctx = canvas.getContext('2d');
-  const im = ctx.getImageData(0, 0, canvas.width, canvas.height), d = im.data;
-  for (let i = 0; i < d.length; i += 4) {
-    let g = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
-    g = (g - 128) * 1.5 + 128;
-    g = g < 0 ? 0 : g > 255 ? 255 : g;
-    d[i] = d[i + 1] = d[i + 2] = g;
-  }
-  ctx.putImageData(im, 0, 0);
-  return canvas;
-}
-
-// Recadre une sous-zone (fractions DANS la carte) et la pré-traite pour l'OCR.
-function cropCardRegion(v, rx, ry, rw, rh, upscale = 3) {
-  const r = cardRectInVideo(v);
-  const sx = r.x + rx * r.w, sy = r.y + ry * r.h, sw = rw * r.w, sh = rh * r.h;
-  const c = document.createElement('canvas');
-  c.width = Math.max(1, Math.round(sw * upscale));
-  c.height = Math.max(1, Math.round(sh * upscale));
-  c.getContext('2d').drawImage(v, sx, sy, sw, sh, 0, 0, c.width, c.height);
-  return preprocessForOcr(c);
-}
-
-// Binarisation par seuil d'Otsu : texte sombre sur fond clair → noir/blanc pur,
-// ce qui aide nettement Tesseract sur du petit texte.
-function otsuThreshold(canvas) {
-  const ctx = canvas.getContext('2d');
-  const im = ctx.getImageData(0, 0, canvas.width, canvas.height), d = im.data;
-  const n = d.length / 4, g = new Uint8Array(n), hist = new Array(256).fill(0);
-  for (let i = 0, j = 0; i < d.length; i += 4, j++) { const v = (0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]) | 0; g[j] = v; hist[v]++; }
-  let sum = 0; for (let t = 0; t < 256; t++) sum += t * hist[t];
-  let sumB = 0, wB = 0, maxVar = -1, thr = 128;
-  for (let t = 0; t < 256; t++) {
-    wB += hist[t]; if (!wB) continue; const wF = n - wB; if (!wF) break;
-    sumB += t * hist[t]; const mB = sumB / wB, mF = (sum - sumB) / wF;
-    const between = wB * wF * (mB - mF) * (mB - mF);
-    if (between > maxVar) { maxVar = between; thr = t; }
-  }
-  // Normalise la polarité : le texte (minorité) doit être NOIR sur fond BLANC —
-  // sinon un numéro en texte clair sur fond sombre ressort blanc-sur-noir et
-  // Tesseract le lit mal. On compte les pixels clairs et on inverse si besoin.
-  let bright = 0; for (let j = 0; j < n; j++) if (g[j] > thr) bright++;
-  const invert = bright < n / 2; // peu de clair → le clair est le texte → inverser
-  for (let i = 0, j = 0; i < d.length; i += 4, j++) {
-    let val = g[j] > thr ? 255 : 0;
-    if (invert) val = 255 - val;
-    d[i] = d[i + 1] = d[i + 2] = val;
-  }
-  ctx.putImageData(im, 0, 0);
-  return canvas;
-}
-
-// Seuillage ADAPTATIF (local) : compare chaque pixel à la moyenne de son
-// voisinage → isole un texte net même sur un fond en dégradé/illustration, là où
-// un seuil global (Otsu) échoue. Gère la polarité (texte clair OU sombre).
-function adaptiveThreshold(canvas, winFrac = 0.22, C = 8) {
-  const ctx = canvas.getContext('2d');
-  const W = canvas.width, H = canvas.height, N = W * H;
-  const im = ctx.getImageData(0, 0, W, H), d = im.data;
-  const g = new Float32Array(N);
-  for (let i = 0, j = 0; i < d.length; i += 4, j++) g[j] = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
-  // Image intégrale → moyenne de fenêtre en O(1).
-  const Wp = W + 1, ii = new Float64Array(Wp * (H + 1));
-  for (let y = 1; y <= H; y++) { let rs = 0; for (let x = 1; x <= W; x++) { rs += g[(y - 1) * W + (x - 1)]; ii[y * Wp + x] = ii[(y - 1) * Wp + x] + rs; } }
-  const win = Math.max(3, Math.round(Math.min(W, H) * winFrac)) | 1, r = win >> 1;
-  const mean = new Float32Array(N);
-  for (let y = 0; y < H; y++) {
-    const y0 = Math.max(0, y - r), y1 = Math.min(H - 1, y + r);
-    for (let x = 0; x < W; x++) {
-      const x0 = Math.max(0, x - r), x1 = Math.min(W - 1, x + r);
-      const area = (x1 - x0 + 1) * (y1 - y0 + 1);
-      mean[y * W + x] = (ii[(y1 + 1) * Wp + (x1 + 1)] - ii[y0 * Wp + (x1 + 1)] - ii[(y1 + 1) * Wp + x0] + ii[y0 * Wp + x0]) / area;
-    }
-  }
-  // Polarité : le texte est la MINORITÉ qui dévie de sa moyenne locale.
-  let dark = 0, light = 0;
-  for (let j = 0; j < N; j++) { if (g[j] < mean[j] - C) dark++; else if (g[j] > mean[j] + C) light++; }
-  const textIsDark = dark <= light;
-  for (let i = 0, j = 0; i < d.length; i += 4, j++) {
-    const fg = textIsDark ? (g[j] < mean[j] - C) : (g[j] > mean[j] + C);
-    const val = fg ? 0 : 255; // texte noir sur fond blanc (préférence Tesseract)
-    d[i] = d[i + 1] = d[i + 2] = val;
-  }
-  ctx.putImageData(im, 0, 0);
-  return canvas;
-}
-
-// Extrait un numéro de carte d'un texte OCR. Accepte « 029/198 », « 029 198 »
-// (slash manqué) ou un nombre seul.
-function parseNumFromText(raw) {
-  const nums = (raw.match(/\d{1,3}/g) || []);
-  const xy = raw.match(/(\d{1,3})\s*\/\s*(\d{1,3})/);
-  if (xy) return { number: xy[1], total: xy[2], xy: true };
-  if (nums.length >= 2) return { number: nums[0], total: nums[1], xy: true };
-  if (nums.length === 1) return { number: nums[0], total: '', xy: false };
-  return null;
-}
-
-// Fractions du n° de collection DANS LA CARTE (appliquées au rectangle de carte
-// détecté, pas au cadre) : coin bas-gauche moderne → de plus en plus large.
-const SCAN_NUM_REGIONS = {
-  international: [
-    { x: 0.03, y: 0.90, w: 0.50, h: 0.085 },
-    { x: 0.00, y: 0.86, w: 0.62, h: 0.13 },
-    { x: 0.00, y: 0.80, w: 1.00, h: 0.19 },
-  ],
-  asian: [
-    { x: 0.02, y: 0.90, w: 0.55, h: 0.085 },
-    { x: 0.00, y: 0.86, w: 0.66, h: 0.13 },
-    { x: 0.00, y: 0.80, w: 1.00, h: 0.19 },
-  ],
-};
-
-// Zone du NOM (gros texte en haut de la carte), fraction DANS la carte.
-const SCAN_NAME_REGIONS = {
-  international: { x: 0.05, y: 0.015, w: 0.74, h: 0.11 },
-  asian:        { x: 0.05, y: 0.015, w: 0.74, h: 0.11 },
-};
 // Nettoie un nom lu par OCR : garde lettres/espaces/accents, vire le reste.
 function cleanNameOcr(raw) {
   return (raw || '').replace(/[^A-Za-zÀ-ÿ'\- ]/g, ' ').replace(/\s+/g, ' ').trim();
 }
-// Rect absolu (px vidéo) d'une fraction relative au rectangle de carte.
-function relRect(cb, f) { return { x: cb.x + f.x * cb.w, y: cb.y + f.y * cb.h, w: f.w * cb.w, h: f.h * cb.h }; }
 
 // Détecte le rectangle de la CARTE dans le cadre-guide (elle flotte dans sa
 // pochette → marges sombres). Projection de luminosité : la carte = grande zone
@@ -3886,20 +3743,6 @@ function detectCardRect(v) {
   if (cw < W * 0.4 || ch < H * 0.4) return { x: r.x, y: r.y, w: r.w, h: r.h, detected: false };
   return { x: r.x + (x0 / W) * r.w, y: r.y + (y0 / H) * r.h, w: (cw / W) * r.w, h: (ch / H) * r.h, detected: true };
 }
-// Rects absolus (px vidéo) des zones-numéro, relatifs au rectangle de carte.
-function numberCropsForCard(cb) {
-  const fr = SCAN_NUM_REGIONS[currentRegion] || SCAN_NUM_REGIONS.international;
-  return fr.map(f => ({ x: cb.x + f.x * cb.w, y: cb.y + f.y * cb.h, w: f.w * cb.w, h: f.h * cb.h }));
-}
-// Crop d'un rect absolu (px vidéo), fortement agrandi puis prétraité.
-function cropAbs(v, rect, upscale = 6) {
-  const c = document.createElement('canvas');
-  c.width = Math.max(1, Math.round(rect.w * upscale));
-  c.height = Math.max(1, Math.round(rect.h * upscale));
-  c.getContext('2d').drawImage(v, rect.x, rect.y, rect.w, rect.h, 0, 0, c.width, c.height);
-  return preprocessForOcr(c);
-}
-
 // Canvas de la carte détectée (≤ maxW de large) pour l'OCR cloud.
 function cardImageCanvas(v, cb, maxW = 1000) {
   const scale = Math.min(1, maxW / cb.w);
@@ -3926,8 +3769,17 @@ async function cloudOcr(dataUrl) {
 // qui matche le mieux une carte du catalogue.
 function parseCloudText(text, pool) {
   const flat = text.replace(/\s+/g, ' ');
+  let number = '', total = '';
   const m = flat.match(/(\d{1,3})\s*\/\s*(\d{1,3})/);
-  const number = m ? m[1] : '', total = m ? m[2] : '';
+  if (m) { number = m[1]; total = m[2]; }
+  else {
+    // N° promo alphanumérique (ex. SWSH039, SM01) — on ne le retient que s'il
+    // existe vraiment comme localId (évite de prendre « PV 120 » = les PV).
+    for (const code of (flat.match(/[A-Z]{2,5}\s?\d{1,3}/g) || [])) {
+      const norm = normNum(code.replace(/\s/g, ''));
+      if (pool.some(c => normNum(c.localId) === norm)) { number = code.replace(/\s/g, ''); break; }
+    }
+  }
   let name = '', bestScore = 0;
   for (const line of text.split('\n')) {
     const clean = cleanNameOcr(line);
@@ -3938,13 +3790,13 @@ function parseCloudText(text, pool) {
   return { name, number, total };
 }
 
-// Capture : OCR cloud (fiable) en priorité, repli Tesseract local si indispo.
+// Capture : OCR cloud (OCR.space via le Worker). Si indispo → saisie manuelle.
 async function captureAndOcr() {
   const v = document.getElementById('scan-video');
   if (!v || !v.videoWidth) return;
   const cb = detectCardRect(v);
   try {
-    setScanStatus('Lecture (cloud)…');
+    setScanStatus('Lecture…');
     const cardCanvas = cardImageCanvas(v, cb, 1000);
     const text = await cloudOcr(cardCanvas.toDataURL('image/jpeg', 0.6));
     const parsed = parseCloudText(text, allCards);
@@ -3953,50 +3805,7 @@ async function captureAndOcr() {
     renderScanCandidates();
     setScanStatus(`${parsed.name ? '« ' + parsed.name + ' »' : 'Nom ?'}${parsed.number ? ' · N° ' + parsed.number + (parsed.total ? '/' + parsed.total : '') : ''} — tape la bonne carte ↓`);
   } catch (e) {
-    setScanStatus('OCR cloud indispo — lecture locale…');
-    await captureAndOcrLocal();
-  }
-}
-
-// Repli : lecture locale (Tesseract.js) — utilisée si l'OCR cloud n'est pas
-// configuré. Moins fiable sur les polices stylisées.
-async function captureAndOcrLocal() {
-  const v = document.getElementById('scan-video');
-  if (!v || !v.videoWidth) return;
-  const lang = currentRegion === 'asian' ? 'jpn' : 'eng';
-  setScanStatus(window.Tesseract ? 'Lecture…' : 'Chargement de l\'OCR (1ère fois)…');
-  try {
-    const worker = await getOcrWorker(lang);
-    const cb = detectCardRect(v);                 // bords de la carte (pas le cadre)
-
-    // 1) NOM (gros texte du haut) — signal de matching le plus fiable.
-    const nameReg = relRect(cb, SCAN_NAME_REGIONS[currentRegion] || SCAN_NAME_REGIONS.international);
-    let nameText = '';
-    try {
-      await worker.setParameters({ tessedit_char_whitelist: '', tessedit_pageseg_mode: '7' });
-      const nameCrop = cropAbs(v, nameReg, 4);
-      adaptiveThreshold(nameCrop); // seuillage local : isole le nom du fond illustré
-      nameText = cleanNameOcr((await worker.recognize(nameCrop)).data.text || '');
-    } catch (e) {}
-    lastScanName = nameText;
-
-    // 2) NUMÉRO (bas-gauche de la carte) — bonus.
-    await worker.setParameters({ tessedit_char_whitelist: '0123456789/', tessedit_pageseg_mode: '7' });
-    let best = null;
-    for (const reg of numberCropsForCard(cb)) {
-      const crop = cropAbs(v, reg, 6);
-      adaptiveThreshold(crop, 0.3, 10);
-      const parsed = parseNumFromText(((await worker.recognize(crop)).data.text || '').trim());
-      if (parsed && parsed.xy) { best = parsed; break; }
-      if (parsed && !best) best = parsed;
-    }
-
-    if (best) document.getElementById('scan-num').value = best.total ? `${best.number}/${best.total}` : best.number;
-    renderScanCandidates(); // utilise lastScanName + le champ numéro
-    const nLabel = best ? (best.total ? best.number + '/' + best.total : best.number) : '?';
-    setScanStatus(`${nameText ? '« ' + nameText + ' »' : 'Nom non lu'} · N° ${nLabel} — tape la bonne carte ↓`);
-  } catch (e) {
-    setScanStatus('Lecture impossible — saisis le N° ci-dessous.');
+    setScanStatus('OCR indisponible — saisis le N° ci-dessous.');
   }
 }
 
