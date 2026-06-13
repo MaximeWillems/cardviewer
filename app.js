@@ -857,11 +857,14 @@ function imagePlaceholder(card, isModal = false) {
 }
 
 // pokemontcg.io renvoie un dos de carte générique (exactement 640×892) avec un
-// statut 200 quand elle n'a pas le vrai visuel (ex. set MEP) → on le traite
-// comme une absence d'image et on affiche notre placeholder enrichi.
+// statut 200 quand elle n'a pas le vrai visuel (ex. set MEP). Les vignettes sont
+// masquées (CSS img[onload]) tant qu'on n'a pas vérifié : si c'est un dos, on
+// affiche notre placeholder (jamais le dos) ; sinon on révèle l'image.
 function checkCardBack(img) {
   if (img.naturalWidth === 640 && img.naturalHeight === 892 && /pokemontcg\.io/.test(img.currentSrc || img.src)) {
-    handleImageError(img);
+    handleImageError(img); // dos → placeholder enrichi (l'image masquée n'est jamais montrée)
+  } else {
+    img.style.opacity = '1'; // vraie image → on révèle
   }
 }
 
@@ -3256,6 +3259,8 @@ function openCardViewer(imgUrl, altText) {
     hi.src = pngUrl;
   }
   inner.style.transform = 'rotateY(0deg) rotateX(0deg)';
+  inner.style.setProperty('--glare-x', '50%');
+  inner.style.setProperty('--glare-y', '36%');
   overlay.classList.add('open');
 
   let isDragging = false;
@@ -3266,6 +3271,9 @@ function openCardViewer(imgUrl, altText) {
     rotY = Math.max(-35, Math.min(35, rotY + dx * 0.4));
     rotX = Math.max(-25, Math.min(25, rotX - dy * 0.4));
     inner.style.transform = `rotateY(${rotY}deg) rotateX(${rotX}deg)`;
+    // Le reflet spéculaire se déplace à l'inverse de l'inclinaison (effet brillance).
+    inner.style.setProperty('--glare-x', (50 - rotY * 1.5) + '%');
+    inner.style.setProperty('--glare-y', (36 + rotX * 1.6) + '%');
   }
   function onDown(e) {
     isDragging = true;

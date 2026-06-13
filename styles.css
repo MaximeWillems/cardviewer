@@ -388,6 +388,10 @@
     background: var(--surface2);
   }
 
+  /* Vignettes de carte : masquées tant que checkCardBack n'a pas confirmé que ce
+     n'est pas un dos pokemontcg (640×892) → pas de flash du dos avant remplacement. */
+  img[onload] { opacity: 0; transition: opacity 0.15s ease; }
+
   .image-placeholder {
     --ph-accent: rgba(var(--fg-rgb),0.32);
     width: 100%;
@@ -1469,29 +1473,90 @@
   }
   .card-viewer-overlay.open { display: flex; }
   .card-viewer-scene {
-    perspective: 900px;
-    width: min(80vw, 460px);
+    perspective: 1300px;
+    width: min(96vw, 62vh, 640px);
     aspect-ratio: 63/88;
     cursor: grab;
     user-select: none;
+    animation: viewerIn 0.55s cubic-bezier(0.2, 0.9, 0.25, 1.15) both;
+  }
+  @keyframes viewerIn {
+    from { transform: scale(0.82) translateY(14px); opacity: 0; }
+    to   { transform: none; opacity: 1; }
   }
   .card-viewer-scene:active { cursor: grabbing; }
   .card-viewer-inner {
+    position: relative;
     width: 100%;
     height: 100%;
     transform-style: preserve-3d;
     transition: transform 0.08s ease-out;
-    border-radius: 14px;
+    border-radius: 18px;
     overflow: hidden;
-    box-shadow: 0 30px 80px rgba(0,0,0,0.7), 0 0 0 1px rgba(var(--fg-rgb),0.08);
+    box-shadow:
+      0 50px 120px rgba(0,0,0,0.75),
+      0 0 70px rgba(120,170,255,0.18),
+      0 0 0 1px rgba(var(--fg-rgb),0.10);
   }
   .card-viewer-inner img {
     width: 100%;
     height: 100%;
     object-fit: cover;
     display: block;
-    border-radius: 14px;
+    border-radius: 18px;
     pointer-events: none;
+  }
+  /* Reflet spéculaire qui suit la rotation (vars posées par le JS au drag) */
+  .card-viewer-inner::after {
+    content: '';
+    position: absolute; inset: 0; z-index: 1; pointer-events: none; border-radius: 18px;
+    background: radial-gradient(55% 45% at var(--glare-x, 50%) var(--glare-y, 36%),
+      rgba(255,255,255,0.34), rgba(255,255,255,0.06) 45%, transparent 68%);
+    mix-blend-mode: screen;
+  }
+  /* Balayage lumineux une fois à l'ouverture (effet « carte holo ») */
+  .card-viewer-inner::before {
+    content: '';
+    position: absolute; inset: 0; z-index: 2; pointer-events: none; border-radius: 18px;
+    background: linear-gradient(105deg, transparent 32%, rgba(255,255,255,0.18) 46%,
+      rgba(255,255,255,0.42) 50%, rgba(255,255,255,0.18) 54%, transparent 68%);
+    background-size: 250% 100%;
+    background-position: 140% 0;
+    mix-blend-mode: screen;
+    opacity: 0;
+  }
+  .card-viewer-overlay.open .card-viewer-inner::before {
+    animation: cardSweep 1s ease-out 0.25s 1;
+  }
+  @keyframes cardSweep {
+    0%   { background-position: 150% 0; opacity: 1; }
+    100% { background-position: -50% 0; opacity: 0; }
+  }
+  /* Foil holographique : bande iridescente qui balaie la carte selon l'angle
+     (position pilotée par --glare-x/--glare-y posées au drag). color-dodge + faible
+     opacité → l'arc-en-ciel ne ressort que sur les zones claires, comme une vraie holo. */
+  .card-viewer-foil {
+    position: absolute; inset: 0; z-index: 1; pointer-events: none; border-radius: 18px;
+    background: linear-gradient(115deg,
+      transparent 18%,
+      rgba(255,40,140,0.55) 33%,
+      rgba(255,210,60,0.50) 42%,
+      rgba(70,255,180,0.50) 50%,
+      rgba(60,180,255,0.50) 58%,
+      rgba(200,70,255,0.55) 67%,
+      transparent 82%);
+    background-size: 230% 230%;
+    background-position: var(--glare-x, 50%) var(--glare-y, 50%);
+    mix-blend-mode: color-dodge;
+    opacity: 0.16;
+    filter: saturate(1.5);
+  }
+  /* Fines stries holo qui scintillent (très discret) */
+  .card-viewer-foil::after {
+    content: ''; position: absolute; inset: 0; border-radius: 18px;
+    background: repeating-linear-gradient(100deg,
+      rgba(255,255,255,0.06) 0 2px, transparent 2px 6px);
+    mix-blend-mode: overlay; opacity: 0.5;
   }
   .card-viewer-hint {
     position: absolute;
@@ -2408,7 +2473,7 @@
   .modal-close, .modal-share, .modal-nav { color: #fff; }
   .modal-nav { border-color: rgba(255,255,255,0.18); }
   .card-viewer-hint { color: rgba(255,255,255,0.35); }
-  .card-viewer-inner { box-shadow: 0 30px 80px rgba(0,0,0,0.7), 0 0 0 1px rgba(255,255,255,0.08); }
+  .card-viewer-inner { box-shadow: 0 50px 120px rgba(0,0,0,0.8), 0 0 70px rgba(120,170,255,0.2), 0 0 0 1px rgba(255,255,255,0.1); }
   /* Ombre des cartes adaptée au thème */
   .card:hover { box-shadow: 0 12px 40px var(--shadow); }
 
