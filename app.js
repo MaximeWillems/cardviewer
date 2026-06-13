@@ -230,6 +230,8 @@ const defaultPrefs = {
   // masterExcludes : kinds exclus du comptage, PAR master set (clé "mode:key")
   // Stocké comme { "set:sv03.5": [...kinds], "artist:Mitsuhiro Arita": [...kinds] }
   masterExcludes: {},
+  syncKey: '',        // clé perso de synchro auto entre appareils (vide = désactivé)
+  syncAppliedTs: 0,   // horodatage de la dernière version synchronisée reflétée localement
 };
 let prefs = { ...defaultPrefs, ...JSON.parse(localStorage.getItem(LS_PREFS) || '{}') };
 prefs.listOrder = { ...defaultPrefs.listOrder, ...(prefs.listOrder || {}) };
@@ -418,7 +420,7 @@ function rebuildProjections() {
     }
   }
 }
-function afterCollectionChange() { rebuildProjections(); saveCollection(); updateCollStat(); }
+function afterCollectionChange() { rebuildProjections(); saveCollection(); updateCollStat(); scheduleSyncPush(); }
 // Mémorise les données d'affichage d'une carte qu'on vient d'ajouter à la
 // collection, pour qu'elle reste visible depuis l'autre catalogue.
 function snapshotById(id) {
@@ -3498,12 +3500,14 @@ document.getElementById('btn-img').addEventListener('click', async () => {
    IMPORT / EXPORT DE LA COLLECTION (JSON)
    ════════════════════════════════════════════════════════════════════════ */
 function buildConfigPayload() {
+  // La clé de sync et son horodatage sont propres à l'appareil → jamais transmis.
+  const { syncKey, syncAppliedTs, ...prefsOut } = prefs;
   return JSON.stringify({
     app: 'pikidex', version: 2, exportedAt: new Date().toISOString(),
     collection,
     // Projections « toutes langues » conservées pour relecture par d'anciennes versions.
     owned: [...ownedSet], wanted: [...wantedSet], trade: [...tradeSet],
-    prefs, masters: startedMasters, presets: filterPresets, tags: tagsMap,
+    prefs: prefsOut, masters: startedMasters, presets: filterPresets, tags: tagsMap,
   }, null, 2);
 }
 
@@ -3841,11 +3845,12 @@ function shareSellList() {
   copyText(text, '📋 Liste de vente copiée');
 }
 
-function applyImportedConfig(text) {
+function applyImportedConfig(text, opts = {}) {
+  const silent = !!opts.silent;
   let data;
   try { data = JSON.parse(text); }
-  catch (e) { showToast('⚠ JSON invalide', 'info'); return; }
-  if (!data || typeof data !== 'object') { showToast('⚠ Format non reconnu', 'info'); return; }
+  catch (e) { if (!silent) showToast('⚠ JSON invalide', 'info'); return; }
+  if (!data || typeof data !== 'object') { if (!silent) showToast('⚠ Format non reconnu', 'info'); return; }
 
   const prevLang = currentLang;
   if (data.collection && typeof data.collection === 'object') {
@@ -3860,7 +3865,8 @@ function applyImportedConfig(text) {
   if (Array.isArray(data.presets)) { filterPresets = data.presets; savePresetsLS(); populatePresetSelect('explore'); populatePresetSelect('collection'); }
   if (data.tags && typeof data.tags === 'object' && !Array.isArray(data.tags)) { tagsMap = data.tags; saveTags(); refreshTagFilters(); }
   if (data.prefs && typeof data.prefs === 'object') {
-    prefs = { ...defaultPrefs, ...data.prefs };
+    const keepKey = prefs.syncKey, keepTs = prefs.syncAppliedTs; // la sync est propre à l'appareil
+    prefs = { ...defaultPrefs, ...data.prefs, syncKey: keepKey, syncAppliedTs: keepTs };
     // Compat exclusions par master set
     if (!prefs.masterExcludes || typeof prefs.masterExcludes !== 'object' || Array.isArray(prefs.masterExcludes)) {
       prefs.masterExcludes = {};
@@ -3876,8 +3882,7 @@ function applyImportedConfig(text) {
     S.collection.sort = prefs.collSort || 'pokedex';
   }
 
-  closeConfig();
-  showToast('✓ Configuration importée');
+  if (!silent) { closeConfig(); showToast('✓ Configuration importée'); }
 
   applyPricesVisible();
   document.getElementById('btn-hide-prices').classList.toggle('active', pricesVisible);
@@ -4309,10 +4314,95 @@ document.getElementById('config-file').addEventListener('change', e => {
 document.getElementById('config-import').addEventListener('click', () => applyImportedConfig(document.getElementById('config-text').value));
 document.getElementById('config-share-code').addEventListener('click', () => copyText(buildShareCode(), '🔗 Code d\'échange copié !'));
 
-// 12c) Synchronisation entre appareils via un Worker (code court).
-// URL du service de sync (Worker Cloudflare) intégrée — l'utilisateur n'a rien à saisir.
+// 12c) Synchronisation entre appareils (Worker Cloudflare intégré).
+//  - Clé perso (auto) : PUT /<clé> à chaque changement (débounce) + GET au démarrage.
+//  - Partage ponctuel : POST / → code aléatoire, lu par GET /<code>.
 const SYNC_URL = 'https://pikidex-sync.maximew2000.workers.dev';
 function syncBase() { return SYNC_URL; }
+
+let syncBusy = false, syncPushTimer = null, syncReady = false;
+
+function genSyncKey() {
+  const chars = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'; // sans I/O/0/1/L
+  const buf = new Uint8Array(8); crypto.getRandomValues(buf);
+  let s = '';
+  for (let i = 0; i < 8; i++) { if (i === 4) s += '-'; s += chars[buf[i] % chars.length]; }
+  return s; // ex. K7P2-9MXT
+}
+function normSyncKey(k) { return (k || '').trim().toUpperCase().replace(/[^A-Z0-9-]/g, ''); }
+function setSyncStatus(msg) { const el = document.getElementById('sync-status'); if (el) el.textContent = msg || ''; }
+
+async function syncPushKey() {
+  if (!prefs.syncKey || syncBusy) return;
+  syncBusy = true;
+  try {
+    const ts = Date.now();
+    const body = JSON.stringify({ _ts: ts, data: buildConfigPayload() });
+    const res = await fetch(`${syncBase()}/${encodeURIComponent(prefs.syncKey)}`,
+      { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body });
+    if (!res.ok) throw new Error(res.status);
+    prefs.syncAppliedTs = ts; savePrefs();
+    setSyncStatus('Synchronisé ✓');
+  } catch (e) { setSyncStatus('Envoi en échec — réessai au prochain changement'); }
+  finally { syncBusy = false; }
+}
+function scheduleSyncPush() {
+  if (!prefs.syncKey || !syncReady) return; // pas avant le pull initial
+  setSyncStatus('Modifs en attente…');
+  clearTimeout(syncPushTimer);
+  syncPushTimer = setTimeout(syncPushKey, 2500);
+}
+async function syncPullKey({ force = false } = {}) {
+  if (!prefs.syncKey) return false;
+  try {
+    const res = await fetch(`${syncBase()}/${encodeURIComponent(prefs.syncKey)}`);
+    if (res.status === 404) { setSyncStatus('Aucune donnée pour cette clé'); return false; }
+    if (!res.ok) throw new Error(res.status);
+    const wrap = JSON.parse(await res.text());
+    if (!wrap || !wrap.data) return false;
+    if (!force && !((wrap._ts || 0) > (prefs.syncAppliedTs || 0))) { setSyncStatus('Déjà à jour ✓'); return false; }
+    applyImportedConfig(wrap.data, { silent: true }); // applyImportedConfig préserve syncKey
+    prefs.syncAppliedTs = wrap._ts || Date.now(); savePrefs();
+    setSyncStatus('Récupéré ✓');
+    return true;
+  } catch (e) { setSyncStatus('Récupération en échec'); return false; }
+}
+function refreshSyncUI() {
+  const has = !!prefs.syncKey;
+  const box = document.getElementById('sync-key-box'), setup = document.getElementById('sync-setup-box');
+  if (box) box.hidden = !has;
+  if (setup) setup.hidden = has;
+  const v = document.getElementById('sync-key-val'); if (v) v.textContent = prefs.syncKey || '';
+}
+
+// Clé perso : créer / utiliser une clé / sync manuelle / oublier
+document.getElementById('sync-create').addEventListener('click', async () => {
+  prefs.syncKey = genSyncKey(); prefs.syncAppliedTs = 0; savePrefs();
+  refreshSyncUI();
+  await syncPushKey();
+  copyText(prefs.syncKey, `🔑 Clé ${prefs.syncKey} copiée — colle-la sur tes autres appareils`);
+});
+document.getElementById('sync-use').addEventListener('click', async () => {
+  const k = normSyncKey(document.getElementById('sync-key-input').value);
+  if (k.length < 4) { showToast('Clé invalide', 'info'); return; }
+  prefs.syncKey = k; prefs.syncAppliedTs = 0; savePrefs();
+  refreshSyncUI();
+  const ok = await syncPullKey({ force: true }); // adopte les données de la clé
+  showToast(ok ? '✓ Synchronisé sur cette clé' : 'Clé enregistrée — aucune donnée encore', 'info');
+});
+document.getElementById('sync-now').addEventListener('click', async () => {
+  const btn = document.getElementById('sync-now'); btn.disabled = true;
+  await syncPullKey();   // récupère si plus récent
+  await syncPushKey();   // puis pousse l'état local
+  btn.disabled = false;
+});
+document.getElementById('sync-key-copy').addEventListener('click', () => copyText(prefs.syncKey, '🔑 Clé copiée'));
+document.getElementById('sync-forget').addEventListener('click', () => {
+  prefs.syncKey = ''; prefs.syncAppliedTs = 0; savePrefs(); refreshSyncUI();
+  showToast('Clé oubliée sur cet appareil', 'info');
+});
+
+// Partage ponctuel par code (ami) : POST → code, GET /<code> → import.
 document.getElementById('sync-send').addEventListener('click', async () => {
   const btn = document.getElementById('sync-send'), codeEl = document.getElementById('sync-code');
   btn.disabled = true; btn.textContent = '⬆ Envoi…';
@@ -4323,8 +4413,8 @@ document.getElementById('sync-send').addEventListener('click', async () => {
     codeEl.hidden = false; codeEl.textContent = code;
     copyText(code, `🔗 Code ${code} copié — entre-le sur l'autre appareil`);
   } catch (e) {
-    showToast('Envoi impossible — vérifie l\'URL du service', 'info');
-  } finally { btn.disabled = false; btn.textContent = '⬆ Envoyer ma config'; }
+    showToast('Envoi impossible — réessaie', 'info');
+  } finally { btn.disabled = false; btn.textContent = '⬆ Envoyer une copie'; }
 });
 document.getElementById('sync-get').addEventListener('click', async () => {
   const code = (document.getElementById('sync-code-input').value || '').trim().toUpperCase();
@@ -4337,11 +4427,12 @@ document.getElementById('sync-get').addEventListener('click', async () => {
     if (!res.ok) throw new Error(res.status);
     const text = await res.text();
     document.getElementById('config-text').value = text;
-    applyImportedConfig(text); // applique directement
+    applyImportedConfig(text);
   } catch (e) {
-    showToast('Récupération impossible — vérifie l\'URL / le code', 'info');
+    showToast('Récupération impossible — vérifie le code', 'info');
   } finally { btn.disabled = false; btn.textContent = '⬇ Récupérer'; }
 });
+refreshSyncUI();
 
 // 12b) Échange : code de partage + comparateur.
 document.getElementById('echange-copy-code').addEventListener('click', () => {
@@ -4366,10 +4457,12 @@ window.addEventListener('hashchange', () => {
 });
 
 // 14) Démarrage.
-fetchCards().then(() => {
-  if (location.hash.startsWith('#share=')) { handleShareLink(); return; }
-  handleDeepLink();
-  setActiveTab(prefs.tab || 'explore');
+fetchCards().then(async () => {
+  if (location.hash.startsWith('#share=')) { handleShareLink(); }
+  else { handleDeepLink(); setActiveTab(prefs.tab || 'explore'); }
+  // Synchro auto : récupère la dernière version de la clé perso, puis active le push auto.
+  if (prefs.syncKey) { try { await syncPullKey(); } catch (e) {} }
+  syncReady = true;
 });
 
 updateCollStat();

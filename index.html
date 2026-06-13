@@ -263,16 +263,45 @@
     <div class="config-body">
       <!-- Synchronisation entre appareils via code court -->
       <div class="config-sync">
-        <div class="config-sync-title">Synchroniser entre appareils</div>
-        <div class="config-sync-row">
-          <button class="config-btn primary" id="sync-send">⬆ Envoyer ma config</button>
-          <span class="sync-code" id="sync-code" hidden></span>
+        <div class="config-sync-title">Synchroniser mes appareils</div>
+
+        <!-- Clé configurée : synchro auto -->
+        <div id="sync-key-box" hidden>
+          <div class="config-sync-keyline">
+            <span class="config-sync-keylabel">Ma clé</span>
+            <span class="sync-code" id="sync-key-val"></span>
+            <button class="config-btn sync-mini" id="sync-key-copy" title="Copier la clé">⧉</button>
+          </div>
+          <div class="config-sync-status" id="sync-status">Synchro automatique active</div>
+          <div class="config-sync-row">
+            <button class="config-btn primary" id="sync-now">⟳ Synchroniser maintenant</button>
+            <button class="config-btn sync-mini" id="sync-forget" title="Retirer la clé de cet appareil">Oublier</button>
+          </div>
         </div>
-        <div class="config-sync-row">
-          <input id="sync-code-input" class="sync-input" placeholder="Code reçu (ex. K7P2QX)" autocomplete="off" spellcheck="false">
-          <button class="config-btn" id="sync-get">⬇ Récupérer</button>
+
+        <!-- Pas encore de clé -->
+        <div id="sync-setup-box">
+          <div class="config-sync-row">
+            <button class="config-btn primary" id="sync-create">＋ Créer ma clé</button>
+            <span class="config-sync-or">ou</span>
+            <input id="sync-key-input" class="sync-input" placeholder="coller une clé existante" autocomplete="off" spellcheck="false">
+            <button class="config-btn" id="sync-use">Utiliser</button>
+          </div>
+          <div class="config-sync-hint">Crée une clé sur un appareil, puis colle-la sur tes autres appareils. Ensuite tout se synchronise tout seul (à chaque changement et à l'ouverture).</div>
         </div>
-        <div class="config-sync-hint">Envoie ta config depuis un appareil, puis entre le code sur l'autre pour la récupérer.</div>
+
+        <!-- Partage ponctuel par code (pour un ami) -->
+        <details class="config-sync-oneoff">
+          <summary>Partage ponctuel par code (ami)</summary>
+          <div class="config-sync-row">
+            <button class="config-btn" id="sync-send">⬆ Envoyer une copie</button>
+            <span class="sync-code" id="sync-code" hidden></span>
+          </div>
+          <div class="config-sync-row">
+            <input id="sync-code-input" class="sync-input" placeholder="Code reçu (ex. K7P2-9MXT)" autocomplete="off" spellcheck="false">
+            <button class="config-btn" id="sync-get">⬇ Récupérer</button>
+          </div>
+        </details>
       </div>
 
       <div class="config-note">

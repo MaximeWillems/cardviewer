@@ -1,8 +1,9 @@
 /* ════════════════════════════════════════════════════════════════════════
    Pikidex — Worker de synchronisation de config entre appareils
    ────────────────────────────────────────────────────────────────────────
-   POST  /          body = JSON de config  → stocke et renvoie { "code": "K7P2QX" }
-   GET   /<CODE>                            → renvoie le JSON stocké (404 si absent)
+   POST  /          body = JSON de config  → stocke et renvoie { "code": "K7P2QX" }  (partage ponctuel)
+   PUT   /<CLE>      body = JSON de config  → stocke sous la clé perso (synchro auto)  → { "ok": true }
+   GET   /<CODE|CLE>                        → renvoie le JSON stocké (404 si absent)
 
    Déploiement (tableau de bord Cloudflare, sans CLI) :
    1. Workers & Pages → Create → Worker → nomme-le (ex. pikidex-sync) → Deploy
@@ -16,9 +17,10 @@
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'GET,POST,OPTIONS',
+  'Access-Control-Allow-Methods': 'GET,POST,PUT,OPTIONS',
   'Access-Control-Allow-Headers': 'Content-Type',
 };
+const KEY_RE = /^[A-Z0-9][A-Z0-9-]{3,39}$/; // clés perso autorisées (4–40 car.)
 const TTL = 60 * 60 * 24 * 60;          // 60 jours
 const MAX_BYTES = 3 * 1024 * 1024;      // 3 Mo de garde-fou
 
@@ -38,6 +40,7 @@ export default {
 
     const code = new URL(request.url).pathname.replace(/^\/+/, '').toUpperCase();
 
+    // POST / (sans clé) → partage ponctuel : génère un code aléatoire.
     if (request.method === 'POST') {
       const body = await request.text();
       if (!body) return json({ error: 'empty' }, 400);
@@ -47,6 +50,16 @@ export default {
       for (let i = 0; i < 3 && (await env.CONFIGS.get(newCode)); i++) newCode = genCode();
       await env.CONFIGS.put(newCode, body, { expirationTtl: TTL });
       return json({ code: newCode }, 200);
+    }
+
+    // PUT /<clé> → écrit la config sous une clé perso choisie (synchro auto).
+    if (request.method === 'PUT' && code) {
+      if (!KEY_RE.test(code)) return json({ error: 'bad key' }, 400);
+      const body = await request.text();
+      if (!body) return json({ error: 'empty' }, 400);
+      if (body.length > MAX_BYTES) return json({ error: 'too large' }, 413);
+      await env.CONFIGS.put(code, body, { expirationTtl: TTL });
+      return json({ ok: true }, 200);
     }
 
     if (request.method === 'GET' && code) {
