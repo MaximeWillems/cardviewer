@@ -3639,7 +3639,8 @@ async function startCamera() {
     const v = document.getElementById('scan-video');
     v.srcObject = scanStream;
     await v.play();
-    setScanStatus('Approche la carte et tape l\'écran pour lire le N°.');
+    setScanStatus('Place la carte dans le cadre — lecture automatique.');
+    startScanLoop(); // auto-capture quand la carte est nette et immobile
   } catch (e) {
     setScanStatus('Caméra refusée — saisis le N° ci-dessous.');
   }
@@ -3721,8 +3722,67 @@ function cropCardRegion(v, rx, ry, rw, rh, upscale = 3) {
   return preprocessForOcr(c);
 }
 
-// On lit UNIQUEMENT le numéro (le plus fiable). On vise large (bas de la carte)
-// et on affiche ce qui a été capturé/lu (debug) pour pouvoir régler le tir.
+// Binarisation par seuil d'Otsu : texte sombre sur fond clair → noir/blanc pur,
+// ce qui aide nettement Tesseract sur du petit texte.
+function otsuThreshold(canvas) {
+  const ctx = canvas.getContext('2d');
+  const im = ctx.getImageData(0, 0, canvas.width, canvas.height), d = im.data;
+  const n = d.length / 4, g = new Uint8Array(n), hist = new Array(256).fill(0);
+  for (let i = 0, j = 0; i < d.length; i += 4, j++) { const v = (0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]) | 0; g[j] = v; hist[v]++; }
+  let sum = 0; for (let t = 0; t < 256; t++) sum += t * hist[t];
+  let sumB = 0, wB = 0, maxVar = -1, thr = 128;
+  for (let t = 0; t < 256; t++) {
+    wB += hist[t]; if (!wB) continue; const wF = n - wB; if (!wF) break;
+    sumB += t * hist[t]; const mB = sumB / wB, mF = (sum - sumB) / wF;
+    const between = wB * wF * (mB - mF) * (mB - mF);
+    if (between > maxVar) { maxVar = between; thr = t; }
+  }
+  for (let i = 0, j = 0; i < d.length; i += 4, j++) { const val = g[j] > thr ? 255 : 0; d[i] = d[i + 1] = d[i + 2] = val; }
+  ctx.putImageData(im, 0, 0);
+  return canvas;
+}
+
+// Extrait un numéro de carte d'un texte OCR. Accepte « 029/198 », « 029 198 »
+// (slash manqué) ou un nombre seul.
+function parseNumFromText(raw) {
+  const nums = (raw.match(/\d{1,3}/g) || []);
+  const xy = raw.match(/(\d{1,3})\s*\/\s*(\d{1,3})/);
+  if (xy) return { number: xy[1], total: xy[2], xy: true };
+  if (nums.length >= 2) return { number: nums[0], total: nums[1], xy: true };
+  if (nums.length === 1) return { number: nums[0], total: '', xy: false };
+  return null;
+}
+
+// Zones probables du n° de collection (fractions DANS la carte), de la plus
+// précise (coin bas-gauche moderne) à la plus large (repli). On essaie chacune.
+const SCAN_NUM_REGIONS = {
+  international: [
+    { x: 0.03, y: 0.88, w: 0.46, h: 0.10 },
+    { x: 0.00, y: 0.84, w: 0.55, h: 0.15 },
+    { x: 0.00, y: 0.66, w: 1.00, h: 0.32 },
+  ],
+  asian: [
+    { x: 0.02, y: 0.88, w: 0.52, h: 0.10 },
+    { x: 0.00, y: 0.84, w: 0.62, h: 0.15 },
+    { x: 0.00, y: 0.66, w: 1.00, h: 0.32 },
+  ],
+};
+
+function renderScanDebug(attempts, best) {
+  const dbg = document.getElementById('scan-debug');
+  if (!dbg) return;
+  dbg.hidden = false;
+  dbg.innerHTML = attempts.map((a, i) => {
+    const read = a.parsed ? (a.parsed.total ? `${a.parsed.number}/${a.parsed.total}` : a.parsed.number) : '—';
+    return `<div class="scan-dbg-item${(best && a.parsed === best) ? ' chosen' : ''}">
+      <img src="${a.crop.toDataURL('image/png')}" alt="zone ${i + 1}">
+      <div class="scan-debug-text"><b>${read}</b> <span class="scan-dbg-raw">« ${escapeHtml((a.raw || '').replace(/\n/g, ' ') || '(rien)')} »</span></div>
+    </div>`;
+  }).join('');
+}
+
+// On lit UNIQUEMENT le numéro (le plus fiable). On essaie plusieurs zones et on
+// retient celle qui donne un X/Y ; le debug montre chaque tentative pour régler.
 async function captureAndOcr() {
   const v = document.getElementById('scan-video');
   if (!v || !v.videoWidth) return;
@@ -3730,24 +3790,26 @@ async function captureAndOcr() {
   setScanStatus(window.Tesseract ? 'Lecture…' : 'Chargement de l\'OCR (1ère fois)…');
   try {
     const worker = await getOcrWorker(lang);
-    const crop = cropCardRegion(v, 0, 0.66, 1, 0.32, 3); // tout le bas de la carte
-    await worker.setParameters({ tessedit_char_whitelist: '0123456789/', tessedit_pageseg_mode: '6' });
-    const raw = (await worker.recognize(crop)).data.text || '';
-    const compact = raw.replace(/\s+/g, '');
-    const m = compact.match(/(\d{1,3})\/(\d{1,3})/) || compact.match(/(\d{1,3})/);
-    // Debug visible : l'image exacte lue + le texte brut reconnu.
-    const dbg = document.getElementById('scan-debug');
-    if (dbg) {
-      dbg.hidden = false;
-      document.getElementById('scan-debug-img').src = crop.toDataURL('image/png');
-      document.getElementById('scan-debug-text').textContent = 'lu : « ' + (raw.trim().replace(/\n/g, ' ') || '(rien)') + ' »';
+    await worker.setParameters({ tessedit_char_whitelist: '0123456789/', tessedit_pageseg_mode: '7' });
+    const regions = SCAN_NUM_REGIONS[currentRegion] || SCAN_NUM_REGIONS.international;
+    const attempts = [];
+    let best = null;
+    for (const reg of regions) {
+      const crop = cropCardRegion(v, reg.x, reg.y, reg.w, reg.h, 4);
+      otsuThreshold(crop);
+      const raw = ((await worker.recognize(crop)).data.text || '').trim();
+      const parsed = parseNumFromText(raw);
+      attempts.push({ crop, raw, parsed });
+      if (parsed && parsed.xy) { best = parsed; break; } // X/Y trouvé → on s'arrête
     }
-    if (m) {
-      document.getElementById('scan-num').value = m[2] ? `${m[1]}/${m[2]}` : m[1];
+    if (!best) { const a = attempts.find(x => x.parsed); if (a) best = a.parsed; }
+    renderScanDebug(attempts, best);
+    if (best) {
+      document.getElementById('scan-num').value = best.total ? `${best.number}/${best.total}` : best.number;
       renderScanCandidates();
-      setScanStatus(`N° ${m[2] ? m[1] + '/' + m[2] : m[1]} — tape la bonne carte ↓`);
+      setScanStatus(`N° ${best.total ? best.number + '/' + best.total : best.number} — tape la bonne carte ↓`);
     } else {
-      setScanStatus('Numéro non lu — vois la zone capturée ci-dessous.');
+      setScanStatus('Numéro non lu — vois les zones lues ci-dessous.');
     }
   } catch (e) {
     setScanStatus('Lecture impossible — saisis le N° ci-dessous.');

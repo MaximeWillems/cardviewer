@@ -1231,12 +1231,16 @@
     pointer-events: none;
   }
   .scan-debug {
-    display: flex; align-items: center; gap: 10px;
+    display: flex; flex-direction: column; gap: 6px;
     margin-top: 10px; padding: 8px;
     border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface2);
   }
-  .scan-debug img { height: 44px; max-width: 60%; border-radius: 4px; background: #fff; object-fit: contain; }
-  .scan-debug-text { font-size: 12px; color: var(--muted); font-family: monospace; word-break: break-all; }
+  .scan-dbg-item { display: flex; align-items: center; gap: 10px; padding: 4px; border-radius: 6px; }
+  .scan-dbg-item.chosen { background: rgba(var(--accent-rgb),0.12); outline: 1px solid var(--accent); }
+  .scan-dbg-item img { height: 38px; max-width: 50%; border-radius: 4px; background: #fff; object-fit: contain; }
+  .scan-debug-text { font-size: 12px; color: var(--text); font-family: monospace; word-break: break-all; }
+  .scan-debug-text b { color: var(--accent); }
+  .scan-dbg-raw { color: var(--muted); }
   .scan-manual { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
   .scan-manual label { font-size: 12px; color: var(--muted); white-space: nowrap; }
   .scan-manual input {
