@@ -240,14 +240,18 @@ if (!prefs.masterExcludes || typeof prefs.masterExcludes !== 'object' || Array.i
   prefs.masterExcludes = {};
 }
 
+// État de synchro (déclaré tôt : les fonctions de sauvegarde ci-dessous déclenchent
+// le push auto, et scheduleSyncPush lit syncReady — pas de zone morte au chargement).
+let syncBusy = false, syncPushTimer = null, syncReady = false;
+
 function savePrefs()  { localStorage.setItem(LS_PREFS,  JSON.stringify(prefs)); }
-function saveCollection() { localStorage.setItem(LS_COLLECTION, JSON.stringify(collection)); }
+function saveCollection() { localStorage.setItem(LS_COLLECTION, JSON.stringify(collection)); scheduleSyncPush(); }
 // Conservés comme alias (anciens appelants) — toute la donnée vit dans collection.
 function saveOwned()  { saveCollection(); }
 function saveWanted() { saveCollection(); }
 function saveTrade()  { saveCollection(); }
 function savePrices() { saveCollection(); }
-function saveTags()   { localStorage.setItem(LS_TAGS,   JSON.stringify(tagsMap)); }
+function saveTags()   { localStorage.setItem(LS_TAGS,   JSON.stringify(tagsMap)); scheduleSyncPush(); }
 
 /* ── Tags personnalisés par carte ─────────────────────────────────────── */
 function getTags(id) { return tagsMap[id] || []; }
@@ -291,8 +295,8 @@ function onTagsChanged() {
   const st = S[currentTab];
   if (st && st.tag && st.tag !== 'all' && (currentTab === 'explore' || currentTab === 'collection')) refresh(currentTab);
 }
-function saveMasters() { localStorage.setItem(LS_MASTERS, JSON.stringify(startedMasters)); }
-function savePresetsLS() { localStorage.setItem(LS_PRESETS, JSON.stringify(filterPresets)); }
+function saveMasters() { localStorage.setItem(LS_MASTERS, JSON.stringify(startedMasters)); scheduleSyncPush(); }
+function savePresetsLS() { localStorage.setItem(LS_PRESETS, JSON.stringify(filterPresets)); scheduleSyncPush(); }
 
 /* ── Régions de catalogue & langues ───────────────────────────────────────
    Le « type de série » (région) définit l'espace d'ids = quelles cartes
@@ -420,7 +424,7 @@ function rebuildProjections() {
     }
   }
 }
-function afterCollectionChange() { rebuildProjections(); saveCollection(); updateCollStat(); scheduleSyncPush(); }
+function afterCollectionChange() { rebuildProjections(); saveCollection(); updateCollStat(); } // saveCollection déclenche le push auto
 // Mémorise les données d'affichage d'une carte qu'on vient d'ajouter à la
 // collection, pour qu'elle reste visible depuis l'autre catalogue.
 function snapshotById(id) {
@@ -4319,8 +4323,7 @@ document.getElementById('config-share-code').addEventListener('click', () => cop
 //  - Partage ponctuel : POST / → code aléatoire, lu par GET /<code>.
 const SYNC_URL = 'https://pikidex-sync.maximew2000.workers.dev';
 function syncBase() { return SYNC_URL; }
-
-let syncBusy = false, syncPushTimer = null, syncReady = false;
+// (syncBusy / syncPushTimer / syncReady déclarés en haut, avant les saveX.)
 
 function genSyncKey() {
   const chars = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'; // sans I/O/0/1/L
