@@ -3785,36 +3785,79 @@ function parseNumFromText(raw) {
   return null;
 }
 
-// Zones probables du n° de collection (fractions DANS la carte), de la plus
-// précise (coin bas-gauche moderne) à la plus large (repli). On essaie chacune.
+// Fractions du n° de collection DANS LA CARTE (appliquées au rectangle de carte
+// détecté, pas au cadre) : coin bas-gauche moderne → de plus en plus large.
 const SCAN_NUM_REGIONS = {
   international: [
-    { x: 0.03, y: 0.88, w: 0.46, h: 0.10 },
-    { x: 0.00, y: 0.84, w: 0.55, h: 0.15 },
-    { x: 0.00, y: 0.66, w: 1.00, h: 0.32 },
+    { x: 0.03, y: 0.90, w: 0.50, h: 0.085 },
+    { x: 0.00, y: 0.86, w: 0.62, h: 0.13 },
+    { x: 0.00, y: 0.80, w: 1.00, h: 0.19 },
   ],
   asian: [
-    { x: 0.02, y: 0.88, w: 0.52, h: 0.10 },
-    { x: 0.00, y: 0.84, w: 0.62, h: 0.15 },
-    { x: 0.00, y: 0.66, w: 1.00, h: 0.32 },
+    { x: 0.02, y: 0.90, w: 0.55, h: 0.085 },
+    { x: 0.00, y: 0.86, w: 0.66, h: 0.13 },
+    { x: 0.00, y: 0.80, w: 1.00, h: 0.19 },
   ],
 };
 
+// Détecte le rectangle de la CARTE dans le cadre-guide (elle flotte dans sa
+// pochette → marges sombres). Projection de luminosité : la carte = grande zone
+// claire centrale. Renvoie un rect en px vidéo (repli sur le cadre si douteux).
+function detectCardRect(v) {
+  const r = cardRectInVideo(v);
+  const W = 160, H = Math.max(1, Math.round(W * r.h / r.w));
+  const c = document.createElement('canvas'); c.width = W; c.height = H;
+  const ctx = c.getContext('2d');
+  ctx.drawImage(v, r.x, r.y, r.w, r.h, 0, 0, W, H);
+  const d = ctx.getImageData(0, 0, W, H).data;
+  const g = new Float32Array(W * H); let sum = 0;
+  for (let i = 0, j = 0; i < d.length; i += 4, j++) { const val = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]; g[j] = val; sum += val; }
+  const thr = (sum / (W * H)) * 0.92; // la carte est plus claire que le fond
+  const col = new Int32Array(W), row = new Int32Array(H);
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (g[y * W + x] > thr) { col[x]++; row[y]++; }
+  const span = (arr, len, perp) => {
+    const need = perp * 0.4; let lo = 0, hi = len - 1;
+    while (lo < len && arr[lo] < need) lo++;
+    while (hi > lo && arr[hi] < need) hi--;
+    return [lo, hi];
+  };
+  const [x0, x1] = span(col, W, H), [y0, y1] = span(row, H, W);
+  const cw = x1 - x0, ch = y1 - y0;
+  if (cw < W * 0.4 || ch < H * 0.4) return { x: r.x, y: r.y, w: r.w, h: r.h, detected: false };
+  return { x: r.x + (x0 / W) * r.w, y: r.y + (y0 / H) * r.h, w: (cw / W) * r.w, h: (ch / H) * r.h, detected: true };
+}
+// Rects absolus (px vidéo) des zones-numéro, relatifs au rectangle de carte.
+function numberCropsForCard(cb) {
+  const fr = SCAN_NUM_REGIONS[currentRegion] || SCAN_NUM_REGIONS.international;
+  return fr.map(f => ({ x: cb.x + f.x * cb.w, y: cb.y + f.y * cb.h, w: f.w * cb.w, h: f.h * cb.h }));
+}
+// Crop d'un rect absolu (px vidéo), fortement agrandi puis prétraité.
+function cropAbs(v, rect, upscale = 6) {
+  const c = document.createElement('canvas');
+  c.width = Math.max(1, Math.round(rect.w * upscale));
+  c.height = Math.max(1, Math.round(rect.h * upscale));
+  c.getContext('2d').drawImage(v, rect.x, rect.y, rect.w, rect.h, 0, 0, c.width, c.height);
+  return preprocessForOcr(c);
+}
+
 // Image complète de la zone-carte avec une grille de repères en % — me permet de
 // lire la position réelle du numéro et de caler les coordonnées de crop.
-function fullCardDebugCanvas(v) {
+function fullCardDebugCanvas(v, cb, numRects) {
   const r = cardRectInVideo(v);
   const W = 300, H = Math.max(1, Math.round(W * r.h / r.w));
   const c = document.createElement('canvas'); c.width = W; c.height = H;
   const ctx = c.getContext('2d');
   ctx.drawImage(v, r.x, r.y, r.w, r.h, 0, 0, W, H);
-  ctx.strokeStyle = 'rgba(0,200,255,0.55)'; ctx.lineWidth = 1;
+  ctx.strokeStyle = 'rgba(0,200,255,0.5)'; ctx.lineWidth = 1;
   for (let p = 10; p < 100; p += 10) {
     const x = W * p / 100, y = H * p / 100;
     ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
   }
   ctx.fillStyle = 'rgba(0,220,255,0.95)'; ctx.font = 'bold 10px monospace';
   for (let p = 0; p <= 100; p += 20) { ctx.fillText(String(p), W * p / 100 + 1, 9); ctx.fillText(String(p), 1, H * p / 100 + 9); }
+  const toCv = rc => ({ x: (rc.x - r.x) / r.w * W, y: (rc.y - r.y) / r.h * H, w: rc.w / r.w * W, h: rc.h / r.h * H });
+  if (cb) { const b = toCv(cb); ctx.strokeStyle = cb.detected ? 'lime' : 'orange'; ctx.lineWidth = 2; ctx.strokeRect(b.x, b.y, b.w, b.h); } // carte détectée (verte) / repli (orange)
+  if (numRects) { ctx.strokeStyle = 'rgba(255,110,0,0.95)'; ctx.lineWidth = 1.5; numRects.forEach(rc => { const b = toCv(rc); ctx.strokeRect(b.x, b.y, b.w, b.h); }); } // zones-numéro essayées
   return c;
 }
 
@@ -3844,11 +3887,12 @@ async function captureAndOcr() {
   try {
     const worker = await getOcrWorker(lang);
     await worker.setParameters({ tessedit_char_whitelist: '0123456789/', tessedit_pageseg_mode: '7' });
-    const regions = SCAN_NUM_REGIONS[currentRegion] || SCAN_NUM_REGIONS.international;
+    const cb = detectCardRect(v);                 // bords de la carte (pas le cadre)
+    const regions = numberCropsForCard(cb);       // zones-numéro relatives à la carte
     const attempts = [];
     let best = null;
     for (const reg of regions) {
-      const crop = cropCardRegion(v, reg.x, reg.y, reg.w, reg.h, 4);
+      const crop = cropAbs(v, reg, 6);
       otsuThreshold(crop);
       const raw = ((await worker.recognize(crop)).data.text || '').trim();
       const parsed = parseNumFromText(raw);
@@ -3856,7 +3900,7 @@ async function captureAndOcr() {
       if (parsed && parsed.xy) { best = parsed; break; } // X/Y trouvé → on s'arrête
     }
     if (!best) { const a = attempts.find(x => x.parsed); if (a) best = a.parsed; }
-    renderScanDebug(attempts, best, fullCardDebugCanvas(v));
+    renderScanDebug(attempts, best, fullCardDebugCanvas(v, cb, regions));
     if (best) {
       document.getElementById('scan-num').value = best.total ? `${best.number}/${best.total}` : best.number;
       renderScanCandidates();
