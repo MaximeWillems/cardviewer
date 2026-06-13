@@ -230,6 +230,7 @@ const defaultPrefs = {
   // masterExcludes : kinds exclus du comptage, PAR master set (clé "mode:key")
   // Stocké comme { "set:sv03.5": [...kinds], "artist:Mitsuhiro Arita": [...kinds] }
   masterExcludes: {},
+  syncUrl: '', // URL du Worker de synchronisation entre appareils (code court)
 };
 let prefs = { ...defaultPrefs, ...JSON.parse(localStorage.getItem(LS_PREFS) || '{}') };
 prefs.listOrder = { ...defaultPrefs.listOrder, ...(prefs.listOrder || {}) };
@@ -4308,6 +4309,54 @@ document.getElementById('config-file').addEventListener('change', e => {
 });
 document.getElementById('config-import').addEventListener('click', () => applyImportedConfig(document.getElementById('config-text').value));
 document.getElementById('config-share-code').addEventListener('click', () => copyText(buildShareCode(), '🔗 Code d\'échange copié !'));
+
+// 12c) Synchronisation entre appareils via un Worker (code court).
+function syncBase() { return (prefs.syncUrl || '').trim().replace(/\/+$/, ''); }
+function requireSyncUrl() {
+  if (syncBase()) return true;
+  const d = document.querySelector('.config-sync-cfg'); if (d) d.open = true;
+  const u = document.getElementById('sync-url'); if (u) u.focus();
+  showToast('Renseigne d\'abord l\'URL du service de sync', 'info');
+  return false;
+}
+(() => {
+  const urlInput = document.getElementById('sync-url');
+  if (urlInput) {
+    urlInput.value = prefs.syncUrl || '';
+    urlInput.addEventListener('change', () => { prefs.syncUrl = urlInput.value.trim(); savePrefs(); });
+  }
+})();
+document.getElementById('sync-send').addEventListener('click', async () => {
+  if (!requireSyncUrl()) return;
+  const btn = document.getElementById('sync-send'), codeEl = document.getElementById('sync-code');
+  btn.disabled = true; btn.textContent = '⬆ Envoi…';
+  try {
+    const res = await fetch(syncBase(), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: buildConfigPayload() });
+    if (!res.ok) throw new Error(res.status);
+    const { code } = await res.json();
+    codeEl.hidden = false; codeEl.textContent = code;
+    copyText(code, `🔗 Code ${code} copié — entre-le sur l'autre appareil`);
+  } catch (e) {
+    showToast('Envoi impossible — vérifie l\'URL du service', 'info');
+  } finally { btn.disabled = false; btn.textContent = '⬆ Envoyer ma config'; }
+});
+document.getElementById('sync-get').addEventListener('click', async () => {
+  if (!requireSyncUrl()) return;
+  const code = (document.getElementById('sync-code-input').value || '').trim().toUpperCase();
+  if (!code) { showToast('Entre un code', 'info'); return; }
+  const btn = document.getElementById('sync-get');
+  btn.disabled = true; btn.textContent = '⬇ …';
+  try {
+    const res = await fetch(`${syncBase()}/${encodeURIComponent(code)}`);
+    if (res.status === 404) { showToast('Code introuvable ou expiré', 'info'); return; }
+    if (!res.ok) throw new Error(res.status);
+    const text = await res.text();
+    document.getElementById('config-text').value = text;
+    applyImportedConfig(text); // applique directement
+  } catch (e) {
+    showToast('Récupération impossible — vérifie l\'URL / le code', 'info');
+  } finally { btn.disabled = false; btn.textContent = '⬇ Récupérer'; }
+});
 
 // 12b) Échange : code de partage + comparateur.
 document.getElementById('echange-copy-code').addEventListener('click', () => {

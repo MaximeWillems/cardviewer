@@ -261,6 +261,24 @@
       <button class="config-close" id="config-close" aria-label="Fermer">✕</button>
     </div>
     <div class="config-body">
+      <!-- Synchronisation entre appareils via code court -->
+      <div class="config-sync">
+        <div class="config-sync-title">Synchroniser entre appareils</div>
+        <div class="config-sync-row">
+          <button class="config-btn primary" id="sync-send">⬆ Envoyer ma config</button>
+          <span class="sync-code" id="sync-code" hidden></span>
+        </div>
+        <div class="config-sync-row">
+          <input id="sync-code-input" class="sync-input" placeholder="Code reçu (ex. K7P2QX)" autocomplete="off" spellcheck="false">
+          <button class="config-btn" id="sync-get">⬇ Récupérer</button>
+        </div>
+        <details class="config-sync-cfg">
+          <summary>Service de synchronisation</summary>
+          <input id="sync-url" class="sync-input" placeholder="https://…workers.dev" autocomplete="off" spellcheck="false">
+          <div class="config-sync-hint">URL de ton Worker Cloudflare (à configurer une seule fois, mémorisée sur cet appareil).</div>
+        </details>
+      </div>
+
       <div class="config-note">
         Cette configuration contient uniquement tes données locales : cartes en collection, cartes à obtenir, cartes à vendre, prix saisis et préférences. Elle peut être copiée en texte ou téléchargée en fichier JSON.
       </div>
