@@ -60,6 +60,7 @@
     <button class="nav-tab" data-view="collection">Ma Collection</button>
     <button class="nav-tab" data-view="master">Master Set</button>
     <button class="nav-tab" data-view="binder">Classeur</button>
+    <button class="nav-tab" data-view="tierlist">Tier list</button>
     <button class="nav-tab" data-view="echange">Échange</button>
   </nav>
 
@@ -167,6 +168,34 @@
     <div class="config-body">
       <input class="binder-picker-search" id="binder-picker-search" type="text" placeholder="Rechercher dans ma collection…" autocomplete="off">
       <div class="binder-picker-grid" id="binder-picker-grid"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ── TIER LIST ────────────────────────────────── -->
+<div class="tierlist-view" id="tierlist-view">
+  <div class="tierlist-bar">
+    <span class="tierlist-hint">Classe tes cartes par rangée, puis exporte en image.</span>
+    <button class="tierlist-btn" id="tier-add">+ rangée</button>
+    <button class="tierlist-btn primary" id="tier-export">⬇ Exporter en image</button>
+  </div>
+  <div class="tier-rows" id="tier-rows"></div>
+</div>
+
+<!-- Sélecteur de carte pour la tier list (collection / à obtenir) -->
+<div class="config-overlay" id="tier-picker">
+  <div class="config-modal" role="dialog" aria-modal="true">
+    <div class="config-head">
+      <div class="config-title">Ajouter une carte</div>
+      <button class="config-close" id="tier-picker-close" aria-label="Fermer">✕</button>
+    </div>
+    <div class="config-body">
+      <div class="tier-picker-tabs">
+        <button class="tier-src-tab active" data-src="owned">Ma collection</button>
+        <button class="tier-src-tab" data-src="wanted">À obtenir</button>
+      </div>
+      <input class="binder-picker-search" id="tier-picker-search" type="text" placeholder="Rechercher…" autocomplete="off">
+      <div class="binder-picker-grid" id="tier-picker-grid"></div>
     </div>
   </div>
 </div>

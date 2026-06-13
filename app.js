@@ -1448,6 +1448,207 @@ function renderBinderPicker(query) {
 }
 
 /* ════════════════════════════════════════════════════════════════════════
+   TIER LIST (rangées S/A/B/C/D → cartes → export image). En mémoire (pas de
+   sauvegarde) ; l'objectif est l'export PNG.
+   ════════════════════════════════════════════════════════════════════════ */
+const TIER_LABELS = ['S', 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J'];
+let tierlist = {
+  tiers: [
+    { label: 'S', color: '#c0392b', cards: [] },
+    { label: 'A', color: '#e67e22', cards: [] },
+    { label: 'B', color: '#f1c40f', cards: [] },
+    { label: 'C', color: '#2ecc71', cards: [] },
+    { label: 'D', color: '#2980b9', cards: [] },
+  ],
+};
+let tierPickTarget = -1;
+let tierPickerSrc = 'owned';
+
+function closeTierMenus() { document.querySelectorAll('.tier-menu').forEach(m => m.remove()); }
+
+function renderTierlist() {
+  const root = document.getElementById('tier-rows');
+  if (!root) return;
+  closeTierMenus();
+  root.innerHTML = '';
+  tierlist.tiers.forEach((tier, i) => root.appendChild(buildTierRow(tier, i)));
+}
+
+function buildTierRow(tier, index) {
+  const row = document.createElement('div');
+  row.className = 'tier-row';
+
+  const label = document.createElement('div');
+  label.className = 'tier-label';
+  label.style.background = tier.color;
+  label.textContent = tier.label;
+  label.title = 'Renommer';
+  label.addEventListener('click', () => {
+    const v = prompt('Nom de la rangée :', tier.label);
+    if (v != null) { tier.label = v.trim() || tier.label; renderTierlist(); }
+  });
+
+  const ctrls = document.createElement('div');
+  ctrls.className = 'tier-ctrls';
+  ctrls.innerHTML = `<button class="tier-ctrl tier-color-btn" title="Couleur">🎨</button>` +
+    `<button class="tier-ctrl tier-remove" title="Supprimer la rangée">×</button>`;
+  ctrls.querySelector('.tier-color-btn').addEventListener('click', e => { e.stopPropagation(); openTierColorMenu(index, e.currentTarget); });
+  ctrls.querySelector('.tier-remove').addEventListener('click', () => {
+    if (tierlist.tiers.length <= 1) return;
+    tierlist.tiers.splice(index, 1); renderTierlist();
+  });
+
+  const left = document.createElement('div');
+  left.className = 'tier-left';
+  left.appendChild(label); left.appendChild(ctrls);
+
+  const strip = document.createElement('div');
+  strip.className = 'tier-strip';
+  tier.cards.forEach((slot, ci) => strip.appendChild(buildTierCard(slot, index, ci)));
+  const add = document.createElement('button');
+  add.className = 'tier-add-card'; add.textContent = '+';
+  add.addEventListener('click', () => openTierPicker(index));
+  strip.appendChild(add);
+
+  row.appendChild(left);
+  row.appendChild(strip);
+  return row;
+}
+
+function buildTierCard(slot, tierIndex, cardIndex) {
+  const c = lookupCard(slot.id);
+  const img = c && c.image ? c.image + '/low.webp' : '';
+  const el = document.createElement('div');
+  el.className = 'tier-card';
+  el.innerHTML = img
+    ? `<img src="${escapeHtml(img)}" alt="" loading="lazy" onerror="handleImageError(this)">`
+    : imagePlaceholder(c || { name: slot.id });
+  el.addEventListener('click', e => { e.stopPropagation(); openTierCardMenu(tierIndex, cardIndex, el); });
+  return el;
+}
+
+function openTierCardMenu(tierIndex, cardIndex, anchor) {
+  closeTierMenus();
+  const menu = document.createElement('div');
+  menu.className = 'tier-menu';
+  const targets = tierlist.tiers.map((t, i) =>
+    i === tierIndex ? '' : `<button class="tm-move" data-to="${i}" style="background:${t.color}">${escapeHtml(t.label)}</button>`
+  ).join('');
+  menu.innerHTML = `<div class="tm-row">${targets}</div><button class="tm-remove">Retirer</button>`;
+  anchor.appendChild(menu);
+  menu.querySelectorAll('.tm-move').forEach(b => b.addEventListener('click', e => {
+    e.stopPropagation();
+    const [card] = tierlist.tiers[tierIndex].cards.splice(cardIndex, 1);
+    tierlist.tiers[+b.dataset.to].cards.push(card);
+    renderTierlist();
+  }));
+  menu.querySelector('.tm-remove').addEventListener('click', e => {
+    e.stopPropagation();
+    tierlist.tiers[tierIndex].cards.splice(cardIndex, 1);
+    renderTierlist();
+  });
+}
+
+function openTierColorMenu(tierIndex, anchor) {
+  closeTierMenus();
+  const menu = document.createElement('div');
+  menu.className = 'tier-menu tier-color-menu';
+  menu.innerHTML = `<div class="tm-colors">${BINDER_COLORS.map(col => `<button class="tm-color" style="background:${col}" data-col="${col}"></button>`).join('')}</div>`;
+  anchor.appendChild(menu);
+  menu.querySelectorAll('.tm-color').forEach(b => b.addEventListener('click', e => {
+    e.stopPropagation();
+    tierlist.tiers[tierIndex].color = b.dataset.col; renderTierlist();
+  }));
+}
+document.addEventListener('click', () => closeTierMenus());
+
+function openTierPicker(tierIndex) {
+  tierPickTarget = tierIndex;
+  document.getElementById('tier-picker-search').value = '';
+  renderTierPicker('');
+  document.getElementById('tier-picker').classList.add('open');
+}
+function closeTierPicker() { document.getElementById('tier-picker').classList.remove('open'); tierPickTarget = -1; }
+
+function renderTierPicker(query) {
+  const grid = document.getElementById('tier-picker-grid');
+  if (!grid) return;
+  const q = (query || '').toLowerCase().trim();
+  const set = tierPickerSrc === 'wanted' ? wantedSet : ownedSet;
+  let cards = getCollectionPool().filter(c => set.has(c.id));
+  if (q) cards = cards.filter(c =>
+    (c.name || '').toLowerCase().includes(q) || (c.romaji && c.romaji.includes(q)) || String(c.localId || '').includes(q));
+  cards = sortByConfig(cards, 'set').slice(0, 120);
+  if (!cards.length) { grid.innerHTML = '<div class="scan-empty">Aucune carte ici.</div>'; return; }
+  grid.innerHTML = '';
+  cards.forEach(c => {
+    const lang = (tierPickerSrc === 'wanted' ? langsWith(c.id, 'wanted')[0] : ownedLangs(c.id)[0]) || currentLang;
+    const img = c.image ? c.image + '/low.webp' : '';
+    const el = document.createElement('button'); el.type = 'button'; el.className = 'binder-pick';
+    el.innerHTML = `${img ? `<img src="${escapeHtml(img)}" alt="" loading="lazy" onerror="handleImageError(this)">` : imagePlaceholder(c)}<span class="binder-pick-name">${escapeHtml(c.name || '—')}</span>`;
+    el.addEventListener('click', () => {
+      if (tierPickTarget >= 0) tierlist.tiers[tierPickTarget].cards.push({ id: c.id, lang });
+      closeTierPicker(); renderTierlist();
+    });
+    grid.appendChild(el);
+  });
+}
+
+// Export PNG via une popup + html2canvas (même mécanisme que l'export de vue).
+function exportTierImage() {
+  const rowsHtml = tierlist.tiers.map(t => {
+    const cards = t.cards.map(s => {
+      const c = lookupCard(s.id);
+      const img = c && c.image ? c.image + '/low.webp' : '';
+      return img ? `<img class="tc" src="${img}" crossorigin="anonymous">` : `<div class="tc tc-none"></div>`;
+    }).join('') || '<div class="tempty"></div>';
+    return `<div class="trow"><div class="tlbl" style="background:${t.color}">${escapeHtml(t.label)}</div><div class="tstrip">${cards}</div></div>`;
+  }).join('');
+
+  const html = `<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>Tier list</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"><\/script>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0;font-family:system-ui,sans-serif}
+  body{background:#0d0d0f;color:#eee;padding:16px}
+  .bar{display:flex;gap:10px;margin-bottom:14px;align-items:center}
+  .btn{padding:9px 16px;border-radius:8px;border:1px solid rgba(255,255,255,.2);background:#1e1e24;color:#eee;font-weight:700;cursor:pointer}
+  .btn.p{background:#2980b9;border-color:#2980b9;color:#fff}
+  #tier-export{background:#16161a;border-radius:10px;padding:8px;width:fit-content;min-width:340px}
+  .trow{display:flex;align-items:stretch;gap:6px;margin-bottom:6px}
+  .trow:last-child{margin-bottom:0}
+  .tlbl{min-width:64px;width:64px;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:22px;color:#fff;border-radius:6px;text-shadow:0 1px 2px rgba(0,0,0,.4);word-break:break-word;text-align:center;padding:4px}
+  .tstrip{flex:1;display:flex;flex-wrap:wrap;gap:5px;background:#0d0d0f;border-radius:6px;padding:5px;min-height:84px}
+  .tc{width:60px;height:84px;object-fit:cover;border-radius:4px;background:#222}
+  .tc-none{background:#222}
+  .prog{font-size:12px;color:#999}
+</style></head><body>
+<div class="bar">
+  <button class="btn p" id="gen">⬇ Générer le PNG</button>
+  <span class="prog" id="prog"></span>
+</div>
+<div id="tier-export">${rowsHtml}</div>
+<script>
+document.getElementById('gen').addEventListener('click', async function(){
+  var prog=document.getElementById('prog'); prog.textContent='Chargement des images…';
+  var imgs=[].slice.call(document.querySelectorAll('#tier-export img'));
+  await Promise.all(imgs.map(function(im){return new Promise(function(r){if(im.complete)return r();im.onload=r;im.onerror=r;});}));
+  prog.textContent='Rendu…';
+  try{
+    var node=document.getElementById('tier-export');
+    var canvas=await html2canvas(node,{backgroundColor:'#16161a',scale:2,useCORS:true,logging:false});
+    var link=document.createElement('a'); link.download='tierlist.png'; link.href=canvas.toDataURL('image/png'); link.click();
+    prog.textContent='✓ Image téléchargée';
+  }catch(e){prog.textContent='⚠ '+e.message;}
+});
+<\/script></body></html>`;
+
+  const w = window.open('', '_blank');
+  if (!w) { showToast('Autorise les pop-ups pour exporter', 'info'); return; }
+  w.document.write(html); w.document.close();
+}
+
+/* ════════════════════════════════════════════════════════════════════════
    ÉCHANGE (partage de listes + comparateur)
    App statique → le partage passe par un code copiable (base64) qui encode la
    wishlist + la liste à vendre. Le comparateur croise avec mes propres listes.
@@ -3691,12 +3892,14 @@ function setActiveTab(tab) {
   document.getElementById('collection-view').classList.toggle('active', currentTab === 'collection');
   document.getElementById('master-view').classList.toggle('active', currentTab === 'master');
   document.getElementById('binder-view').classList.toggle('active', currentTab === 'binder');
+  document.getElementById('tierlist-view').classList.toggle('active', currentTab === 'tierlist');
   document.getElementById('echange-view').classList.toggle('active', currentTab === 'echange');
   document.getElementById('explore-controls').style.display = currentTab === 'explore' ? '' : 'none';
   if (currentTab !== 'collection' && selectionMode) setSelectionMode(false);
   if (currentTab === 'collection') { populateFilters('collection'); renderCollection(); }
   if (currentTab === 'master') { masterSelected = null; renderMaster(); }
   if (currentTab === 'binder') renderBinder();
+  if (currentTab === 'tierlist') renderTierlist();
   if (currentTab === 'echange') renderEchange();
 }
 document.querySelectorAll('.nav-tab').forEach(tab => {
@@ -3713,6 +3916,21 @@ document.getElementById('binder-addpage').addEventListener('click', () => {
 document.getElementById('binder-picker-close').addEventListener('click', closeBinderPicker);
 document.getElementById('binder-picker').addEventListener('click', e => { if (e.target === e.currentTarget) closeBinderPicker(); });
 document.getElementById('binder-picker-search').addEventListener('input', e => renderBinderPicker(e.target.value));
+
+// Tier list : ajout de rangée, export, et sélecteur (collection / à obtenir).
+document.getElementById('tier-add').addEventListener('click', () => {
+  tierlist.tiers.push({ label: TIER_LABELS[tierlist.tiers.length] || '?', color: '#607d8b', cards: [] });
+  renderTierlist();
+});
+document.getElementById('tier-export').addEventListener('click', exportTierImage);
+document.getElementById('tier-picker-close').addEventListener('click', closeTierPicker);
+document.getElementById('tier-picker').addEventListener('click', e => { if (e.target === e.currentTarget) closeTierPicker(); });
+document.getElementById('tier-picker-search').addEventListener('input', e => renderTierPicker(e.target.value));
+document.querySelectorAll('.tier-src-tab').forEach(tab => tab.addEventListener('click', () => {
+  tierPickerSrc = tab.dataset.src;
+  document.querySelectorAll('.tier-src-tab').forEach(t => t.classList.toggle('active', t === tab));
+  renderTierPicker(document.getElementById('tier-picker-search').value);
+}));
 
 // 10) Sous-onglets Collection.
 document.querySelectorAll('.coll-tab-btn').forEach(btn => {
