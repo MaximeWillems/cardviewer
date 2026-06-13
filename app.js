@@ -3787,6 +3787,41 @@ function otsuThreshold(canvas) {
   return canvas;
 }
 
+// Seuillage ADAPTATIF (local) : compare chaque pixel à la moyenne de son
+// voisinage → isole un texte net même sur un fond en dégradé/illustration, là où
+// un seuil global (Otsu) échoue. Gère la polarité (texte clair OU sombre).
+function adaptiveThreshold(canvas, winFrac = 0.22, C = 8) {
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height, N = W * H;
+  const im = ctx.getImageData(0, 0, W, H), d = im.data;
+  const g = new Float32Array(N);
+  for (let i = 0, j = 0; i < d.length; i += 4, j++) g[j] = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+  // Image intégrale → moyenne de fenêtre en O(1).
+  const Wp = W + 1, ii = new Float64Array(Wp * (H + 1));
+  for (let y = 1; y <= H; y++) { let rs = 0; for (let x = 1; x <= W; x++) { rs += g[(y - 1) * W + (x - 1)]; ii[y * Wp + x] = ii[(y - 1) * Wp + x] + rs; } }
+  const win = Math.max(3, Math.round(Math.min(W, H) * winFrac)) | 1, r = win >> 1;
+  const mean = new Float32Array(N);
+  for (let y = 0; y < H; y++) {
+    const y0 = Math.max(0, y - r), y1 = Math.min(H - 1, y + r);
+    for (let x = 0; x < W; x++) {
+      const x0 = Math.max(0, x - r), x1 = Math.min(W - 1, x + r);
+      const area = (x1 - x0 + 1) * (y1 - y0 + 1);
+      mean[y * W + x] = (ii[(y1 + 1) * Wp + (x1 + 1)] - ii[y0 * Wp + (x1 + 1)] - ii[(y1 + 1) * Wp + x0] + ii[y0 * Wp + x0]) / area;
+    }
+  }
+  // Polarité : le texte est la MINORITÉ qui dévie de sa moyenne locale.
+  let dark = 0, light = 0;
+  for (let j = 0; j < N; j++) { if (g[j] < mean[j] - C) dark++; else if (g[j] > mean[j] + C) light++; }
+  const textIsDark = dark <= light;
+  for (let i = 0, j = 0; i < d.length; i += 4, j++) {
+    const fg = textIsDark ? (g[j] < mean[j] - C) : (g[j] > mean[j] + C);
+    const val = fg ? 0 : 255; // texte noir sur fond blanc (préférence Tesseract)
+    d[i] = d[i + 1] = d[i + 2] = val;
+  }
+  ctx.putImageData(im, 0, 0);
+  return canvas;
+}
+
 // Extrait un numéro de carte d'un texte OCR. Accepte « 029/198 », « 029 198 »
 // (slash manqué) ou un nombre seul.
 function parseNumFromText(raw) {
@@ -3921,7 +3956,8 @@ async function captureAndOcr() {
     let nameText = '';
     try {
       await worker.setParameters({ tessedit_char_whitelist: '', tessedit_pageseg_mode: '7' });
-      const nameCrop = cropAbs(v, nameReg, 4); // gros texte → pas de binarisation
+      const nameCrop = cropAbs(v, nameReg, 4);
+      adaptiveThreshold(nameCrop); // seuillage local : isole le nom du fond illustré
       nameText = cleanNameOcr((await worker.recognize(nameCrop)).data.text || '');
       attempts.push({ crop: nameCrop, raw: nameText || '(rien)', parsed: null, isName: true });
     } catch (e) {}
@@ -3933,7 +3969,7 @@ async function captureAndOcr() {
     let best = null;
     for (const reg of regions) {
       const crop = cropAbs(v, reg, 6);
-      otsuThreshold(crop);
+      adaptiveThreshold(crop, 0.3, 10); // seuillage local (fenêtre plus large pour le n°)
       const raw = ((await worker.recognize(crop)).data.text || '').trim();
       const parsed = parseNumFromText(raw);
       attempts.push({ crop, raw, parsed });
