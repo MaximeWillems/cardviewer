@@ -3939,9 +3939,68 @@ function renderScanDebug(attempts, best, full) {
   }).join('');
 }
 
-// On lit UNIQUEMENT le numéro (le plus fiable). On essaie plusieurs zones et on
-// retient celle qui donne un X/Y ; le debug montre chaque tentative pour régler.
+// Canvas de la carte détectée (≤ maxW de large) pour l'OCR cloud / le debug.
+function cardImageCanvas(v, cb, maxW = 1000) {
+  const scale = Math.min(1, maxW / cb.w);
+  const c = document.createElement('canvas');
+  c.width = Math.max(1, Math.round(cb.w * scale));
+  c.height = Math.max(1, Math.round(cb.h * scale));
+  c.getContext('2d').drawImage(v, cb.x, cb.y, cb.w, cb.h, 0, 0, c.width, c.height);
+  return c;
+}
+// OCR cloud via le Worker (OCR.space). Lance une erreur si indispo/non configuré.
+async function cloudOcr(dataUrl) {
+  const lang = currentRegion === 'asian' ? 'jpn' : 'fre';
+  const engine = currentRegion === 'asian' ? 1 : 2;
+  const res = await fetch(`${syncBase()}/ocr`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ image: dataUrl, lang, engine }),
+  });
+  if (!res.ok) throw new Error('http ' + res.status);
+  const j = await res.json();
+  if (!j || j.error || typeof j.text !== 'string') throw new Error((j && j.error) || 'ocr vide');
+  return j.text;
+}
+// Extrait nom + numéro du texte OCR complet : numéro par regex ; nom = la ligne
+// qui matche le mieux une carte du catalogue.
+function parseCloudText(text, pool) {
+  const flat = text.replace(/\s+/g, ' ');
+  const m = flat.match(/(\d{1,3})\s*\/\s*(\d{1,3})/);
+  const number = m ? m[1] : '', total = m ? m[2] : '';
+  let name = '', bestScore = 0;
+  for (const line of text.split('\n')) {
+    const clean = cleanNameOcr(line);
+    if (clean.length < 3) continue;
+    const c = findScanCandidates({ name: clean }, pool, 1)[0];
+    if (c && c.score > bestScore) { bestScore = c.score; name = clean; }
+  }
+  return { name, number, total };
+}
+
+// Capture : OCR cloud (fiable) en priorité, repli Tesseract local si indispo.
 async function captureAndOcr() {
+  const v = document.getElementById('scan-video');
+  if (!v || !v.videoWidth) return;
+  const cb = detectCardRect(v);
+  try {
+    setScanStatus('Lecture (cloud)…');
+    const cardCanvas = cardImageCanvas(v, cb, 1000);
+    const text = await cloudOcr(cardCanvas.toDataURL('image/jpeg', 0.6));
+    const parsed = parseCloudText(text, allCards);
+    lastScanName = parsed.name;
+    if (parsed.number) document.getElementById('scan-num').value = parsed.total ? `${parsed.number}/${parsed.total}` : parsed.number;
+    renderScanCandidates();
+    renderScanDebug([{ crop: cardCanvas, raw: text, parsed: null, isName: true }], null, fullCardDebugCanvas(v, cb, [], null));
+    setScanStatus(`${parsed.name ? '« ' + parsed.name + ' »' : 'Nom ?'}${parsed.number ? ' · N° ' + parsed.number + (parsed.total ? '/' + parsed.total : '') : ''} — tape la bonne carte ↓`);
+  } catch (e) {
+    setScanStatus('OCR cloud indispo — lecture locale…');
+    await captureAndOcrLocal();
+  }
+}
+
+// Repli : lecture locale (Tesseract.js) — utilisée si l'OCR cloud n'est pas
+// configuré. Moins fiable sur les polices stylisées.
+async function captureAndOcrLocal() {
   const v = document.getElementById('scan-video');
   if (!v || !v.videoWidth) return;
   const lang = currentRegion === 'asian' ? 'jpn' : 'eng';

@@ -4,6 +4,11 @@
    POST  /          body = JSON de config  → stocke et renvoie { "code": "K7P2QX" }  (partage ponctuel)
    PUT   /<CLE>      body = JSON de config  → stocke sous la clé perso (synchro auto)  → { "ok": true }
    GET   /<CODE|CLE>                        → renvoie le JSON stocké (404 si absent)
+   POST  /ocr       body = { image, lang, engine } → OCR via OCR.space → { "text": "…" }
+
+   OCR (scan de cartes) : créer une clé gratuite sur https://ocr.space/ocrapi/freekey,
+   puis Worker → Settings → Variables and Secrets → Add → type Secret →
+   Name = OCR_KEY, Value = <ta clé> → Deploy.
 
    Déploiement (tableau de bord Cloudflare, sans CLI) :
    1. Workers & Pages → Create → Worker → nomme-le (ex. pikidex-sync) → Deploy
@@ -39,6 +44,28 @@ export default {
     if (request.method === 'OPTIONS') return new Response(null, { headers: CORS });
 
     const code = new URL(request.url).pathname.replace(/^\/+/, '').toUpperCase();
+
+    // POST /ocr → lecture OCR d'une image de carte via OCR.space (clé côté serveur).
+    if (request.method === 'POST' && code === 'OCR') {
+      if (!env.OCR_KEY) return json({ error: 'OCR non configuré (secret OCR_KEY manquant)' }, 200);
+      let payload;
+      try { payload = await request.json(); } catch (e) { return json({ error: 'bad json' }, 400); }
+      if (!payload || !payload.image) return json({ error: 'no image' }, 400);
+      try {
+        const form = new FormData();
+        form.append('apikey', env.OCR_KEY);
+        form.append('base64Image', payload.image);   // data:image/jpeg;base64,…
+        form.append('OCREngine', String(payload.engine || 2));
+        form.append('scale', 'true');
+        form.append('detectOrientation', 'true');
+        if (payload.lang) form.append('language', payload.lang);
+        const r = await fetch('https://api.ocr.space/parse/image', { method: 'POST', body: form });
+        const j = await r.json();
+        if (j.IsErroredOnProcessing) return json({ error: (j.ErrorMessage && j.ErrorMessage[0]) || 'ocr error' }, 200);
+        const text = (j.ParsedResults && j.ParsedResults[0] && j.ParsedResults[0].ParsedText) || '';
+        return json({ text }, 200);
+      } catch (e) { return json({ error: 'ocr fetch failed' }, 200); }
+    }
 
     // POST / (sans clé) → partage ponctuel : génère un code aléatoire.
     if (request.method === 'POST') {
