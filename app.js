@@ -3633,16 +3633,49 @@ async function startCamera() {
   }
   try {
     scanStream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } },
+      video: {
+        facingMode: { ideal: 'environment' },
+        width: { ideal: 2560 }, height: { ideal: 1440 }, // résolution max raisonnable → texte plus net
+        focusMode: 'continuous',
+      },
     });
     const v = document.getElementById('scan-video');
     v.srcObject = scanStream;
     await v.play();
+    await applyCameraTuning(); // autofocus + expo + balance des blancs continus si dispo
     setScanStatus('Place la carte et appuie sur « Capturer ».');
-    startScanLoop(); // auto-capture quand la carte est nette et immobile
+    startScanLoop();
   } catch (e) {
     setScanStatus('Caméra refusée — saisis le N° ci-dessous.');
   }
+}
+
+// Active la mise au point continue (et expo/balance auto) quand le matériel le
+// permet — c'est ce qui évite les photos floues, fatales à l'OCR.
+async function applyCameraTuning() {
+  try {
+    const track = scanStream && scanStream.getVideoTracks()[0];
+    if (!track || !track.getCapabilities) return;
+    const caps = track.getCapabilities();
+    const adv = [];
+    if (caps.focusMode && caps.focusMode.includes('continuous'))               adv.push({ focusMode: 'continuous' });
+    if (caps.exposureMode && caps.exposureMode.includes('continuous'))         adv.push({ exposureMode: 'continuous' });
+    if (caps.whiteBalanceMode && caps.whiteBalanceMode.includes('continuous')) adv.push({ whiteBalanceMode: 'continuous' });
+    if (adv.length) await track.applyConstraints({ advanced: adv });
+  } catch (e) {}
+}
+// Re-déclenche la mise au point juste avant une capture (utile sur les appareils
+// qui ne maintiennent pas l'autofocus en continu).
+async function refocusOnce() {
+  try {
+    const track = scanStream && scanStream.getVideoTracks()[0];
+    if (!track || !track.getCapabilities) return;
+    const caps = track.getCapabilities();
+    if (caps.focusMode && caps.focusMode.includes('single-shot')) {
+      await track.applyConstraints({ advanced: [{ focusMode: 'single-shot' }] });
+      await new Promise(r => setTimeout(r, 450)); // laisse l'objectif faire le point
+    }
+  } catch (e) {}
 }
 function stopCamera() {
   stopScanLoop();
@@ -4274,10 +4307,15 @@ document.getElementById('scan-close').addEventListener('click', closeScanPanel);
 document.getElementById('scan-overlay').addEventListener('click', e => { if (e.target === e.currentTarget) closeScanPanel(); });
 document.getElementById('scan-num').addEventListener('input', renderScanCandidates);
 // Capture : bouton (principal) + tap sur la vidéo. L'auto-capture reste un bonus.
-function manualCapture() {
+async function manualCapture() {
   if (scanBusy) { setScanStatus('Lecture en cours…'); return; }
-  if (stableCount !== undefined) stableCount = 0;
-  autoCapture();
+  scanBusy = true;
+  stableCount = 0;
+  try {
+    setScanStatus('Mise au point…');
+    await refocusOnce();      // fait le point avant de capturer (anti-flou)
+    await captureAndOcr();
+  } finally { scanBusy = false; }
 }
 document.getElementById('scan-capture').addEventListener('click', manualCapture);
 document.getElementById('scan-cam-view').addEventListener('click', manualCapture);
