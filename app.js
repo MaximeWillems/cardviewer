@@ -641,16 +641,17 @@ function findScanCandidates(signals, pool, limit = 8) {
   const Y = (signals.total != null && signals.total !== '') ? Number(signals.total) : null;
   const name = signals.name ? String(signals.name).trim() : '';
 
-  // On part des cartes au bon numéro ; si rien et qu'on a un nom, on élargit.
-  let base = X != null ? pool.filter(c => normNum(c.localId) === X) : pool;
-  if (X != null && name && base.length === 0) base = pool;
+  // Avec un nom : on score TOUT le catalogue par le nom (le numéro, souvent mal
+  // lu, n'est qu'un bonus) → un bon nom retrouve la carte même si X est faux.
+  // Sans nom : on filtre par numéro pour rester pertinent.
+  const base = name ? pool : (X != null ? pool.filter(c => normNum(c.localId) === X) : pool);
 
   const scored = [];
   for (const c of base) {
     let score = 0;
     if (X != null && normNum(c.localId) === X) score += 5;
     if (Y != null && setOfficialCount(c) === Y) score += 3;
-    if (name) score += nameScore(name, c) * 6;
+    if (name) { const ns = nameScore(name, c); if (ns > 0.34) score += ns * 6; }
     if (score > 0) scored.push({ card: c, score });
   }
   scored.sort((a, b) => b.score - a.score);
@@ -3558,9 +3559,10 @@ function renderScanCandidates() {
   const results = document.getElementById('scan-results');
   if (!results) return;
   const { number, total } = parseScanNum();
-  if (!number) { results.innerHTML = ''; return; }
+  const name = lastScanName || '';
+  if (!number && !name) { results.innerHTML = ''; return; }
   if (!allCards.length) { results.innerHTML = '<div class="scan-empty">Catalogue non chargé.</div>'; return; }
-  const cands = findScanCandidates({ number, total }, allCards, 12);
+  const cands = findScanCandidates({ number, total, name }, allCards, 12);
   if (!cands.length) { results.innerHTML = '<div class="scan-empty">Aucune carte trouvée dans ce catalogue.</div>'; return; }
   results.innerHTML = '';
   cands.forEach(c => results.appendChild(buildScanCandidateEl(c.card)));
@@ -3578,6 +3580,7 @@ function openScanPanel() {
   const ctx = document.getElementById('scan-context');
   if (ctx) ctx.innerHTML = `Ajout au catalogue <b>${escapeHtml(REGIONS[currentRegion].label)}</b> · ${LANG_FLAGS[currentLang] || ''} ${escapeHtml(LANG_LABELS[currentLang] || currentLang)}`;
   const n = document.getElementById('scan-num'); if (n) n.value = '';
+  lastScanName = '';
   document.getElementById('scan-results').innerHTML = '';
   updateScanSession();
   document.getElementById('scan-overlay').classList.add('open');
@@ -3598,6 +3601,7 @@ function closeScanPanel() {
    accélérateur : si la lecture rate, la saisie manuelle prend le relais.
    ──────────────────────────────────────────────────────────────────────── */
 let scanStream = null, ocrWorker = null, ocrWorkerLang = null, tesseractLoading = null;
+let lastScanName = ''; // nom lu par OCR à la dernière capture (signal de matching)
 // Auto-capture : on déclenche quand la carte est nette/détaillée ET immobile.
 let scanLoopId = null, lastSig = null, lastCapturedSig = null, stableCount = 0, scanBusy = false;
 const SCAN_CONTENT_VAR = 150;  // variance mini = la zone contient une carte (assoupli)
@@ -3769,7 +3773,16 @@ function otsuThreshold(canvas) {
     const between = wB * wF * (mB - mF) * (mB - mF);
     if (between > maxVar) { maxVar = between; thr = t; }
   }
-  for (let i = 0, j = 0; i < d.length; i += 4, j++) { const val = g[j] > thr ? 255 : 0; d[i] = d[i + 1] = d[i + 2] = val; }
+  // Normalise la polarité : le texte (minorité) doit être NOIR sur fond BLANC —
+  // sinon un numéro en texte clair sur fond sombre ressort blanc-sur-noir et
+  // Tesseract le lit mal. On compte les pixels clairs et on inverse si besoin.
+  let bright = 0; for (let j = 0; j < n; j++) if (g[j] > thr) bright++;
+  const invert = bright < n / 2; // peu de clair → le clair est le texte → inverser
+  for (let i = 0, j = 0; i < d.length; i += 4, j++) {
+    let val = g[j] > thr ? 255 : 0;
+    if (invert) val = 255 - val;
+    d[i] = d[i + 1] = d[i + 2] = val;
+  }
   ctx.putImageData(im, 0, 0);
   return canvas;
 }
@@ -3799,6 +3812,18 @@ const SCAN_NUM_REGIONS = {
     { x: 0.00, y: 0.80, w: 1.00, h: 0.19 },
   ],
 };
+
+// Zone du NOM (gros texte en haut de la carte), fraction DANS la carte.
+const SCAN_NAME_REGIONS = {
+  international: { x: 0.05, y: 0.015, w: 0.74, h: 0.11 },
+  asian:        { x: 0.05, y: 0.015, w: 0.74, h: 0.11 },
+};
+// Nettoie un nom lu par OCR : garde lettres/espaces/accents, vire le reste.
+function cleanNameOcr(raw) {
+  return (raw || '').replace(/[^A-Za-zÀ-ÿ'\- ]/g, ' ').replace(/\s+/g, ' ').trim();
+}
+// Rect absolu (px vidéo) d'une fraction relative au rectangle de carte.
+function relRect(cb, f) { return { x: cb.x + f.x * cb.w, y: cb.y + f.y * cb.h, w: f.w * cb.w, h: f.h * cb.h }; }
 
 // Détecte le rectangle de la CARTE dans le cadre-guide (elle flotte dans sa
 // pochette → marges sombres). Projection de luminosité : la carte = grande zone
@@ -3842,7 +3867,7 @@ function cropAbs(v, rect, upscale = 6) {
 
 // Image complète de la zone-carte avec une grille de repères en % — me permet de
 // lire la position réelle du numéro et de caler les coordonnées de crop.
-function fullCardDebugCanvas(v, cb, numRects) {
+function fullCardDebugCanvas(v, cb, numRects, nameRect) {
   const r = cardRectInVideo(v);
   const W = 300, H = Math.max(1, Math.round(W * r.h / r.w));
   const c = document.createElement('canvas'); c.width = W; c.height = H;
@@ -3857,7 +3882,8 @@ function fullCardDebugCanvas(v, cb, numRects) {
   for (let p = 0; p <= 100; p += 20) { ctx.fillText(String(p), W * p / 100 + 1, 9); ctx.fillText(String(p), 1, H * p / 100 + 9); }
   const toCv = rc => ({ x: (rc.x - r.x) / r.w * W, y: (rc.y - r.y) / r.h * H, w: rc.w / r.w * W, h: rc.h / r.h * H });
   if (cb) { const b = toCv(cb); ctx.strokeStyle = cb.detected ? 'lime' : 'orange'; ctx.lineWidth = 2; ctx.strokeRect(b.x, b.y, b.w, b.h); } // carte détectée (verte) / repli (orange)
-  if (numRects) { ctx.strokeStyle = 'rgba(255,110,0,0.95)'; ctx.lineWidth = 1.5; numRects.forEach(rc => { const b = toCv(rc); ctx.strokeRect(b.x, b.y, b.w, b.h); }); } // zones-numéro essayées
+  if (numRects) { ctx.strokeStyle = 'rgba(255,110,0,0.95)'; ctx.lineWidth = 1.5; numRects.forEach(rc => { const b = toCv(rc); ctx.strokeRect(b.x, b.y, b.w, b.h); }); } // zones-numéro (orange)
+  if (nameRect) { ctx.strokeStyle = 'yellow'; ctx.lineWidth = 1.5; const b = toCv(nameRect); ctx.strokeRect(b.x, b.y, b.w, b.h); } // zone-nom (jaune)
   return c;
 }
 
@@ -3869,10 +3895,11 @@ function renderScanDebug(attempts, best, full) {
     ? `<div class="scan-dbg-full"><img src="${full.toDataURL('image/png')}" alt="carte captée"><div class="scan-dbg-cap">Carte captée — repères en % (x en haut, y à gauche)</div></div>`
     : '';
   dbg.innerHTML = fullHtml + attempts.map((a, i) => {
-    const read = a.parsed ? (a.parsed.total ? `${a.parsed.number}/${a.parsed.total}` : a.parsed.number) : '—';
+    const read = a.isName ? (a.raw || '—') : (a.parsed ? (a.parsed.total ? `${a.parsed.number}/${a.parsed.total}` : a.parsed.number) : '—');
+    const tag = a.isName ? 'nom' : 'n°';
     return `<div class="scan-dbg-item${(best && a.parsed === best) ? ' chosen' : ''}">
       <img src="${a.crop.toDataURL('image/png')}" alt="zone ${i + 1}">
-      <div class="scan-debug-text"><b>${read}</b> <span class="scan-dbg-raw">« ${escapeHtml((a.raw || '').replace(/\n/g, ' ') || '(rien)')} »</span></div>
+      <div class="scan-debug-text"><b>${escapeHtml(read)}</b> <span class="scan-dbg-raw">(${tag})</span></div>
     </div>`;
   }).join('');
 }
@@ -3886,10 +3913,23 @@ async function captureAndOcr() {
   setScanStatus(window.Tesseract ? 'Lecture…' : 'Chargement de l\'OCR (1ère fois)…');
   try {
     const worker = await getOcrWorker(lang);
-    await worker.setParameters({ tessedit_char_whitelist: '0123456789/', tessedit_pageseg_mode: '7' });
     const cb = detectCardRect(v);                 // bords de la carte (pas le cadre)
-    const regions = numberCropsForCard(cb);       // zones-numéro relatives à la carte
     const attempts = [];
+
+    // 1) NOM (gros texte du haut) — signal de matching le plus fiable.
+    const nameReg = relRect(cb, SCAN_NAME_REGIONS[currentRegion] || SCAN_NAME_REGIONS.international);
+    let nameText = '';
+    try {
+      await worker.setParameters({ tessedit_char_whitelist: '', tessedit_pageseg_mode: '7' });
+      const nameCrop = cropAbs(v, nameReg, 4); // gros texte → pas de binarisation
+      nameText = cleanNameOcr((await worker.recognize(nameCrop)).data.text || '');
+      attempts.push({ crop: nameCrop, raw: nameText || '(rien)', parsed: null, isName: true });
+    } catch (e) {}
+    lastScanName = nameText;
+
+    // 2) NUMÉRO (bas-gauche de la carte) — bonus.
+    await worker.setParameters({ tessedit_char_whitelist: '0123456789/', tessedit_pageseg_mode: '7' });
+    const regions = numberCropsForCard(cb);
     let best = null;
     for (const reg of regions) {
       const crop = cropAbs(v, reg, 6);
@@ -3897,17 +3937,15 @@ async function captureAndOcr() {
       const raw = ((await worker.recognize(crop)).data.text || '').trim();
       const parsed = parseNumFromText(raw);
       attempts.push({ crop, raw, parsed });
-      if (parsed && parsed.xy) { best = parsed; break; } // X/Y trouvé → on s'arrête
+      if (parsed && parsed.xy) { best = parsed; break; }
     }
-    if (!best) { const a = attempts.find(x => x.parsed); if (a) best = a.parsed; }
-    renderScanDebug(attempts, best, fullCardDebugCanvas(v, cb, regions));
-    if (best) {
-      document.getElementById('scan-num').value = best.total ? `${best.number}/${best.total}` : best.number;
-      renderScanCandidates();
-      setScanStatus(`N° ${best.total ? best.number + '/' + best.total : best.number} — tape la bonne carte ↓`);
-    } else {
-      setScanStatus('Numéro non lu — vois les zones lues ci-dessous.');
-    }
+    if (!best) { const a = attempts.find(x => x.parsed && !x.isName); if (a) best = a.parsed; }
+
+    renderScanDebug(attempts, best, fullCardDebugCanvas(v, cb, regions, nameReg));
+    if (best) document.getElementById('scan-num').value = best.total ? `${best.number}/${best.total}` : best.number;
+    renderScanCandidates(); // utilise lastScanName + le champ numéro
+    const nLabel = best ? (best.total ? best.number + '/' + best.total : best.number) : '?';
+    setScanStatus(`${nameText ? '« ' + nameText + ' »' : 'Nom non lu'} · N° ${nLabel} — tape la bonne carte ↓`);
   } catch (e) {
     setScanStatus('Lecture impossible — saisis le N° ci-dessous.');
   }
