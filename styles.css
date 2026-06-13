@@ -1221,6 +1221,22 @@
   .config-sync-oneoff summary { font-size: 12px; color: var(--muted); cursor: pointer; margin-bottom: 8px; }
 
   /* ── Panneau d'ajout / scan de cartes ─────────────────────── */
+  .scan-capture-btn {
+    width: 100%;
+    margin-top: 10px;
+    padding: 15px;
+    border-radius: var(--radius);
+    border: none;
+    background: var(--accent);
+    color: #0d0d0f;
+    font-family: 'Syne', sans-serif;
+    font-size: 16px;
+    font-weight: 800;
+    cursor: pointer;
+    transition: filter 0.15s, transform 0.05s;
+  }
+  .scan-capture-btn:hover { filter: brightness(1.06); }
+  .scan-capture-btn:active { transform: scale(0.98); }
   .scan-context { font-size: 12px; color: var(--muted); margin-bottom: 10px; }
   .scan-context b { color: var(--text); }
   .scan-camera-slot { margin-bottom: 12px; }

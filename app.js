@@ -3600,8 +3600,8 @@ function closeScanPanel() {
 let scanStream = null, ocrWorker = null, ocrWorkerLang = null, tesseractLoading = null;
 // Auto-capture : on déclenche quand la carte est nette/détaillée ET immobile.
 let scanLoopId = null, lastSig = null, lastCapturedSig = null, stableCount = 0, scanBusy = false;
-const SCAN_CONTENT_VAR = 320;  // variance mini = la zone contient bien une carte
-const SCAN_STABLE_DIFF = 7;    // diff inter-images mini = immobile
+const SCAN_CONTENT_VAR = 150;  // variance mini = la zone contient une carte (assoupli)
+const SCAN_STABLE_DIFF = 18;   // diff inter-images tolérée = immobile (tolère le tremblement)
 const SCAN_NEW_DIFF    = 16;   // diff vs dernière capturée = nouvelle carte
 
 function setScanStatus(msg) { const el = document.getElementById('scan-cam-status'); if (el) el.textContent = msg || ''; }
@@ -3638,7 +3638,7 @@ async function startCamera() {
     const v = document.getElementById('scan-video');
     v.srcObject = scanStream;
     await v.play();
-    setScanStatus('Place la carte dans le cadre — lecture automatique.');
+    setScanStatus('Place la carte et appuie sur « Capturer ».');
     startScanLoop(); // auto-capture quand la carte est nette et immobile
   } catch (e) {
     setScanStatus('Caméra refusée — saisis le N° ci-dessous.');
@@ -3673,7 +3673,7 @@ function scanTick() {
   const isNew  = !lastCapturedSig || sigDiff(sig.arr, lastCapturedSig) > SCAN_NEW_DIFF;
   lastSig = sig.arr;
   if (sig.variance > SCAN_CONTENT_VAR && stable && isNew) {
-    if (++stableCount >= 2) { lastCapturedSig = sig.arr; stableCount = 0; autoCapture(); }
+    if (++stableCount >= 1) { lastCapturedSig = sig.arr; stableCount = 0; autoCapture(); }
   } else stableCount = 0;
 }
 function startScanLoop() { stopScanLoop(); lastSig = lastCapturedSig = null; stableCount = 0; scanLoopId = setInterval(scanTick, 350); }
@@ -4273,8 +4273,14 @@ document.getElementById('btn-scan').addEventListener('click', openScanPanel);
 document.getElementById('scan-close').addEventListener('click', closeScanPanel);
 document.getElementById('scan-overlay').addEventListener('click', e => { if (e.target === e.currentTarget) closeScanPanel(); });
 document.getElementById('scan-num').addEventListener('input', renderScanCandidates);
-// Capture auto quand la carte est bien placée ; tap sur la vidéo = capture forcée.
-document.getElementById('scan-cam-view').addEventListener('click', () => { if (!scanBusy) autoCapture(); });
+// Capture : bouton (principal) + tap sur la vidéo. L'auto-capture reste un bonus.
+function manualCapture() {
+  if (scanBusy) { setScanStatus('Lecture en cours…'); return; }
+  if (stableCount !== undefined) stableCount = 0;
+  autoCapture();
+}
+document.getElementById('scan-capture').addEventListener('click', manualCapture);
+document.getElementById('scan-cam-view').addEventListener('click', manualCapture);
 
 // 11d) Réglages (thème, actualisation, import/export config).
 document.getElementById('btn-settings').addEventListener('click', openSettings);
