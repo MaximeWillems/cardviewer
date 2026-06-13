@@ -230,7 +230,6 @@ const defaultPrefs = {
   // masterExcludes : kinds exclus du comptage, PAR master set (clé "mode:key")
   // Stocké comme { "set:sv03.5": [...kinds], "artist:Mitsuhiro Arita": [...kinds] }
   masterExcludes: {},
-  syncUrl: '', // URL du Worker de synchronisation entre appareils (code court)
 };
 let prefs = { ...defaultPrefs, ...JSON.parse(localStorage.getItem(LS_PREFS) || '{}') };
 prefs.listOrder = { ...defaultPrefs.listOrder, ...(prefs.listOrder || {}) };
@@ -4311,23 +4310,10 @@ document.getElementById('config-import').addEventListener('click', () => applyIm
 document.getElementById('config-share-code').addEventListener('click', () => copyText(buildShareCode(), '🔗 Code d\'échange copié !'));
 
 // 12c) Synchronisation entre appareils via un Worker (code court).
-function syncBase() { return (prefs.syncUrl || '').trim().replace(/\/+$/, ''); }
-function requireSyncUrl() {
-  if (syncBase()) return true;
-  const d = document.querySelector('.config-sync-cfg'); if (d) d.open = true;
-  const u = document.getElementById('sync-url'); if (u) u.focus();
-  showToast('Renseigne d\'abord l\'URL du service de sync', 'info');
-  return false;
-}
-(() => {
-  const urlInput = document.getElementById('sync-url');
-  if (urlInput) {
-    urlInput.value = prefs.syncUrl || '';
-    urlInput.addEventListener('change', () => { prefs.syncUrl = urlInput.value.trim(); savePrefs(); });
-  }
-})();
+// URL du service de sync (Worker Cloudflare) intégrée — l'utilisateur n'a rien à saisir.
+const SYNC_URL = 'https://pikidex-sync.maximew2000.workers.dev';
+function syncBase() { return SYNC_URL; }
 document.getElementById('sync-send').addEventListener('click', async () => {
-  if (!requireSyncUrl()) return;
   const btn = document.getElementById('sync-send'), codeEl = document.getElementById('sync-code');
   btn.disabled = true; btn.textContent = '⬆ Envoi…';
   try {
@@ -4341,7 +4327,6 @@ document.getElementById('sync-send').addEventListener('click', async () => {
   } finally { btn.disabled = false; btn.textContent = '⬆ Envoyer ma config'; }
 });
 document.getElementById('sync-get').addEventListener('click', async () => {
-  if (!requireSyncUrl()) return;
   const code = (document.getElementById('sync-code-input').value || '').trim().toUpperCase();
   if (!code) { showToast('Entre un code', 'info'); return; }
   const btn = document.getElementById('sync-get');
