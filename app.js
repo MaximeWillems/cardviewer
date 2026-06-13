@@ -3767,11 +3767,32 @@ const SCAN_NUM_REGIONS = {
   ],
 };
 
-function renderScanDebug(attempts, best) {
+// Image complète de la zone-carte avec une grille de repères en % — me permet de
+// lire la position réelle du numéro et de caler les coordonnées de crop.
+function fullCardDebugCanvas(v) {
+  const r = cardRectInVideo(v);
+  const W = 300, H = Math.max(1, Math.round(W * r.h / r.w));
+  const c = document.createElement('canvas'); c.width = W; c.height = H;
+  const ctx = c.getContext('2d');
+  ctx.drawImage(v, r.x, r.y, r.w, r.h, 0, 0, W, H);
+  ctx.strokeStyle = 'rgba(0,200,255,0.55)'; ctx.lineWidth = 1;
+  for (let p = 10; p < 100; p += 10) {
+    const x = W * p / 100, y = H * p / 100;
+    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
+  }
+  ctx.fillStyle = 'rgba(0,220,255,0.95)'; ctx.font = 'bold 10px monospace';
+  for (let p = 0; p <= 100; p += 20) { ctx.fillText(String(p), W * p / 100 + 1, 9); ctx.fillText(String(p), 1, H * p / 100 + 9); }
+  return c;
+}
+
+function renderScanDebug(attempts, best, full) {
   const dbg = document.getElementById('scan-debug');
   if (!dbg) return;
   dbg.hidden = false;
-  dbg.innerHTML = attempts.map((a, i) => {
+  const fullHtml = full
+    ? `<div class="scan-dbg-full"><img src="${full.toDataURL('image/png')}" alt="carte captée"><div class="scan-dbg-cap">Carte captée — repères en % (x en haut, y à gauche)</div></div>`
+    : '';
+  dbg.innerHTML = fullHtml + attempts.map((a, i) => {
     const read = a.parsed ? (a.parsed.total ? `${a.parsed.number}/${a.parsed.total}` : a.parsed.number) : '—';
     return `<div class="scan-dbg-item${(best && a.parsed === best) ? ' chosen' : ''}">
       <img src="${a.crop.toDataURL('image/png')}" alt="zone ${i + 1}">
@@ -3802,7 +3823,7 @@ async function captureAndOcr() {
       if (parsed && parsed.xy) { best = parsed; break; } // X/Y trouvé → on s'arrête
     }
     if (!best) { const a = attempts.find(x => x.parsed); if (a) best = a.parsed; }
-    renderScanDebug(attempts, best);
+    renderScanDebug(attempts, best, fullCardDebugCanvas(v));
     if (best) {
       document.getElementById('scan-num').value = best.total ? `${best.number}/${best.total}` : best.number;
       renderScanCandidates();
