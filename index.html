@@ -24,45 +24,41 @@
       <div class="app-logo">Piki<span>dex</span></div>
     </div>
     <div class="header-actions">
-      <!-- Theme toggle -->
-      <button class="icon-btn" id="btn-theme" title="Thème clair / sombre" aria-label="Changer de thème">
-        <span class="theme-icon">🌙</span>
-      </button>
-      <!-- Hide prices toggle -->
-      <button class="icon-btn active" id="btn-hide-prices" title="Afficher / cacher les prix" aria-label="Afficher les prix">
-        <span class="euro-icon">€</span>
-      </button>
       <!-- Scan / add cards -->
       <button class="icon-btn" id="btn-scan" title="Scanner des cartes" aria-label="Scanner des cartes">
         <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
       </button>
-      <!-- Type de série (catalogue) + langue de la carte -->
-      <div class="catalog-toggle">
-        <select id="region-select" class="hdr-select" aria-label="Type de série" title="Type de série"></select>
-        <select id="lang-select" class="hdr-select" aria-label="Langue de la carte" title="Langue de la carte"></select>
-      </div>
-      <!-- Refresh data -->
-      <button class="icon-btn" id="btn-refresh" title="Actualiser les cartes (recharger depuis l'API)" aria-label="Actualiser les cartes">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
-      </button>
-      <!-- Export -->
-      <button class="icon-btn" id="btn-config" title="Importer / exporter la collection" aria-label="Importer / exporter la collection">
-        ⇅
-      </button>
-      <button class="icon-btn" id="btn-export" title="Exporter la vue" aria-label="Exporter">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+      <!-- Réglages (thème, actualisation, import/export config) -->
+      <button class="icon-btn" id="btn-settings" title="Réglages" aria-label="Réglages">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
       </button>
     </div>
   </div>
 
   <nav class="app-nav">
     <button class="nav-tab active" data-view="explore">Explorer</button>
-    <button class="nav-tab" data-view="collection">Ma Collection</button>
-    <button class="nav-tab" data-view="master">Master Set</button>
-    <button class="nav-tab" data-view="binder">Classeur</button>
-    <button class="nav-tab" data-view="tierlist">Tier list</button>
-    <button class="nav-tab" data-view="echange">Échange</button>
+    <button class="nav-tab" data-section="collection">Ma Collection</button>
   </nav>
+
+  <!-- Sous-navigation de « Ma Collection » (scrollable sur mobile) -->
+  <nav class="sub-nav" id="coll-subnav" hidden>
+    <button class="sub-tab active" data-view="collection">Cartes</button>
+    <button class="sub-tab" data-view="master">Master Set</button>
+    <button class="sub-tab" data-view="binder">Classeur</button>
+    <button class="sub-tab" data-view="tierlist">Tier list</button>
+    <button class="sub-tab" data-view="echange">Échange</button>
+  </nav>
+
+  <!-- Barre catalogue : type de série + langue + affichage des prix -->
+  <div class="catalog-bar" id="catalog-bar">
+    <div class="catalog-toggle">
+      <select id="region-select" class="hdr-select" aria-label="Type de série" title="Type de série"></select>
+      <select id="lang-select" class="hdr-select" aria-label="Langue de la carte" title="Langue de la carte"></select>
+    </div>
+    <button class="icon-btn active" id="btn-hide-prices" title="Afficher / cacher les prix" aria-label="Afficher les prix">
+      <span class="euro-icon">€</span>
+    </button>
+  </div>
 
   <div class="controls" id="explore-controls"></div>
 </div>
@@ -100,6 +96,7 @@
     <button class="coll-toolbar-btn" id="btn-deselect-all" style="display:none">Désélectionner</button>
     <button class="coll-toolbar-btn" id="btn-dup-only" style="display:none">⧉ Doublons</button>
     <button class="coll-toolbar-btn" id="btn-share-sell" style="display:none">📋 Partager la liste</button>
+    <button class="coll-toolbar-btn" id="btn-export" title="Exporter les cartes en image">⬇ Exporter</button>
     <div class="coll-info-box" id="coll-info-box">
       <span class="coll-info-count" id="coll-info-count">–</span>
       <span class="coll-info-label">cartes</span>
@@ -275,6 +272,39 @@
         <button class="config-btn primary" id="config-import">Importer</button>
         <button class="config-btn" id="config-share-code">Copier mon code d'échange</button>
         <input class="config-file" id="config-file" type="file" accept="application/json,.json">
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Réglages ─────────────────────────────────── -->
+<div class="config-overlay" id="settings-overlay">
+  <div class="config-modal" role="dialog" aria-modal="true" aria-labelledby="settings-title">
+    <div class="config-head">
+      <div class="config-title" id="settings-title">Réglages</div>
+      <button class="config-close" id="settings-close" aria-label="Fermer">✕</button>
+    </div>
+    <div class="config-body">
+      <div class="settings-row">
+        <div class="settings-row-label">
+          <div class="settings-row-title">Thème</div>
+          <div class="settings-row-sub">Clair ou sombre</div>
+        </div>
+        <button class="config-btn" id="btn-theme"><span class="theme-icon">🌙</span> <span id="theme-label">Sombre</span></button>
+      </div>
+      <div class="settings-row">
+        <div class="settings-row-label">
+          <div class="settings-row-title">Cartes</div>
+          <div class="settings-row-sub">Recharger les données depuis l'API</div>
+        </div>
+        <button class="config-btn" id="btn-refresh">↻ Actualiser</button>
+      </div>
+      <div class="settings-row">
+        <div class="settings-row-label">
+          <div class="settings-row-title">Configuration</div>
+          <div class="settings-row-sub">Sauvegarde / restauration de la collection</div>
+        </div>
+        <button class="config-btn" id="btn-config">⇅ Importer / exporter</button>
       </div>
     </div>
   </div>

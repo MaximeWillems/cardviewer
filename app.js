@@ -161,11 +161,14 @@ function saveCardSnapshots() { localStorage.setItem(LS_CARDSNAP, JSON.stringify(
 // Classeur : pages de 9 emplacements (3×3). slot = { id, lang } ou null.
 let binder = JSON.parse(localStorage.getItem(LS_BINDER) || 'null');
 if (!binder || !Array.isArray(binder.slots)) binder = { pages: 5, slots: new Array(45).fill(null) };
+// Couleur de fond par page (migration depuis l'ancien fond global binder.bg).
+if (!Array.isArray(binder.pageBgs)) binder.pageBgs = new Array(binder.pages).fill(binder.bg || null);
+while (binder.pageBgs.length < binder.pages) binder.pageBgs.push(null);
 let binderPage = 0;
 function saveBinder() { localStorage.setItem(LS_BINDER, JSON.stringify(binder)); }
 function snapshotCard(c) {
   return {
-    id: c.id, image: c.image, name: c.name, nameEn: c.nameEn, romaji: c.romaji,
+    id: c.id, image: c.image, altImage: c.altImage, name: c.name, nameEn: c.nameEn, romaji: c.romaji,
     localId: c.localId, rarity: c.rarity, rarityKind: c.rarityKind,
     types: c.types, dexId: c.dexId, illustrator: c.illustrator,
     apiPrice: c.apiPrice, region: c.region,
@@ -224,20 +227,15 @@ const defaultPrefs = {
   pricesVisible: true, sort: 'pokedex', collSort: 'pokedex', lang: 'fr', tab: 'explore',
   theme: 'light',
   listOrder: { type: 'alpha', artist: 'alpha', set: 'release', series: 'release' },
-  // masterRarityExcludes : kinds exclus du comptage Master Set, par mode
-  // Stocké comme { set: [...kinds], artist: [...kinds] }
-  masterRarityExcludes: { set: [], artist: [] },
+  // masterExcludes : kinds exclus du comptage, PAR master set (clé "mode:key")
+  // Stocké comme { "set:sv03.5": [...kinds], "artist:Mitsuhiro Arita": [...kinds] }
+  masterExcludes: {},
 };
 let prefs = { ...defaultPrefs, ...JSON.parse(localStorage.getItem(LS_PREFS) || '{}') };
 prefs.listOrder = { ...defaultPrefs.listOrder, ...(prefs.listOrder || {}) };
-// Assurer la présence de masterRarityExcludes (compat versions antérieures)
-if (!prefs.masterRarityExcludes || typeof prefs.masterRarityExcludes !== 'object') {
-  prefs.masterRarityExcludes = { set: [], artist: [] };
-} else {
-  prefs.masterRarityExcludes = {
-    set:    Array.isArray(prefs.masterRarityExcludes.set)    ? prefs.masterRarityExcludes.set    : [],
-    artist: Array.isArray(prefs.masterRarityExcludes.artist) ? prefs.masterRarityExcludes.artist : [],
-  };
+// Exclusions par master set (compat versions antérieures où c'était global).
+if (!prefs.masterExcludes || typeof prefs.masterExcludes !== 'object' || Array.isArray(prefs.masterExcludes)) {
+  prefs.masterExcludes = {};
 }
 
 function savePrefs()  { localStorage.setItem(LS_PREFS,  JSON.stringify(prefs)); }
@@ -725,6 +723,27 @@ function getDexNumber(card) {
 }
 function getSetName(card) { return card.set?.name || ''; }
 
+// Repli d'image pour les cartes sans illustration chez TCGdex (surtout des
+// promos : sets smp/mep entiers, etc.). pokemontcg.io a ces visuels et son URL
+// est déterministe à partir de l'id TCGdex "setid-localId".
+function pokeAltBase(id) {
+  const i = String(id).indexOf('-');
+  return i < 0 ? null : `https://images.pokemontcg.io/${String(id).slice(0, i)}/${String(id).slice(i + 1)}`;
+}
+// Renseigne c.altImage sur les cartes internationales sans image TCGdex.
+function applyAltImages(cards) {
+  if (currentRegion === 'asian') return; // ids JP non mappables sur pokemontcg.io
+  cards.forEach(c => { if (!c.image && !c.altImage) { const b = pokeAltBase(c.id); if (b) c.altImage = b; } });
+}
+// Source d'image unifiée. q : 'low' (grille), 'high' (modale, webp), 'highpng' (3D).
+// TCGdex = base + suffixe ; repli pokemontcg.io = URL complète (.png / _hires.png).
+function imgSrc(card, q = 'low') {
+  if (!card) return '';
+  if (card.image) return card.image + (q === 'highpng' ? '/high.png' : q === 'high' ? '/high.webp' : '/low.webp');
+  if (card.altImage) return q === 'low' ? card.altImage + '.png' : card.altImage + '_hires.png';
+  return '';
+}
+
 function sortByConfig(cards, sort, artistCounts = new Map()) {
   const collator = new Intl.Collator('fr', { sensitivity: 'base', numeric: true });
   return [...cards].sort((a, b) => {
@@ -837,6 +856,15 @@ function imagePlaceholder(card, isModal = false) {
     </div>`;
 }
 
+// pokemontcg.io renvoie un dos de carte générique (exactement 640×892) avec un
+// statut 200 quand elle n'a pas le vrai visuel (ex. set MEP) → on le traite
+// comme une absence d'image et on affiche notre placeholder enrichi.
+function checkCardBack(img) {
+  if (img.naturalWidth === 640 && img.naturalHeight === 892 && /pokemontcg\.io/.test(img.currentSrc || img.src)) {
+    handleImageError(img);
+  }
+}
+
 function handleImageError(img) {
   const d = img.dataset;
   const card = {
@@ -906,7 +934,7 @@ function getBadge(rarity, rarityKind) {
    du comportement au clic.
    ════════════════════════════════════════════════════════════════════════ */
 function buildCardEl(c, ctx, idx) {
-  const img = c.image ? c.image + '/low.webp' : '';
+  const img = imgSrc(c);
   const name = (currentLang === 'en' && c.nameEn) ? c.nameEn : (c.name || '—');
 
   let meta;
@@ -936,7 +964,7 @@ function buildCardEl(c, ctx, idx) {
 
   div.innerHTML = `
     ${img
-      ? `<img class="card-img" src="${img}" alt="${escapeHtml(name)}" loading="lazy" data-ph-num="${escapeHtml(c.localId ?? '')}" data-ph-set="${escapeHtml(c.set?.name ?? '')}" data-ph-type="${escapeHtml((c.types && c.types[0]) ?? '')}" onerror="handleImageError(this)">`
+      ? `<img class="card-img" src="${img}" alt="${escapeHtml(name)}" loading="lazy" data-ph-num="${escapeHtml(c.localId ?? '')}" data-ph-set="${escapeHtml(c.set?.name ?? '')}" data-ph-type="${escapeHtml((c.types && c.types[0]) ?? '')}" onerror="handleImageError(this)" onload="checkCardBack(this)">`
       : imagePlaceholder(c)}
     ${langFlagsHtml(c.id)}
     ${qtyBadgeHtml(c.id)}
@@ -1071,12 +1099,21 @@ function refresh(ctx) { ctx === 'collection' ? renderCollection() : applyFilters
    grille pour le détail d'un groupe.
    ════════════════════════════════════════════════════════════════════════ */
 
-/* ── Filtre de rareté Master Set ──────────────────────────────────────────
-   Les kinds exclus sont stockés dans prefs.masterRarityExcludes[mode].
+/* ── Exclusion du comptage, PAR master set ─────────────────────────────────
+   Les kinds exclus sont stockés dans prefs.masterExcludes["mode:key"].
    'trainer' est un pseudo-kind : cartes sans dexId (dresseurs, énergies…).
    ──────────────────────────────────────────────────────────────────────── */
-function getMasterExcludes(mode) {
-  return new Set(prefs.masterRarityExcludes[mode] || []);
+function masterKeyOf(mode, key) { return mode + ':' + key; }
+
+function getMasterExcludes(mode, key) {
+  return new Set(prefs.masterExcludes[masterKeyOf(mode, key)] || []);
+}
+
+function setMasterExcludes(mode, key, kindsSet) {
+  const arr = [...kindsSet];
+  if (arr.length) prefs.masterExcludes[masterKeyOf(mode, key)] = arr;
+  else            delete prefs.masterExcludes[masterKeyOf(mode, key)];
+  savePrefs();
 }
 
 function isTrainerCard(card) {
@@ -1089,9 +1126,9 @@ function masterCardMatchesFilter(card, excludes) {
   return true;
 }
 
-// Retourne les cartes d'un groupe après application du filtre de rareté actif.
-function masterFilteredCards(cards, mode) {
-  const excludes = getMasterExcludes(mode);
+// Retourne les cartes d'un groupe après application de SES exclusions (par master set).
+function masterFilteredCards(cards, mode, key) {
+  const excludes = getMasterExcludes(mode, key);
   if (excludes.size === 0) return cards;
   return cards.filter(c => masterCardMatchesFilter(c, excludes));
 }
@@ -1107,7 +1144,7 @@ function masterGroups(mode, lang = currentLang) {
   });
   // Recalcule total/owned : possession comptée DANS LA LANGUE du master set.
   groups.forEach(g => {
-    const filtered = masterFilteredCards(g.cards, mode);
+    const filtered = masterFilteredCards(g.cards, mode, g.key);
     g.total = filtered.length;
     g.owned = filtered.filter(c => isOwned(c.id, lang)).length;
   });
@@ -1124,7 +1161,7 @@ function isMasterStarted(mode, key, lang) {
 function startMaster(mode, key, label, lang = currentLang) {
   const group = masterGroups(mode, lang).find(g => g.key === key);
   if (!group) return;
-  const cards = masterFilteredCards(group.cards, mode);
+  const cards = masterFilteredCards(group.cards, mode, key);
   let added = 0;
   cards.forEach(c => {
     if (!isOwned(c.id, lang) && !isWanted(c.id, lang)) { setWanted(c.id, lang, true); added++; }
@@ -1205,68 +1242,74 @@ function renderMaster() {
   listEl.style.display = '';
   renderStartedMasters(startedEl);
 
+  // L'exclusion du comptage est désormais propre à chaque master set (réglée
+  // dans son détail), il n'y a donc plus de filtre global ici.
   let groups = masterGroups(masterMode);
   const q = masterQuery.toLowerCase().trim();
   if (q) groups = groups.filter(g => g.label.toLowerCase().includes(q));
+  groups = groups.filter(g => g.total > 0);
   groups.sort((a, b) => (b.owned / b.total) - (a.owned / a.total) || a.label.localeCompare(b.label, 'fr', { sensitivity: 'base' }));
 
   if (groups.length === 0) { listEl.innerHTML = '<div class="master-empty">Aucun résultat</div>'; return; }
 
-  // ── Chips de filtres de rareté Master Set (liste) ──────────────────────
-  const excludes = getMasterExcludes(masterMode);
-  const chipsHtml = MASTER_RARITY_FILTERS.map(({ kind, label }) => {
-    const excluded = excludes.has(kind);
-    return `<button class="pill master-rarity-pill${excluded ? ' master-pill-excluded' : ''}" data-master-rarity="${escapeHtml(kind)}" title="${excluded ? 'Exclure' : 'Inclus'}">${label}</button>`;
-  }).join('');
-
-  listEl.innerHTML = `
-    <div class="master-filter-row">
-      <span class="master-filter-label">Exclure du comptage :</span>
-      <div class="master-rarity-pills">${chipsHtml}</div>
-    </div>
-    <div class="master-rows-container"></div>`;
-
-  // Wire pills
-  listEl.querySelectorAll('[data-master-rarity]').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const kind = btn.dataset.masterRarity;
-      const ex = new Set(prefs.masterRarityExcludes[masterMode] || []);
-      if (ex.has(kind)) ex.delete(kind); else ex.add(kind);
-      prefs.masterRarityExcludes[masterMode] = [...ex];
-      savePrefs();
-      renderMaster(); // re-render avec nouveaux filtres
-    });
-  });
-
-  const rowsContainer = listEl.querySelector('.master-rows-container');
-  // Recalcule groups avec les nouveaux excludes
-  let freshGroups = masterGroups(masterMode);
-  if (q) freshGroups = freshGroups.filter(g => g.label.toLowerCase().includes(q));
-  
-  // Masquer les groupes sans cartes après application des filtres de rareté
-  freshGroups = freshGroups.filter(g => g.total > 0);
-  freshGroups.sort((a, b) => (b.owned / b.total) - (a.owned / a.total) || a.label.localeCompare(b.label, 'fr', { sensitivity: 'base' }));
-
-  rowsContainer.innerHTML = freshGroups.map(g => masterRowHtml(g)).join('');
-  rowsContainer.querySelectorAll('.master-row').forEach(row => {
+  listEl.innerHTML = `<div class="master-rows-container">${groups.map(g => masterRowHtml(g)).join('')}</div>`;
+  listEl.querySelector('.master-rows-container').querySelectorAll('.master-row').forEach(row => {
     row.addEventListener('click', () => openMasterGroup(masterMode, row.dataset.key));
   });
 }
 
-function renderMasterDetail() {
+// Hydrate à la volée (dexId) les cartes d'un master set asiatique : les briefs
+// JP n'ont pas de dexId → toutes seraient vues comme « Dresseur ». On complète
+// depuis /cards/{id} pour que l'exclusion Dresseur soit fiable.
+async function ensureMasterCardsHydrated(group) {
+  const targets = group.cards.filter(c => !c.detailsLoaded && !(Array.isArray(c.dexId) && c.dexId.length));
+  if (!targets.length) return;
+  const prog = document.getElementById('master-detail-progress');
+  if (prog) prog.innerHTML = '<span class="master-progress-num">Chargement des détails…</span>';
+  let next = 0;
+  async function worker() {
+    while (next < targets.length) {
+      const c = targets[next++];
+      try {
+        const res = await fetch(`${API}/cards/${encodeURIComponent(c.id)}`);
+        if (res.ok) {
+          const d = await res.json();
+          Object.assign(c, { dexId: d.dexId, category: d.category,
+            illustrator: c.illustrator || d.illustrator, rarity: c.rarity || d.rarity, types: d.types, detailsLoaded: true });
+        } else c.detailsLoaded = true;
+      } catch (e) { c.detailsLoaded = true; }
+    }
+  }
+  await Promise.all(Array.from({ length: 12 }, worker));
+  idbSet(cacheKey(), { cards: allCards, savedAt: Date.now() });
+}
+
+// Quand l'exclusion change sur un master set DÉMARRÉ, on réaligne « à obtenir » :
+// les cartes désormais exclues sortent, les réincluses (non possédées) rentrent.
+function resyncStartedMaster(mode, key, lang) {
+  if (!isMasterStarted(mode, key, lang)) return;
+  const group = masterGroups(mode, lang).find(g => g.key === key);
+  if (!group) return;
+  const keep = new Set(masterFilteredCards(group.cards, mode, key).map(c => c.id));
+  let changed = false;
+  group.cards.forEach(c => {
+    if (isOwned(c.id, lang)) return;
+    if (!keep.has(c.id) && isWanted(c.id, lang)) { setWanted(c.id, lang, false); changed = true; }
+    else if (keep.has(c.id) && !isWanted(c.id, lang)) { setWanted(c.id, lang, true); changed = true; }
+  });
+  if (changed) { rebuildProjections(); saveCollection(); updateCollStat(); }
+}
+
+let masterExcludeOpen = false; // état d'ouverture de la « tag box » d'exclusion
+
+async function renderMasterDetail() {
   const listEl = document.getElementById('master-list');
   const detail = document.getElementById('master-detail');
   const gridEl = document.getElementById('master-grid');
 
   const lang = masterSelectedLang || currentLang;
-  const allGroup = masterGroups(masterMode, lang).find(g => g.key === masterSelected);
+  let allGroup = masterGroups(masterMode, lang).find(g => g.key === masterSelected);
   if (!allGroup) { masterSelected = null; renderMaster(); return; }
-
-  // Cartes filtrées selon les excludes actifs
-  const filteredGroupCards = masterFilteredCards(allGroup.cards, masterMode);
-  const ownedCount = filteredGroupCards.filter(c => isOwned(c.id, lang)).length;
-  const totalCount = filteredGroupCards.length;
-  const pct = totalCount ? Math.round(ownedCount / totalCount * 100) : 0;
 
   listEl.style.display = 'none';
   detail.style.display = '';
@@ -1288,40 +1331,72 @@ function renderMasterDetail() {
   }
   document.getElementById('master-detail-sub').textContent = subtitle;
 
-  // ── Chips de filtres dans le détail ──────────────────────────────────
-  const excludes = getMasterExcludes(masterMode);
-  const chipsHtml = MASTER_RARITY_FILTERS.map(({ kind, label }) => {
-    const excluded = excludes.has(kind);
-    return `<button class="pill master-rarity-pill${excluded ? ' master-pill-excluded' : ''}" data-master-rarity="${escapeHtml(kind)}" title="${excluded ? 'Exclure' : 'Inclus'}">${label}</button>`;
-  }).join('');
+  // JP : compléter les dexId avant de calculer l'exclusion Dresseur.
+  if (currentRegion === 'asian') {
+    await ensureMasterCardsHydrated(allGroup);
+    if (masterSelected !== allGroup.key) return; // l'utilisateur a navigué ailleurs
+  }
 
-  // Compte les cartes affectées par chaque filtre (sur ce groupe)
-  const countsByKind = {};
-  MASTER_RARITY_FILTERS.forEach(({ kind }) => {
-    countsByKind[kind] = allGroup.cards.filter(c =>
-      kind === 'trainer' ? isTrainerCard(c) : c.rarityKind === kind
-    ).length;
-  });
+  // Cartes retenues après application des exclusions PROPRES à ce master set.
+  const excludes = getMasterExcludes(masterMode, masterSelected);
+  const filteredGroupCards = masterFilteredCards(allGroup.cards, masterMode, masterSelected);
+  const ownedCount = filteredGroupCards.filter(c => isOwned(c.id, lang)).length;
+  const totalCount = filteredGroupCards.length;
+  const pct = totalCount ? Math.round(ownedCount / totalCount * 100) : 0;
   const excludedTotal = allGroup.cards.length - filteredGroupCards.length;
 
+  // ── Tag box d'exclusion (multi-sélection compacte) ───────────────────
+  // En asiatique, seule l'exclusion « Dresseur » est fiable (rareté non classée).
+  const availKinds = currentRegion === 'asian'
+    ? MASTER_RARITY_FILTERS.filter(f => f.kind === 'trainer')
+    : MASTER_RARITY_FILTERS;
+  const countOf = kind => allGroup.cards.filter(c => kind === 'trainer' ? isTrainerCard(c) : c.rarityKind === kind).length;
+  const selectedTags = availKinds.filter(f => excludes.has(f.kind));
+  const tagsHtml = selectedTags.length
+    ? selectedTags.map(f => `<span class="mex-tag">${f.label}</span>`).join('')
+    : '<span class="mex-none">Aucune</span>';
+  const optsHtml = availKinds.map(({ kind, label }) => {
+    const on = excludes.has(kind);
+    return `<button type="button" class="mex-opt${on ? ' on' : ''}" data-kind="${escapeHtml(kind)}">
+      <span class="mex-check">${on ? '✓' : ''}</span>
+      <span class="mex-opt-label">${label}</span>
+      <span class="mex-opt-count">${countOf(kind)}</span>
+    </button>`;
+  }).join('');
+
   document.getElementById('master-detail-progress').innerHTML = `
-    <div class="master-detail-filter-row">
-      <span class="master-filter-label">Exclure du comptage :</span>
-      <div class="master-rarity-pills">${chipsHtml}</div>
-      ${excludedTotal > 0 ? `<span class="master-excluded-note">${excludedTotal} carte${excludedTotal > 1 ? 's' : ''} exclue${excludedTotal > 1 ? 's' : ''}</span>` : ''}
+    <div class="master-exclude" id="master-exclude">
+      <button type="button" class="master-exclude-toggle" id="master-exclude-toggle" aria-expanded="${masterExcludeOpen}">
+        <span class="mex-label">Exclure du comptage</span>
+        <span class="mex-current">${tagsHtml}</span>
+        <span class="mex-caret">▾</span>
+      </button>
+      <div class="master-exclude-menu" id="master-exclude-menu"${masterExcludeOpen ? '' : ' hidden'}>${optsHtml}</div>
     </div>
+    ${excludedTotal > 0 ? `<span class="master-excluded-note">${excludedTotal} carte${excludedTotal > 1 ? 's' : ''} exclue${excludedTotal > 1 ? 's' : ''} du comptage</span>` : ''}
     <span class="master-progress-num">${ownedCount} / ${totalCount}</span> <span class="master-progress-pct">${pct}%</span>
     <div class="master-bar-track" style="margin-top:6px"><div class="master-bar-fill" style="width:${pct}%"></div></div>`;
 
-  // Wire pills du détail
-  detail.querySelectorAll('[data-master-rarity]').forEach(btn => {
+  // Ouvrir / fermer la tag box (sans re-render).
+  const toggleBtn = document.getElementById('master-exclude-toggle');
+  const menu = document.getElementById('master-exclude-menu');
+  toggleBtn.addEventListener('click', e => {
+    e.stopPropagation();
+    masterExcludeOpen = !masterExcludeOpen;
+    menu.hidden = !masterExcludeOpen;
+    toggleBtn.setAttribute('aria-expanded', masterExcludeOpen);
+  });
+  menu.addEventListener('click', e => e.stopPropagation());
+  // Cocher / décocher un type → exclusion propre à ce master set + resync.
+  menu.querySelectorAll('.mex-opt').forEach(btn => {
     btn.addEventListener('click', () => {
-      const kind = btn.dataset.masterRarity;
-      const ex = new Set(prefs.masterRarityExcludes[masterMode] || []);
+      const kind = btn.dataset.kind;
+      const ex = getMasterExcludes(masterMode, masterSelected);
       if (ex.has(kind)) ex.delete(kind); else ex.add(kind);
-      prefs.masterRarityExcludes[masterMode] = [...ex];
-      savePrefs();
-      renderMasterDetail(); // re-render le détail
+      setMasterExcludes(masterMode, masterSelected, ex);
+      resyncStartedMaster(masterMode, masterSelected, lang);
+      masterExcludeOpen = true; // garder la box ouverte pour enchaîner
+      renderMasterDetail();
     });
   });
 
@@ -1355,18 +1430,20 @@ let binderPickSlot = -1; // emplacement en cours d'attribution
 const BINDER_COLORS = ['#c0392b', '#e67e22', '#f39c12', '#f1c40f', '#7cb342', '#27ae60', '#16a085', '#0aa3c2',
                        '#2980b9', '#3f51b5', '#8e44ad', '#e84393', '#7b2d3a', '#8d6e63', '#607d8b', '#95a5a6',
                        '#ecf0f1', '#2b2b2b'];
+function pageBg() { return binder.pageBgs[binderPage] || null; }
 function applyBinderBg() {
   const grid = document.getElementById('binder-grid');
-  if (grid) grid.style.background = binder.bg || '';
+  if (grid) grid.style.background = pageBg() || '';
 }
 function renderBinderPalette() {
   const el = document.getElementById('binder-palette');
   if (!el) return;
-  el.innerHTML = BINDER_COLORS.map(col =>
-    `<button class="binder-swatch${binder.bg === col ? ' selected' : ''}" style="background:${col}" data-col="${col}" aria-label="Fond ${col}"></button>`
+  const cur = pageBg();
+  el.innerHTML = `<span class="binder-palette-label">Fond de la page ${binderPage + 1} :</span>` + BINDER_COLORS.map(col =>
+    `<button class="binder-swatch${cur === col ? ' selected' : ''}" style="background:${col}" data-col="${col}" aria-label="Fond ${col}"></button>`
   ).join('');
   el.querySelectorAll('.binder-swatch').forEach(b => b.addEventListener('click', () => {
-    binder.bg = (binder.bg === b.dataset.col) ? null : b.dataset.col; // re-clic = retour au fond neutre
+    binder.pageBgs[binderPage] = (pageBg() === b.dataset.col) ? null : b.dataset.col; // re-clic = fond neutre
     saveBinder(); renderBinderPalette(); applyBinderBg();
   }));
 }
@@ -1391,9 +1468,9 @@ function buildBinderSlot(slotIndex) {
   div.className = 'binder-slot' + (slot ? ' filled' : '');
   if (slot) {
     const c = lookupCard(slot.id);
-    const img = c && c.image ? c.image + '/low.webp' : '';
+    const img = imgSrc(c);
     div.innerHTML = `
-      ${img ? `<img class="binder-slot-img" src="${escapeHtml(img)}" alt="" loading="lazy" onerror="handleImageError(this)">` : imagePlaceholder(c || { name: slot.id })}
+      ${img ? `<img class="binder-slot-img" src="${escapeHtml(img)}" alt="" loading="lazy" onerror="handleImageError(this)" onload="checkCardBack(this)">` : imagePlaceholder(c || { name: slot.id })}
       ${slot.lang && LANG_FLAGS[slot.lang] ? `<span class="binder-slot-flag">${LANG_FLAGS[slot.lang]}</span>` : ''}
       <button class="binder-slot-remove" title="Retirer">×</button>`;
     div.querySelector('.binder-slot-remove').addEventListener('click', e => {
@@ -1428,16 +1505,16 @@ function renderBinderPicker(query) {
     (c.name || '').toLowerCase().includes(q) ||
     (c.romaji && c.romaji.includes(q)) ||
     String(c.localId || '').includes(q));
-  cards = sortByConfig(cards, 'set').slice(0, 120);
+  cards = sortByConfig(cards, 'set').slice(0, 300);
   if (!cards.length) { grid.innerHTML = '<div class="scan-empty">Aucune carte possédée.</div>'; return; }
   grid.innerHTML = '';
   cards.forEach(c => {
     const lang = ownedLangs(c.id)[0] || currentLang;
-    const img = c.image ? c.image + '/low.webp' : '';
+    const img = imgSrc(c);
     const el = document.createElement('button');
     el.type = 'button';
     el.className = 'binder-pick';
-    el.innerHTML = `${img ? `<img src="${escapeHtml(img)}" alt="" loading="lazy" onerror="handleImageError(this)">` : imagePlaceholder(c)}
+    el.innerHTML = `${img ? `<img src="${escapeHtml(img)}" alt="" loading="lazy" onerror="handleImageError(this)" onload="checkCardBack(this)">` : imagePlaceholder(c)}
       <span class="binder-pick-name">${escapeHtml(c.name || '—')}</span>`;
     el.addEventListener('click', () => {
       binder.slots[binderPickSlot] = { id: c.id, lang };
@@ -1517,11 +1594,11 @@ function buildTierRow(tier, index) {
 
 function buildTierCard(slot, tierIndex, cardIndex) {
   const c = lookupCard(slot.id);
-  const img = c && c.image ? c.image + '/low.webp' : '';
+  const img = imgSrc(c);
   const el = document.createElement('div');
   el.className = 'tier-card';
   el.innerHTML = img
-    ? `<img src="${escapeHtml(img)}" alt="" loading="lazy" onerror="handleImageError(this)">`
+    ? `<img src="${escapeHtml(img)}" alt="" loading="lazy" onerror="handleImageError(this)" onload="checkCardBack(this)">`
     : imagePlaceholder(c || { name: slot.id });
   el.addEventListener('click', e => { e.stopPropagation(); openTierCardMenu(tierIndex, cardIndex, el); });
   return el;
@@ -1561,6 +1638,15 @@ function openTierColorMenu(tierIndex, anchor) {
   }));
 }
 document.addEventListener('click', () => closeTierMenus());
+// Fermer la tag box d'exclusion du master set au clic extérieur.
+document.addEventListener('click', () => {
+  if (!masterExcludeOpen) return;
+  masterExcludeOpen = false;
+  const menu = document.getElementById('master-exclude-menu');
+  const tb = document.getElementById('master-exclude-toggle');
+  if (menu) menu.hidden = true;
+  if (tb) tb.setAttribute('aria-expanded', 'false');
+});
 
 function openTierPicker(tierIndex) {
   tierPickTarget = tierIndex;
@@ -1578,14 +1664,14 @@ function renderTierPicker(query) {
   let cards = getCollectionPool().filter(c => set.has(c.id));
   if (q) cards = cards.filter(c =>
     (c.name || '').toLowerCase().includes(q) || (c.romaji && c.romaji.includes(q)) || String(c.localId || '').includes(q));
-  cards = sortByConfig(cards, 'set').slice(0, 120);
+  cards = sortByConfig(cards, 'set').slice(0, 300);
   if (!cards.length) { grid.innerHTML = '<div class="scan-empty">Aucune carte ici.</div>'; return; }
   grid.innerHTML = '';
   cards.forEach(c => {
     const lang = (tierPickerSrc === 'wanted' ? langsWith(c.id, 'wanted')[0] : ownedLangs(c.id)[0]) || currentLang;
-    const img = c.image ? c.image + '/low.webp' : '';
+    const img = imgSrc(c);
     const el = document.createElement('button'); el.type = 'button'; el.className = 'binder-pick';
-    el.innerHTML = `${img ? `<img src="${escapeHtml(img)}" alt="" loading="lazy" onerror="handleImageError(this)">` : imagePlaceholder(c)}<span class="binder-pick-name">${escapeHtml(c.name || '—')}</span>`;
+    el.innerHTML = `${img ? `<img src="${escapeHtml(img)}" alt="" loading="lazy" onerror="handleImageError(this)" onload="checkCardBack(this)">` : imagePlaceholder(c)}<span class="binder-pick-name">${escapeHtml(c.name || '—')}</span>`;
     el.addEventListener('click', () => {
       if (tierPickTarget >= 0) tierlist.tiers[tierPickTarget].cards.push({ id: c.id, lang });
       closeTierPicker(); renderTierlist();
@@ -1599,7 +1685,7 @@ function exportTierImage() {
   const rowsHtml = tierlist.tiers.map(t => {
     const cards = t.cards.map(s => {
       const c = lookupCard(s.id);
-      const img = c && c.image ? c.image + '/low.webp' : '';
+      const img = c && c.image ? imgSrc(c, 'high') : ''; // pokemontcg.io = pas de CORS → exclu de l'export
       return img ? `<img class="tc" src="${img}" crossorigin="anonymous">` : `<div class="tc tc-none"></div>`;
     }).join('') || '<div class="tempty"></div>';
     return `<div class="trow"><div class="tlbl" style="background:${t.color}">${escapeHtml(t.label)}</div><div class="tstrip">${cards}</div></div>`;
@@ -2397,6 +2483,48 @@ async function hydrateCards(cards, concurrency = 12) {
   return hydrated;
 }
 
+// Hydratation progressive : on a déjà affiché les briefs, on complète chaque
+// carte (dexId, illustrateur, prix, set complet) en tâche de fond et on
+// re-rafraîchit l'Explorer par à-coups → le tri Pokédex se met en place tout
+// seul, premiers Pokémon en tête. `hydrateRunId` annule un run précédent quand
+// on change de catalogue (région/langue) ou qu'on force une actualisation.
+let hydrateRunId = 0;
+async function hydrateProgressive(cards, seriesMap) {
+  const myRun = ++hydrateRunId;
+  let next = 0, lastPaint = performance.now();
+  const repaint = () => {
+    enrichSeries(cards, seriesMap);
+    // On ne re-peint que si l'utilisateur regarde le haut de l'Explorer sans
+    // recherche en cours (sinon on perturberait son défilement / ses résultats).
+    if (currentTab === 'explore' && window.scrollY < 300 && !S.explore.query) {
+      populateFilters('explore');
+      applyFilters();
+    }
+  };
+  async function worker() {
+    while (next < cards.length && myRun === hydrateRunId) {
+      const c = cards[next++];
+      try {
+        const res = await fetch(`${API}/cards/${encodeURIComponent(c.id)}`);
+        if (res.ok) {
+          const d = await res.json();
+          const rarity = c.rarity, rarityKind = c.rarityKind; // on garde la rareté du fetch
+          Object.assign(c, d, { rarity, rarityKind, detailsLoaded: true });
+        } else c.detailsLoaded = true;
+      } catch (e) { c.detailsLoaded = true; }
+      if (performance.now() - lastPaint > 900) { lastPaint = performance.now(); repaint(); }
+    }
+  }
+  await Promise.all(Array.from({ length: 16 }, worker));
+  if (myRun !== hydrateRunId) return; // catalogue changé entre-temps → run obsolète
+  enrichSeries(cards, seriesMap);
+  snapshotCollectionCards();
+  if (currentTab === 'explore' && window.scrollY < 300 && !S.explore.query) { populateFilters('explore'); applyFilters(); }
+  countEl.textContent = cards.length;
+  idbSet(cacheKey(), { cards, savedAt: Date.now() }); // cache complet pour les prochaines visites
+  if (sourceLabel) sourceLabel.textContent = 'via TCGdex API';
+}
+
 async function fetchCardsByRarity({ label, kind }) {
   const pageSize = 500;
   const pages = [];
@@ -2421,24 +2549,26 @@ async function fetchSeriesMap() {
     ))).filter(Boolean);
     // Séries triées par date de sortie → index de sortie croissant par set
     details.sort((a, b) => String(a.releaseDate || '').localeCompare(String(b.releaseDate || '')));
-    const serie = {}, order = {};
+    const serie = {}, order = {}, name = {};
     let idx = 0;
     details.forEach(d => (d.sets || []).forEach(set => {
       serie[set.id] = { id: d.id, name: d.name };
       order[set.id] = idx++;
+      if (set.name) name[set.id] = set.name;
     }));
-    return { serie, order };
+    return { serie, order, name };
   } catch (e) { return null; }
 }
 
 function enrichSeries(cards, data) {
   if (!data) return;
-  const { serie, order } = data;
+  const { serie, order, name } = data;
   cards.forEach(c => {
     if (!c.set?.id) return;
     const next = { ...c.set };
     if (serie[c.set.id]) next.serie = serie[c.set.id];
     if (order[c.set.id] != null) next.order = order[c.set.id];
+    if (name && name[c.set.id] && !next.name) next.name = name[c.set.id]; // nom d'extension dès les briefs
     c.set = next;
   });
 }
@@ -2448,29 +2578,15 @@ async function fetchPromoCards() {
   // asiatique — on saute (les cartes illustrées JP arrivent via le fetch rareté).
   if (currentRegion === 'asian') return [];
   const allPromos = [];
+  // Briefs uniquement (id/nom/image + rareté promo). Les détails (dexId, prix…)
+  // arrivent via l'hydratation progressive, comme pour les cartes de rareté.
   await Promise.all(PROMO_SET_IDS.map(async (setId) => {
     try {
       const res = await fetch(`${API}/sets/${setId}`);
       if (!res.ok) return;
       const setData = await res.json();
-      const cardRefs = setData.cards || [];
       const setMeta = { id: setData.id, name: setData.name, serie: setData.serie || null };
-      const BATCH = 10;
-      for (let i = 0; i < cardRefs.length; i += BATCH) {
-        const batch = cardRefs.slice(i, i + BATCH);
-        const results = await Promise.all(batch.map(async (ref) => {
-          if (ref.image) return { ...ref, set: setMeta, rarity: 'Promo', rarityKind: 'promo' };
-          try {
-            const cr = await fetch(`${API}/cards/${encodeURIComponent(ref.id)}`);
-            if (cr.ok) {
-              const cd = await cr.json();
-              return { ...cd, set: setMeta, rarity: 'Promo', rarityKind: 'promo' };
-            }
-          } catch (e) {}
-          return { ...ref, set: setMeta, rarity: 'Promo', rarityKind: 'promo' };
-        }));
-        results.forEach(c => { if (c) allPromos.push(c); });
-      }
+      (setData.cards || []).forEach(ref => allPromos.push({ ...ref, set: setMeta, rarity: 'Promo', rarityKind: 'promo' }));
     } catch (e) {}
   }));
   return allPromos;
@@ -2504,6 +2620,7 @@ async function fetchAsianCatalog() {
 }
 
 async function fetchCards({ force = false } = {}) {
+  hydrateRunId++; // annule une hydratation progressive encore en cours
   showSkeletons();
   sourceLabel = document.getElementById('source-label');
 
@@ -2513,6 +2630,7 @@ async function fetchCards({ force = false } = {}) {
     if (cached && Array.isArray(cached.cards) && cached.cards.length &&
         (Date.now() - cached.savedAt) < CACHE_TTL) {
       allCards = cached.cards;
+      applyAltImages(allCards); // repli image promos même depuis un ancien cache
       snapshotCollectionCards();
       countEl.textContent = allCards.length;
       populateFilters('explore');
@@ -2537,16 +2655,27 @@ async function fetchCards({ force = false } = {}) {
       asianCards.forEach(c => { c.romaji = toRomaji(c.name); });
       allCards = asianCards;
     } else {
+      // Briefs rapides (image + nom + rareté) → affichage quasi immédiat (~0,6 s),
+      // puis hydratation progressive en arrière-plan (dexId → tri Pokédex, prix…).
       const [rarityResults, promoCards, seriesMap] = await Promise.all([
         Promise.all(RARITY_LABELS.map(r => fetchCardsByRarity(r).catch(() => []))),
         fetchPromoCards().catch(() => []),
-        fetchSeriesMap(),
+        fetchSeriesMap().catch(() => null),
       ]);
       allCards = [...rarityResults.flat(), ...promoCards];
       if (allCards.length === 0) throw new Error('empty');
-      if (sourceLabel) sourceLabel.textContent = 'tri Pokédex en préparation…';
-      allCards = await hydrateCards(allCards);
+      allCards.forEach(c => { if (!c.set) c.set = { id: String(c.id).split('-')[0] }; });
       enrichSeries(allCards, seriesMap);
+      applyAltImages(allCards); // repli pokemontcg.io pour les cartes sans image TCGdex
+      snapshotCollectionCards();
+      countEl.textContent = allCards.length;
+      populateFilters('explore');
+      updateRarityButtons('explore');
+      applyFilters();
+      errorMsg.style.display = 'none';
+      if (sourceLabel) sourceLabel.textContent = 'détails en cours…';
+      hydrateProgressive(allCards, seriesMap);
+      return;
     }
     if (allCards.length === 0) throw new Error('empty');
 
@@ -2859,7 +2988,7 @@ async function openModal(card, list, index) {
 
   // Langue de collection de CETTE carte (asiatique → 'ja' même en affichage international).
   const mlang = cardLangFor(card);
-  const img    = card.image ? card.image + '/high.webp' : '';
+  const img    = imgSrc(card, 'high');
   const rarity = card.rarity || '—';
   const set    = card.set?.name || '—';
   const series = card.set?.serie?.name || '—';
@@ -2870,7 +2999,7 @@ async function openModal(card, list, index) {
   const position = currentModalIndex >= 0 ? `${currentModalIndex + 1} / ${modalList.length}` : '';
 
   document.getElementById('modal-media').innerHTML = img
-    ? `<img class="modal-img" id="modal-img" src="${img}" alt="${escapeHtml(card.name || '')}" data-ph-num="${escapeHtml(card.localId ?? '')}" data-ph-set="${escapeHtml(card.set?.name ?? '')}" data-ph-type="${escapeHtml((card.types && card.types[0]) ?? '')}" onerror="handleImageError(this)" style="cursor:zoom-in;transition:opacity 0.18s" title="Cliquer pour voir en 3D">`
+    ? `<img class="modal-img" id="modal-img" src="${img}" alt="${escapeHtml(card.name || '')}" data-ph-num="${escapeHtml(card.localId ?? '')}" data-ph-set="${escapeHtml(card.set?.name ?? '')}" data-ph-type="${escapeHtml((card.types && card.types[0]) ?? '')}" onerror="handleImageError(this)" onload="checkCardBack(this)" style="cursor:zoom-in;transition:opacity 0.18s" title="Cliquer pour voir en 3D">`
     : imagePlaceholder(card, true);
   if (img) {
     setTimeout(() => {
@@ -3183,7 +3312,8 @@ function showToast(msg, type = 'ok') {
    ════════════════════════════════════════════════════════════════════════ */
 function buildExportRows(cards) {
   return cards.map(c => {
-    const img    = c.image ? c.image + '/high.webp' : '';
+    const img    = c.image ? imgSrc(c, 'high') : ''; // pokemontcg.io = pas de CORS → exclu de l'export
+
     const name   = (currentLang === 'en' && c.nameEn) ? c.nameEn : (c.name || '—');
     const set    = c.set?.name || '';
     const rarity = c.rarity || '';
@@ -3372,6 +3502,9 @@ function buildConfigPayload() {
 function openConfig()  { document.getElementById('config-overlay').classList.add('open'); }
 function closeConfig() { document.getElementById('config-overlay').classList.remove('open'); }
 
+function openSettings()  { document.getElementById('settings-overlay').classList.add('open'); }
+function closeSettings() { document.getElementById('settings-overlay').classList.remove('open'); }
+
 /* ── Panneau d'ajout / scan de cartes ─────────────────────────────────────
    Saisie du numéro (+ total / nom si doute) → candidats du catalogue courant
    via findScanCandidates → tap pour ajouter à la collection. La caméra (OCR)
@@ -3397,7 +3530,7 @@ function addOwnedFromScan(card) {
 function buildScanCandidateEl(card) {
   const lang = cardLangFor(card);
   const owned = isOwned(card.id, lang);
-  const img = card.image ? card.image + '/low.webp' : '';
+  const img = imgSrc(card);
   const sub = `${card.set?.name || ''}${card.localId ? ' · N°' + card.localId : ''}`;
   const el = document.createElement('button');
   el.type = 'button';
@@ -3658,9 +3791,9 @@ function applyImportedConfig(text) {
   if (data.tags && typeof data.tags === 'object' && !Array.isArray(data.tags)) { tagsMap = data.tags; saveTags(); refreshTagFilters(); }
   if (data.prefs && typeof data.prefs === 'object') {
     prefs = { ...defaultPrefs, ...data.prefs };
-    // Compat masterRarityExcludes
-    if (!prefs.masterRarityExcludes || typeof prefs.masterRarityExcludes !== 'object') {
-      prefs.masterRarityExcludes = { set: [], artist: [] };
+    // Compat exclusions par master set
+    if (!prefs.masterExcludes || typeof prefs.masterExcludes !== 'object' || Array.isArray(prefs.masterExcludes)) {
+      prefs.masterExcludes = {};
     }
     savePrefs();
     currentLang   = prefs.lang || 'fr';
@@ -3795,6 +3928,8 @@ function applyTheme(theme) {
   document.documentElement.dataset.theme = theme;
   const icon = document.querySelector('#btn-theme .theme-icon');
   if (icon) icon.textContent = theme === 'dark' ? '☀️' : '🌙';
+  const label = document.getElementById('theme-label');
+  if (label) label.textContent = theme === 'dark' ? 'Sombre' : 'Clair';
 }
 applyTheme(prefs.theme === 'dark' ? 'dark' : 'light');
 document.getElementById('btn-theme').addEventListener('click', () => {
@@ -3883,11 +4018,30 @@ document.getElementById('lang-select').addEventListener('change', e => {
 syncCatalogSelects();
 
 // 9) Onglets principaux.
+// « Ma Collection » est une section qui regroupe plusieurs sous-vues.
+const COLL_SECTION   = ['collection', 'master', 'binder', 'tierlist', 'echange'];
+const CATALOG_BAR_TABS = ['explore', 'collection', 'master'];
+
 function setActiveTab(tab) {
   currentTab = tab;
   prefs.tab = currentTab;
+  if (COLL_SECTION.includes(tab)) prefs.collSub = tab; // mémorise la dernière sous-vue
   savePrefs();
-  document.querySelectorAll('.nav-tab').forEach(t => t.classList.toggle('active', t.dataset.view === currentTab));
+
+  const inColl = COLL_SECTION.includes(currentTab);
+  // Nav principale : Explorer vs section Ma Collection
+  document.querySelectorAll('.nav-tab').forEach(t => {
+    const on = t.dataset.section ? (t.dataset.section === 'collection' && inColl) : (t.dataset.view === currentTab);
+    t.classList.toggle('active', on);
+  });
+  // Sous-nav : visible seulement dans la section, onglet courant actif
+  const subnav = document.getElementById('coll-subnav');
+  if (subnav) subnav.hidden = !inColl;
+  document.querySelectorAll('.sub-tab').forEach(t => t.classList.toggle('active', t.dataset.view === currentTab));
+  // Barre catalogue : visible sur Explorer / Cartes / Master uniquement
+  const cbar = document.getElementById('catalog-bar');
+  if (cbar) cbar.hidden = !CATALOG_BAR_TABS.includes(currentTab);
+
   document.getElementById('explore-view').classList.toggle('hidden', currentTab !== 'explore');
   document.getElementById('collection-view').classList.toggle('active', currentTab === 'collection');
   document.getElementById('master-view').classList.toggle('active', currentTab === 'master');
@@ -3902,7 +4056,19 @@ function setActiveTab(tab) {
   if (currentTab === 'tierlist') renderTierlist();
   if (currentTab === 'echange') renderEchange();
 }
-document.querySelectorAll('.nav-tab').forEach(tab => {
+// Nav principale : Explorer (data-view) ou bascule vers la section Collection (data-section).
+document.querySelectorAll('.app-nav .nav-tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    if (tab.dataset.section === 'collection') {
+      const sub = COLL_SECTION.includes(prefs.collSub) ? prefs.collSub : 'collection';
+      setActiveTab(sub);
+    } else {
+      setActiveTab(tab.dataset.view);
+    }
+  });
+});
+// Sous-onglets de la section Collection.
+document.querySelectorAll('.sub-nav .sub-tab').forEach(tab => {
   tab.addEventListener('click', () => setActiveTab(tab.dataset.view));
 });
 
@@ -3910,7 +4076,7 @@ document.querySelectorAll('.nav-tab').forEach(tab => {
 document.getElementById('binder-prev').addEventListener('click', () => { if (binderPage > 0) { binderPage--; renderBinder(); } });
 document.getElementById('binder-next').addEventListener('click', () => { if (binderPage < binder.pages - 1) { binderPage++; renderBinder(); } });
 document.getElementById('binder-addpage').addEventListener('click', () => {
-  binder.pages++; binder.slots.push(...new Array(9).fill(null));
+  binder.pages++; binder.slots.push(...new Array(9).fill(null)); binder.pageBgs.push(null);
   saveBinder(); binderPage = binder.pages - 1; renderBinder();
 });
 document.getElementById('binder-picker-close').addEventListener('click', closeBinderPicker);
@@ -4028,8 +4194,14 @@ document.getElementById('scan-num').addEventListener('input', renderScanCandidat
 // Capture auto quand la carte est bien placée ; tap sur la vidéo = capture forcée.
 document.getElementById('scan-cam-view').addEventListener('click', () => { if (!scanBusy) autoCapture(); });
 
+// 11d) Réglages (thème, actualisation, import/export config).
+document.getElementById('btn-settings').addEventListener('click', openSettings);
+document.getElementById('settings-close').addEventListener('click', closeSettings);
+document.getElementById('settings-overlay').addEventListener('click', e => { if (e.target === e.currentTarget) closeSettings(); });
+
 // 12) Import / export de la collection (JSON).
 document.getElementById('btn-config').addEventListener('click', () => {
+  closeSettings();
   document.getElementById('config-text').value = buildConfigPayload();
   openConfig();
 });
@@ -4093,7 +4265,7 @@ window.addEventListener('hashchange', () => {
 fetchCards().then(() => {
   if (location.hash.startsWith('#share=')) { handleShareLink(); return; }
   handleDeepLink();
-  if (prefs.tab && prefs.tab !== 'explore') setActiveTab(prefs.tab);
+  setActiveTab(prefs.tab || 'explore');
 });
 
 updateCollStat();

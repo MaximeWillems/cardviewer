@@ -1525,6 +1525,59 @@
   .nav-tab:hover { color: var(--text); }
   .nav-tab.active { color: var(--text); border-bottom-color: var(--accent); }
 
+  /* ── Sous-navigation (section Ma Collection) ── */
+  .sub-nav {
+    display: flex;
+    gap: 6px;
+    margin-top: 0.85rem;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  .sub-nav[hidden] { display: none; }
+  .sub-nav::-webkit-scrollbar { display: none; }
+  .sub-tab {
+    padding: 6px 14px;
+    font-family: 'Syne', sans-serif;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+    color: var(--muted);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 100px;
+    cursor: pointer;
+    white-space: nowrap;
+    flex-shrink: 0;
+    transition: all 0.18s;
+  }
+  .sub-tab:hover { color: var(--text); border-color: rgba(var(--fg-rgb),0.2); }
+  .sub-tab.active { color: var(--accent); border-color: var(--accent); background: rgba(var(--accent-rgb),0.1); }
+
+  /* ── Barre catalogue (type de série + langue + prix) ── */
+  .catalog-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 0.85rem;
+    flex-wrap: wrap;
+  }
+  .catalog-bar[hidden] { display: none; }
+
+  /* ── Réglages ─────────────────────────────── */
+  .settings-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.9rem 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .settings-row:last-child { border-bottom: none; }
+  .settings-row-title { font-family: 'Syne', sans-serif; font-weight: 700; font-size: 13px; color: var(--text); }
+  .settings-row-sub { font-size: 11px; color: var(--muted); margin-top: 2px; }
+  .settings-row .config-btn { flex-shrink: 0; }
+
   /* ── Collection view ────────────────────────── */
   .collection-view { display: none; max-width: 1200px; margin: 0 auto; padding: 0 2rem; }
   .collection-view.active { display: block; }
@@ -1704,9 +1757,50 @@
   .master-back:hover { border-color: rgba(var(--fg-rgb),0.25); }
   .master-detail-info { flex: 1; min-width: 200px; }
   .master-detail-title { font-family: 'Syne', sans-serif; font-size: 1.3rem; font-weight: 800; }
-  .master-detail-progress { font-size: 13px; color: var(--muted); margin-top: 4px; max-width: 360px; }
+  .master-detail-progress { font-size: 13px; color: var(--muted); margin-top: 4px; max-width: 420px; }
   .master-progress-num { color: var(--text); font-weight: 700; font-family: 'Syne', sans-serif; }
   .master-progress-pct { color: var(--accent); font-weight: 700; }
+
+  /* ── Tag box d'exclusion (par master set) ───── */
+  .master-exclude { position: relative; display: inline-block; margin-bottom: 8px; max-width: 100%; }
+  .master-exclude-toggle {
+    display: inline-flex; align-items: center; gap: 8px; max-width: 100%;
+    padding: 7px 10px; border: 1px solid var(--border); border-radius: 10px;
+    background: var(--surface); color: var(--text); cursor: pointer; font-size: 12px;
+    transition: border-color 0.15s;
+  }
+  .master-exclude-toggle:hover { border-color: rgba(var(--fg-rgb),0.25); }
+  .mex-label { font-weight: 600; color: var(--muted); white-space: nowrap; }
+  .mex-current { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; min-width: 0; }
+  .mex-tag {
+    font-family: 'Syne', sans-serif; font-weight: 700; font-size: 11px;
+    background: rgba(var(--accent-rgb),0.14); color: var(--accent);
+    padding: 2px 7px; border-radius: 100px; white-space: nowrap;
+  }
+  .mex-none { color: var(--muted); font-style: italic; }
+  .mex-caret { color: var(--muted); margin-left: auto; }
+  .master-exclude-menu {
+    position: absolute; top: calc(100% + 5px); left: 0; z-index: 30;
+    min-width: 230px; max-height: 320px; overflow-y: auto;
+    background: var(--surface); border: 1px solid rgba(var(--fg-rgb),0.16);
+    border-radius: 12px; box-shadow: 0 16px 50px rgba(0,0,0,0.4); padding: 5px;
+  }
+  .master-exclude-menu[hidden] { display: none; }
+  .mex-opt {
+    display: flex; align-items: center; gap: 9px; width: 100%;
+    padding: 8px 10px; border: none; background: none; cursor: pointer;
+    border-radius: 8px; color: var(--text); font-size: 13px; text-align: left;
+  }
+  .mex-opt:hover { background: var(--surface2); }
+  .mex-check {
+    width: 18px; height: 18px; flex-shrink: 0; border-radius: 5px;
+    border: 1px solid var(--border); display: flex; align-items: center; justify-content: center;
+    font-size: 12px; color: transparent;
+  }
+  .mex-opt.on .mex-check { background: var(--accent); border-color: var(--accent); color: #14160c; }
+  .mex-opt-label { flex: 1; font-family: 'Syne', sans-serif; font-weight: 600; }
+  .mex-opt-count { color: var(--muted); font-size: 11px; font-weight: 700; }
+  .master-excluded-note { display: block; font-size: 11px; color: var(--muted); margin-bottom: 6px; }
   /* dans le master set, on atténue les cartes non possédées */
   #master-grid .card:not(.owned) { opacity: 0.45; transition: opacity 0.18s; }
   #master-grid .card:not(.owned):hover { opacity: 1; }
@@ -1773,7 +1867,8 @@
     padding: 8px 12px; border-radius: var(--radius); cursor: pointer;
   }
   .binder-addpage:hover { border-color: rgba(var(--accent-rgb),0.5); }
-  .binder-palette { display: flex; flex-wrap: wrap; gap: 9px; justify-content: center; margin-bottom: 1.1rem; }
+  .binder-palette { display: flex; flex-wrap: wrap; gap: 9px; align-items: center; justify-content: center; margin-bottom: 1.1rem; }
+  .binder-palette-label { font-size: 11px; color: var(--muted); font-weight: 600; margin-right: 2px; width: 100%; text-align: center; }
   .binder-swatch {
     width: 26px; height: 26px; border-radius: 50%;
     border: none; padding: 0; cursor: pointer;
@@ -1826,8 +1921,9 @@
     background: var(--input-bg); color: var(--text); font-size: 15px;
   }
   .binder-picker-grid {
-    display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px;
-    max-height: 60vh; overflow-y: auto; overscroll-behavior: contain;
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 8px;
+    max-height: 62vh; overflow-y: auto; overscroll-behavior: contain;
+    padding-right: 2px;
   }
   .binder-pick {
     display: flex; flex-direction: column; gap: 4px;
@@ -2270,7 +2366,12 @@
     /* Onglets : défilement horizontal si trop larges */
     .app-nav { overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
     .app-nav::-webkit-scrollbar { display: none; }
-    .nav-tab { padding: 10px 8px; font-size: 12px; white-space: nowrap; }
+    .nav-tab { padding: 10px 14px; font-size: 12px; white-space: nowrap; }
+
+    /* Barre catalogue : les deux sélecteurs partagent la largeur, € au bout */
+    .catalog-bar { gap: 6px; flex-wrap: nowrap; }
+    .catalog-bar .catalog-toggle { flex: 1; min-width: 0; }
+    .catalog-bar .hdr-select { flex: 1; min-width: 0; max-width: none; }
 
     /* Barre de recherche : passe à la ligne au lieu de déborder hors écran.
        Ligne 1 = recherche pleine largeur ; ligne 2 = tri + bouton Filtres. */

@@ -72,11 +72,10 @@
 
 /* ── Note "N cartes exclues" ──────────────────────────────────────────── */
 .master-excluded-note {
-  font-size: 10px;
-  color: rgba(255, 130, 130, .75);
-  font-style: italic;
-  margin-left: auto;
-  white-space: nowrap;
+  display: block;
+  font-size: 11px;
+  color: var(--muted, #888);
+  margin: 0 0 6px;
 }
 
 /* ── Conteneur des lignes de groupes (séparé des pills dans la liste) ─── */
