@@ -410,6 +410,13 @@ function langsWith(id, flag) {
 function ownedLangs(id) { return langsWith(id, 'qty'); }
 // Langue dans laquelle une carte est mise en vente (pour son prix de vente).
 function tradeLangOf(id) { return langsWith(id, 'trade')[0] || currentLang; }
+// Langue à utiliser pour LIRE le prix d'une carte selon le type : celle où elle
+// est effectivement possédée / voulue / à vendre (sinon le prix d'une carte JP
+// ne s'afficherait pas quand on est en catalogue international, et inversement).
+function priceLangOf(id, type) {
+  const flag = type === 'owned' ? 'qty' : type; // owned↔qty, wanted↔wanted, trade↔trade
+  return langsWith(id, flag)[0] || currentLang;
+}
 
 // Reconstruit les projections « toutes langues » depuis collection (mutation en place).
 function rebuildProjections() {
@@ -506,14 +513,14 @@ function updateCardPricePill(el, cardId) {
   const ownedPill  = el.querySelector('.owned-price');
   const wantedPill = el.querySelector('.wanted-price');
   const sellPill   = el.querySelector('.sell-price');
-  if (ownedPill)  ownedPill.textContent  = getPriceLabel(cardId, 'owned');
-  if (wantedPill) wantedPill.textContent = getPriceLabel(cardId, 'wanted');
-  if (sellPill)   sellPill.textContent   = getPriceLabel(cardId, 'trade', tradeLangOf(cardId));
+  if (ownedPill)  ownedPill.textContent  = getPriceLabel(cardId, 'owned',  priceLangOf(cardId, 'owned'));
+  if (wantedPill) wantedPill.textContent = getPriceLabel(cardId, 'wanted', priceLangOf(cardId, 'wanted'));
+  if (sellPill)   sellPill.textContent   = getPriceLabel(cardId, 'trade',  tradeLangOf(cardId));
 }
 
 function getBestPrice(cardId) {
   for (const type of ['owned', 'wanted']) {
-    const d = getPriceData(cardId, type);
+    const d = getPriceData(cardId, type, priceLangOf(cardId, type)); // langue de possession
     if (d.val && !isNaN(parseFloat(d.val))) return parseFloat(d.val);
     if (d.min && !isNaN(parseFloat(d.min))) return parseFloat(d.min);
   }
@@ -524,7 +531,7 @@ function getBestPrice(cardId) {
 // donc tout en bas d'un tri décroissant et tout en haut d'un tri croissant).
 function getUserPriceValue(card) {
   for (const type of ['owned', 'wanted']) {
-    const d = getPriceData(card.id, type);
+    const d = getPriceData(card.id, type, priceLangOf(card.id, type)); // langue de possession
     if (d.val && !isNaN(parseFloat(d.val))) return parseFloat(d.val);
     if (d.min && !isNaN(parseFloat(d.min))) return parseFloat(d.min);
   }
@@ -686,14 +693,6 @@ function getCards(ctx) {
   let cards = ctx === 'collection' ? getCollectionPool() : allCards;
   const ms = membershipSet(ctx);
   if (ms) cards = cards.filter(c => ms.has(c.id));
-  // Filtre de langue (Collection) : restreint à l'appartenance DANS cette langue
-  // pour le sous-onglet courant (possédée / à obtenir / à vendre).
-  if (ctx === 'collection' && st.lang && st.lang !== 'all') {
-    const tab = st.collTab;
-    cards = cards.filter(c =>
-      tab === 'owned' ? isOwned(c.id, st.lang) :
-      tab === 'wanted' ? isWanted(c.id, st.lang) : isTrade(c.id, st.lang));
-  }
   // Doublons : ne garder que les cartes possédées en ≥ 2 exemplaires.
   if (ctx === 'collection' && st.dupOnly) cards = cards.filter(c => totalQty(c.id) >= 2);
   return sortByConfig(filterCards(cards, st), st.sort, st.artistCounts);
@@ -959,9 +958,9 @@ function buildCardEl(c, ctx, idx) {
   const isWanted   = wantedSet.has(c.id);
   const isTrade    = tradeSet.has(c.id);
   const isSelected = ctx === 'collection' && selectedIds.has(c.id);
-  const ownedLabel  = getPriceLabel(c.id, 'owned');
-  const wantedLabel = getPriceLabel(c.id, 'wanted');
-  const sellLabel   = getPriceLabel(c.id, 'trade', tradeLangOf(c.id));
+  const ownedLabel  = getPriceLabel(c.id, 'owned',  priceLangOf(c.id, 'owned'));
+  const wantedLabel = getPriceLabel(c.id, 'wanted', priceLangOf(c.id, 'wanted'));
+  const sellLabel   = getPriceLabel(c.id, 'trade',  tradeLangOf(c.id));
 
   const div = document.createElement('div');
   div.className = 'card'
@@ -1938,14 +1937,6 @@ function renderFilterControls(ctx) {
           <label>Tag</label>
           <select id="${prefix}tag-filter" aria-label="Filtrer par tag"><option value="all">Tous les tags</option></select>
         </div>
-        ${isColl && REGIONS[currentRegion].langs.length > 1 ? `
-        <div class="adv-field">
-          <label>Langue</label>
-          <select id="coll-lang-filter" aria-label="Filtrer par langue">
-            <option value="all">Toutes les langues</option>
-            ${REGIONS[currentRegion].langs.map(l => `<option value="${l}"${st.lang === l ? ' selected' : ''}>${LANG_FLAGS[l] || ''} ${LANG_LABELS[l] || l}</option>`).join('')}
-          </select>
-        </div>` : ''}
         ${isColl ? `
         <div class="adv-field price-field">
           <label>Prix (€)</label>
@@ -1975,7 +1966,6 @@ function updateAdvCount(ctx) {
   if (st.set !== 'all') n++;
   if (st.series !== 'all') n++;
   if (st.tag !== 'all') n++;
-  if (st.lang && st.lang !== 'all') n++;
   if (st.priceMin !== '' || st.priceMax !== '') n++;
   const badge = document.getElementById((ctx === 'collection' ? 'coll-' : '') + 'filters-count');
   if (badge) { badge.textContent = n || ''; badge.style.display = n ? '' : 'none'; }
@@ -1987,13 +1977,12 @@ function resetFilters(ctx) {
   const st = S[ctx];
   const prefix = ctx === 'collection' ? 'coll-' : '';
   st.query = ''; st.rarities = new Set(rarityKinds());
-  st.type = 'all'; st.artist = 'all'; st.set = 'all'; st.series = 'all'; st.tag = 'all'; st.lang = 'all';
+  st.type = 'all'; st.artist = 'all'; st.set = 'all'; st.series = 'all'; st.tag = 'all';
   st.priceMin = ''; st.priceMax = '';
   const s = document.getElementById(ctx === 'collection' ? 'coll-search' : 'search'); if (s) s.value = '';
   ['type-filter', 'artist-filter', 'set-filter', 'series-filter', 'tag-filter'].forEach(id => {
     const el = document.getElementById(prefix + id); if (el) el.value = 'all';
   });
-  const lf = document.getElementById('coll-lang-filter'); if (lf) lf.value = 'all';
   const mn = document.getElementById('price-min-filter'), mx = document.getElementById('price-max-filter');
   if (mn) mn.value = ''; if (mx) mx.value = '';
   updateRarityButtons(ctx);
@@ -2274,12 +2263,6 @@ function wireFilters(ctx) {
 
   const tagEl = document.getElementById(prefix + 'tag-filter');
   if (tagEl) tagEl.addEventListener('change', e => { st.tag = e.target.value; apply(); });
-
-  const langFilterEl = document.getElementById('coll-lang-filter');
-  if (langFilterEl) {
-    langFilterEl.value = st.lang;
-    langFilterEl.addEventListener('change', e => { st.lang = e.target.value; apply(); });
-  }
 
   const sortEl = document.getElementById(isColl ? 'coll-sort' : 'sort');
   if (sortEl) {
@@ -4056,7 +4039,6 @@ function syncCatalogSelects() { buildRegionOptions(); buildLangOptions(); }
 function applyCatalogChange() {
   API = API_BASE + '/' + currentLang;
   RARITY_LABELS = RARITY_LABELS_BY_LANG[currentLang] || RARITY_LABELS_BY_LANG.en;
-  S.collection.lang = 'all'; // le filtre langue dépend de la région courante
   if (currentRegion === 'asian') {
     coerceAsianSort();       // JP : pas de Pokédex → tri par extension
   } else {                   // retour international : on restaure le tri préféré
