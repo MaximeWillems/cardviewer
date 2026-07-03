@@ -2037,32 +2037,15 @@
   .binder-cover, .binder-spread { grid-area: 1 / 1; }
 
   .binder-cover {
-    width: min(64vw, 300px); aspect-ratio: 63 / 88;
-    border: none; border-radius: 8px 14px 14px 8px; cursor: pointer;
-    background:
-      repeating-linear-gradient(115deg, rgba(255,255,255,0.04) 0 3px, transparent 3px 7px),
-      linear-gradient(135deg, #3c4c66, #232f47);
-    box-shadow: 0 34px 70px rgba(0,0,0,0.55), inset 0 0 0 2px rgba(255,255,255,0.05);
-    transform-origin: left center; z-index: 2;
+    position: relative;
+    width: min(74vw, 322px); aspect-ratio: 303 / 325;
+    border: none; background: transparent; cursor: pointer; padding: 0;
+    transform-origin: 3% center; z-index: 2;
     transition: transform 0.8s cubic-bezier(.2,.7,.15,1), opacity 0.45s ease 0.3s;
   }
-  .binder-cover::before {
-    content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 14px;
-    background: linear-gradient(90deg, rgba(0,0,0,0.45), transparent); border-radius: 8px 0 0 8px;
-  }
-  .binder-cover-label {
-    position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
-    font-family: 'Syne', sans-serif; font-weight: 800; font-size: 1.15rem; letter-spacing: 0.12em;
-    color: rgba(255,255,255,0.32); text-transform: uppercase; line-height: 1.3;
-  }
-  .binder-cover-shine {
-    position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
-    background: linear-gradient(115deg, transparent 42%, rgba(255,255,255,0.14) 50%, transparent 58%);
-  }
-  .binder-cover::after {  /* surpiqûre + vignette */
-    content: ''; position: absolute; inset: 9px 9px 9px 9px; pointer-events: none;
-    border: 1px solid rgba(255,255,255,0.08); border-radius: 5px 9px 9px 5px;
-    box-shadow: inset 0 0 55px rgba(0,0,0,0.45);
+  .binder-cover-svg {
+    width: 100%; height: 100%; display: block;
+    filter: drop-shadow(0 26px 42px rgba(0,0,0,0.5));
   }
 
   /* Zoom d'une page */
@@ -2076,27 +2059,25 @@
   .binder-zoom-grid .binder-slot { aspect-ratio: 3 / 4; }
   .binder-view.open .binder-cover { transform: rotateY(-155deg); opacity: 0; pointer-events: none; }
 
-  /* Fermeture éclair (Phase B) : liseré à dents sur 3 côtés + tirette qui fait le tour */
-  .binder-zip {
-    position: absolute; inset: 9px 9px 9px 7px;
-    border: 3px dashed rgba(0,0,0,0.42); border-left: none;
-    border-radius: 0 10px 10px 0; pointer-events: none;
-  }
+  /* Fermeture éclair : la tirette dorée suit le contour du zip dessiné dans le SVG */
+  .binder-zip { position: absolute; inset: 0; pointer-events: none; }
   .binder-zip-pull {
-    position: absolute; top: -7px; left: -7px; width: 14px; height: 20px; border-radius: 4px;
-    background: linear-gradient(180deg, #dfe4ea, #98a0ab);
-    box-shadow: 0 1px 3px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.5);
+    position: absolute; left: 89.8%; top: 89.8%; transform: translate(-50%, -50%);
+    width: 15px; height: 22px; border-radius: 4px;
+    background: linear-gradient(180deg, #faf0b8, #b28a34 62%, #7c5c1f);
+    box-shadow: 0 1px 3px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.55);
   }
   .binder-zip-pull::after {
-    content: ''; position: absolute; left: 50%; bottom: -8px; transform: translateX(-50%);
-    width: 6px; height: 9px; border-radius: 0 0 3px 3px; background: #c3c9d2;
+    content: ''; position: absolute; left: 50%; bottom: -7px; transform: translateX(-50%);
+    width: 6px; height: 9px; border-radius: 0 0 3px 3px; background: #c9a13a;
   }
   .binder-view.zipping .binder-zip-pull { animation: zipAround var(--zip-ms, 0.85s) linear forwards; }
   @keyframes zipAround {
-    0%   { top: -7px; left: -7px; }
-    34%  { top: -7px; left: calc(100% - 7px); }
-    67%  { top: calc(100% - 7px); left: calc(100% - 7px); }
-    100% { top: calc(100% - 7px); left: -7px; }
+    0%   { left: 89.8%; top: 89.8%; }
+    30%  { left: 89.8%; top: 6.2%; }
+    55%  { left: 7.3%;  top: 6.2%; }
+    80%  { left: 7.3%;  top: 89.8%; }
+    100% { left: 89.8%; top: 89.8%; }
   }
   @media (prefers-reduced-motion: reduce) { .binder-zip-pull { animation: none !important; } }
 
