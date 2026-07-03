@@ -13,8 +13,8 @@
 </script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=20260703k">
-<link rel="stylesheet" href="master-filter-patch.css?v=20260703k">
+<link rel="stylesheet" href="styles.css?v=20260703m">
+<link rel="stylesheet" href="master-filter-patch.css?v=20260703m">
 </head>
 <body>
 
@@ -162,11 +162,6 @@
           </radialGradient>
           <filter id="bcGrain"><feTurbulence type="fractalNoise" baseFrequency="1.1" numOctaves="2" stitchTiles="stitch"/><feColorMatrix type="saturate" values="0"/><feComponentTransfer><feFuncA type="linear" slope="0.045"/></feComponentTransfer></filter>
           <clipPath id="bcClip"><rect x="4" y="4" width="270" height="306" rx="20"/></clipPath>
-          <path id="bcZip"   d="M34 12 H247 A15 15 0 0 1 262 27 V287 A15 15 0 0 1 247 302 H34" fill="none"/>
-          <path id="bcZipIn" d="M34 21 H244 A6  6  0 0 1 250 27 V287 A6  6  0 0 1 244 293 H34" fill="none"/>
-          <linearGradient id="bcBevel" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0" stop-color="#2b2c31"/><stop offset="1" stop-color="#101116"/>
-          </linearGradient>
         </defs>
         <rect x="10" y="10" width="270" height="306" rx="20" fill="#060608"/>
         <rect x="10.5" y="10.5" width="269" height="305" rx="19.5" fill="none" stroke="#33343a" stroke-width="1" opacity="0.35"/>
@@ -175,24 +170,6 @@
         <rect x="4" y="4" width="270" height="306" rx="20" fill="url(#bcSheen)"/>
         <rect x="4" y="4" width="270" height="306" rx="20" fill="url(#bcVignette)"/>
         <rect x="4.5" y="4.5" width="269" height="305" rx="19.5" fill="none" stroke="#000000" stroke-width="1" opacity="0.55"/>
-        <g stroke-linecap="round">
-          <line x1="19" y1="26" x2="19" y2="290" stroke="#050506" stroke-width="2.4"/>
-          <line x1="24" y1="24" x2="24" y2="292" stroke="#33343a" stroke-width="0.8" opacity="0.5"/>
-        </g>
-        <g fill="none" stroke-linecap="round">
-          <use href="#bcZip" stroke="#202127" stroke-width="12"/>
-          <use href="#bcZip" stroke="#050506" stroke-width="6.5"/>
-          <use href="#bcZip" stroke="#3e4046" stroke-width="4.4" stroke-dasharray="1.8 1.8"/>
-          <use href="#bcZip" stroke="#17181b" stroke-width="4.4" stroke-dasharray="1.8 1.8" stroke-dashoffset="1.8"/>
-          <use href="#bcZip" stroke="#83868f" stroke-width="0.8" stroke-dasharray="1.8 1.8" opacity="0.5"/>
-          <use href="#bcZipIn" stroke="#0a0a0c" stroke-width="1" stroke-dasharray="2.4 2" opacity="0.8"/>
-        </g>
-        <!-- rebord relevé de la couverture : recouvre le bord externe du zip -->
-        <g fill="none">
-          <rect x="8" y="8" width="262" height="298" rx="16" stroke="url(#bcBevel)" stroke-width="9"/>
-          <rect x="12.5" y="12.5" width="253" height="289" rx="12" stroke="#000000" stroke-width="1.8" opacity="0.5"/>
-          <rect x="4.2" y="4.2" width="269.6" height="305.6" rx="19.8" stroke="#45464d" stroke-width="0.8" opacity="0.5"/>
-        </g>
         <g text-anchor="middle" font-family="Syne, sans-serif" font-weight="800" font-size="30" letter-spacing="2">
           <text x="139" y="156.4" fill="#050506">pikidex</text>
           <text x="139" y="158.6" fill="#3d3e45">pikidex</text>
@@ -200,6 +177,16 @@
         </g>
       </svg>
       <span class="binder-zip" aria-hidden="true"><span class="binder-zip-pull"></span></span>
+      <svg class="binder-cover-lip" viewBox="0 0 285 320" width="100%" height="100%" aria-hidden="true">
+        <defs>
+          <linearGradient id="bcLipG" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stop-color="#2c2d32"/><stop offset="1" stop-color="#0e0f13"/>
+          </linearGradient>
+        </defs>
+        <rect x="13" y="13" width="252" height="288" rx="15" fill="none" stroke="url(#bcLipG)" stroke-width="18"/>
+        <rect x="4.4" y="4.4" width="269.2" height="305.2" rx="19.6" fill="none" stroke="#4a4c53" stroke-width="1" opacity="0.5"/>
+        <rect x="22" y="22" width="234" height="270" rx="8" fill="none" stroke="#000000" stroke-width="2.4" opacity="0.55"/>
+      </svg>
     </button>
     <div class="binder-spread" id="binder-spread">
       <div class="binder-page left">
@@ -500,6 +487,6 @@
 
 <div id="toast"></div>
 
-<script src="app.js?v=20260703k"></script>
+<script src="app.js?v=20260703m"></script>
 </body>
 </html>
