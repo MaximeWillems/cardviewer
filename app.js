@@ -1572,7 +1572,7 @@ function updateBinderEditBtn() {
 }
 // ── Fermeture éclair (Phase B) : la tirette fait le tour, puis la couverture
 // s'ouvre. Son généré en Web Audio (bruit filtré modulé), désactivable. ──────
-const ZIP_MS = 1300;
+const ZIP_MS = 1650;
 let binderZipping = false, _audioCtx = null;
 function reducedMotion() { return window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches; }
 function getAudioCtx() {

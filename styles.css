@@ -2090,15 +2090,18 @@
     width: 12px; height: 12px; border-radius: 3px;
     background: linear-gradient(180deg, #4a4c53, #191a1f);
   }
-  .binder-view.zipping .binder-zip-pull { animation: zipAround var(--zip-ms, 1.3s) ease-in-out forwards; }
-  @keyframes zipAround {  /* sort de sous le rebord (haut-gauche), longe le haut, descend la
-                             droite et disparaît à droite ; pointe vers l'extérieur (haut:180° droite:270°). */
+  .binder-view.zipping .binder-zip-pull { animation: zipAround var(--zip-ms, 1.65s) linear forwards; }
+  @keyframes zipAround {  /* sort de sous le rebord (haut-gauche), fait le tour haut → droite →
+                             bas et disparaît en bas-gauche ; pointe vers l'extérieur, pivote
+                             180°(haut) → 270°(droite) → 360°(bas). Timing linear = coins fluides. */
     0%    { left: 14.04%; top: 4.38%;  opacity: 0; transform: translate(-50%,-6px) rotate(180deg); }
-    8%    { left: 14.04%; top: 4.38%;  opacity: 1; transform: translate(-50%,-6px) rotate(180deg); }
-    47%   { left: 87.72%; top: 4.38%;             transform: translate(-50%,-6px) rotate(180deg); }   /* longe le haut */
-    51%   { left: 92.63%; top: 9.38%;            transform: translate(-50%,-6px) rotate(270deg); }    /* coin, pivote */
-    92%   { left: 92.63%; top: 89.06%; opacity: 1; transform: translate(-50%,-6px) rotate(270deg); }  /* descend la droite */
-    100%  { left: 92.63%; top: 89.06%; opacity: 0; transform: translate(-50%,-6px) rotate(270deg); }  /* disparaît à droite */
+    7%    { left: 14.04%; top: 4.38%;  opacity: 1; transform: translate(-50%,-6px) rotate(180deg); }
+    33%   { left: 87.72%; top: 4.38%;             transform: translate(-50%,-6px) rotate(180deg); }   /* longe le haut */
+    36%   { left: 92.63%; top: 9.38%;            transform: translate(-50%,-6px) rotate(270deg); }    /* coin haut-droit */
+    68%   { left: 92.63%; top: 89.38%;           transform: translate(-50%,-6px) rotate(270deg); }    /* descend la droite */
+    71%   { left: 87.72%; top: 93.75%;           transform: translate(-50%,-6px) rotate(360deg); }    /* coin bas-droit */
+    97%   { left: 14.04%; top: 93.75%; opacity: 1; transform: translate(-50%,-6px) rotate(360deg); }  /* longe le bas */
+    100%  { left: 14.04%; top: 93.75%; opacity: 0; transform: translate(-50%,-6px) rotate(360deg); }  /* disparaît en bas-gauche */
   }
   @media (prefers-reduced-motion: reduce) { .binder-zip-pull { animation: none !important; opacity: 0; } }
 
