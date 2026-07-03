@@ -233,7 +233,7 @@ const defaultPrefs = {
   masterExcludes: {},
   syncKey: '',        // clé perso de synchro auto entre appareils (vide = désactivé)
   syncAppliedTs: 0,   // horodatage de la dernière version synchronisée reflétée localement
-  binderSound: true,  // bruitages du classeur (zip / feuilletage)
+  binderSound: false,  // bruitages du classeur (zip / feuilletage) — coupés par défaut
 };
 let prefs = { ...defaultPrefs, ...JSON.parse(localStorage.getItem(LS_PREFS) || '{}') };
 prefs.listOrder = { ...defaultPrefs.listOrder, ...(prefs.listOrder || {}) };
@@ -1585,8 +1585,9 @@ function getAudioCtx() {
   if (!_audioCtx) { try { _audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {} }
   return _audioCtx;
 }
+const BINDER_SOUND_ENABLED = false; // bruitages coupés pour l'instant (à retravailler avant réactivation)
 function audioReady() {
-  if (prefs.binderSound === false) return null;
+  if (!BINDER_SOUND_ENABLED || prefs.binderSound === false) return null;
   const ctx = getAudioCtx(); if (!ctx) return null;
   if (ctx.state === 'suspended') { try { ctx.resume(); } catch (e) {} }
   return ctx;
