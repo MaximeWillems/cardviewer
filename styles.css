@@ -2031,7 +2031,7 @@
   .echange-view.active { display: block; }
 
   /* ── Classeur ─────────────────────────────────── */
-  .binder-view { display: none; max-width: 820px; margin: 0 auto; padding: 1.25rem 1rem 4rem; text-align: center; }
+  .binder-view { display: none; max-width: 1200px; margin: 0 auto; padding: 1.25rem 1rem 4rem; text-align: center; }
   .binder-view.active { display: block; }
 
   /* ── Scène 3D du classeur (Phase A) ─────────── */
@@ -2040,13 +2040,16 @@
 
   .binder-cover {
     position: relative;
-    /* Hauteur calée sur celle de la double-page ouverte (min(94vw,720px) × ratio pages),
-       largeur dérivée par l'aspect-ratio → panneau réaliste, pas de saut de taille à l'ouverture. */
-    height: calc(min(94vw, 720px) * 0.626); width: auto; aspect-ratio: 285 / 320;
+    /* Calé sur la double-page ouverte : largeur = une demi-double-page (pli au centre des
+       anneaux) ; hauteur = hauteur exacte d'une page = 4/3 × largeur de carte × 3 + gaps.
+       Formule (2W − 70px)/3 dérivée de : page padding 10, grid padding 4, gaps 7, cartes 3/4. */
+    height: calc((min(94vw, 1060px) * 2 - 70px) / 3); width: calc(min(94vw, 1060px) / 2);
     border: none; background: transparent; cursor: pointer; padding: 0;
-    transform-origin: 3% center; z-index: 2;
+    transform-origin: 0% center; z-index: 2;
     transition: transform 0.8s cubic-bezier(.2,.7,.15,1), opacity 0.45s ease 0.3s;
   }
+  /* Avant l'ouverture : le classeur glisse vers la droite, sur la future page de droite */
+  .binder-view.sliding .binder-cover { transform: translateX(calc(min(94vw, 1060px) / 4)); }
   .binder-cover-svg {
     width: 100%; height: 100%; display: block;
     filter: drop-shadow(0 26px 42px rgba(0,0,0,0.5));
@@ -2061,7 +2064,12 @@
   .binder-zoom-btn:hover { opacity: 1; }
   .binder-zoom-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; background: #141519; padding: 8px; border-radius: 8px; }
   .binder-zoom-grid .binder-slot { aspect-ratio: 3 / 4; }
-  .binder-view.open .binder-cover { transform: rotateY(-155deg); opacity: 0; pointer-events: none; }
+  /* Ouverture : la couverture pivote autour de la reliure (bord gauche, au centre des
+     anneaux) et se rabat sur la page de gauche, puis s'estompe pour la dévoiler. */
+  .binder-view.open .binder-cover {
+    transform: translateX(calc(min(94vw, 1060px) / 4)) rotateY(-180deg);
+    opacity: 0; pointer-events: none;
+  }
 
   /* La fermeture éclair n'est jamais dessinée. La languette sort de SOUS le rebord relevé
      (calque .binder-cover-lip posé au-dessus) : sa base + le curseur métal restent cachés,
@@ -2074,55 +2082,59 @@
      côté droit 270° (vers la droite). Le bout libre (fenêtre) est à l'extérieur. */
   .binder-zip-pull {
     position: absolute; left: 14.04%; top: 4.38%;
-    transform-origin: 50% 6px; transform: translate(-50%, -6px) rotate(180deg);
+    transform-origin: 50% 8px; transform: translate(-50%, -8px) rotate(180deg);
     opacity: 0;   /* invisible au repos */
-    width: 15px; height: 54px; border-radius: 3px 3px 7px 7px;
+    width: 20px; height: 72px; border-radius: 4px 4px 9px 9px;
     background: linear-gradient(180deg, rgba(182,236,115,0.97), rgba(126,194,58,0.95) 62%, rgba(80,140,32,0.97));
-    box-shadow: 0 2px 5px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.45), inset 0 -1px 0 rgba(0,0,0,0.3);
+    box-shadow: 0 2px 6px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.45), inset 0 -1px 0 rgba(0,0,0,0.3);
   }
   .binder-zip-pull::before {  /* fenêtre du plastique, vers le bout libre (extérieur) */
-    content: ''; position: absolute; top: 40px; left: 50%; transform: translateX(-50%);
-    width: 7px; height: 12px; border-radius: 3px;
+    content: ''; position: absolute; top: 53px; left: 50%; transform: translateX(-50%);
+    width: 9px; height: 16px; border-radius: 4px;
     background: rgba(0,0,0,0.35); box-shadow: inset 0 1px 2px rgba(0,0,0,0.5);
   }
   .binder-zip-pull::after {  /* curseur métal à la base (côté pivot), reste sous le rebord */
-    content: ''; position: absolute; top: -1px; left: 50%; transform: translateX(-50%);
-    width: 12px; height: 12px; border-radius: 3px;
+    content: ''; position: absolute; top: -2px; left: 50%; transform: translateX(-50%);
+    width: 16px; height: 16px; border-radius: 4px;
     background: linear-gradient(180deg, #4a4c53, #191a1f);
   }
   .binder-view.zipping .binder-zip-pull { animation: zipAround var(--zip-ms, 1.65s) linear forwards; }
   @keyframes zipAround {  /* sort de sous le rebord (haut-gauche), fait le tour haut → droite →
                              bas et disparaît en bas-gauche ; pointe vers l'extérieur, pivote
                              180°(haut) → 270°(droite) → 360°(bas). Timing linear = coins fluides. */
-    0%    { left: 14.04%; top: 4.38%;  opacity: 0; transform: translate(-50%,-6px) rotate(180deg); }
-    7%    { left: 14.04%; top: 4.38%;  opacity: 1; transform: translate(-50%,-6px) rotate(180deg); }
-    33%   { left: 87.72%; top: 4.38%;             transform: translate(-50%,-6px) rotate(180deg); }   /* longe le haut */
-    36%   { left: 92.63%; top: 9.38%;            transform: translate(-50%,-6px) rotate(270deg); }    /* coin haut-droit */
-    68%   { left: 92.63%; top: 89.38%;           transform: translate(-50%,-6px) rotate(270deg); }    /* descend la droite */
-    71%   { left: 87.72%; top: 93.75%;           transform: translate(-50%,-6px) rotate(360deg); }    /* coin bas-droit */
-    97%   { left: 14.04%; top: 93.75%; opacity: 1; transform: translate(-50%,-6px) rotate(360deg); }  /* longe le bas */
-    100%  { left: 14.04%; top: 93.75%; opacity: 0; transform: translate(-50%,-6px) rotate(360deg); }  /* disparaît en bas-gauche */
+    0%    { left: 14.04%; top: 4.38%;  opacity: 0; transform: translate(-50%,-8px) rotate(180deg); }
+    7%    { left: 14.04%; top: 4.38%;  opacity: 1; transform: translate(-50%,-8px) rotate(180deg); }
+    33%   { left: 87.72%; top: 4.38%;             transform: translate(-50%,-8px) rotate(180deg); }   /* longe le haut */
+    36%   { left: 92.63%; top: 9.38%;            transform: translate(-50%,-8px) rotate(270deg); }    /* coin haut-droit */
+    68%   { left: 92.63%; top: 89.38%;           transform: translate(-50%,-8px) rotate(270deg); }    /* descend la droite */
+    71%   { left: 87.72%; top: 93.75%;           transform: translate(-50%,-8px) rotate(360deg); }    /* coin bas-droit */
+    97%   { left: 14.04%; top: 93.75%; opacity: 1; transform: translate(-50%,-8px) rotate(360deg); }  /* longe le bas */
+    100%  { left: 14.04%; top: 93.75%; opacity: 0; transform: translate(-50%,-8px) rotate(360deg); }  /* disparaît en bas-gauche */
   }
   @media (prefers-reduced-motion: reduce) { .binder-zip-pull { animation: none !important; opacity: 0; } }
 
   .binder-spread {
     position: relative;
     display: flex; align-items: stretch; justify-content: center;
-    width: min(94vw, 720px); z-index: 1;
+    width: min(94vw, 1060px); z-index: 1;
     perspective: 1700px;
-    opacity: 0; transform: scale(0.92); pointer-events: none;
-    transition: opacity 0.5s ease 0.35s, transform 0.6s cubic-bezier(.2,.7,.2,1) 0.3s;
+    opacity: 0; pointer-events: none;   /* déjà exactement en place : aucun zoom, la couverture se rabat dessus */
+    transition: opacity 0.4s ease 0.1s;
   }
-  /* Page qui tourne (Phase C) */
+  /* Page qui tourne : l'angle est piloté en JS (boutons + glissé au doigt) */
   .binder-flip { position: absolute; z-index: 5; }
-  .binder-flip-inner { position: relative; width: 100%; height: 100%; transform-style: preserve-3d; transition: transform 0.64s cubic-bezier(.35,.05,.2,1); box-shadow: 0 0 40px rgba(0,0,0,0.25); }
+  .binder-flip-inner { position: relative; width: 100%; height: 100%; transform-style: preserve-3d; box-shadow: 0 0 40px rgba(0,0,0,0.25); }
   .binder-flip.next .binder-flip-inner { transform-origin: left center; }
   .binder-flip.prev .binder-flip-inner { transform-origin: right center; }
-  .binder-flip.next.go .binder-flip-inner { transform: rotateY(-180deg); }
-  .binder-flip.prev.go .binder-flip-inner { transform: rotateY(180deg); }
   .binder-flip-face { position: absolute; inset: 0; backface-visibility: hidden; }
   .binder-flip-face.back { transform: rotateY(180deg); }
   .binder-flip-face .binder-page { width: 100%; height: 100%; }
+  /* Ombrage de la page pendant le tour (opacité pilotée en JS selon l'angle) */
+  .binder-flip-shade { position: absolute; inset: 0; pointer-events: none; opacity: 0; z-index: 3; }
+  .binder-flip.next .binder-flip-shade { background: linear-gradient(90deg, rgba(0,0,0,0.6), rgba(0,0,0,0.15) 70%); }
+  .binder-flip.prev .binder-flip-shade { background: linear-gradient(270deg, rgba(0,0,0,0.6), rgba(0,0,0,0.15) 70%); }
+  /* En visualisation : geste horizontal réservé au feuilletage, scroll vertical natif */
+  .binder-view:not(.editing) .binder-spread { touch-action: pan-y; }
   .binder-view.open .binder-spread { opacity: 1; transform: none; pointer-events: auto; }
   .binder-page {
     position: relative;
@@ -2227,7 +2239,6 @@
   .binder-slot.filled { border-color: rgba(255,255,255,0.16); }
   /* Carte pas (encore) dans la collection : grisée/transparente ; se dé-grise seule une fois obtenue */
   .binder-slot.not-owned .binder-slot-img { opacity: 0.4; filter: grayscale(0.7); }
-  .binder-slot.not-owned .binder-slot-flag { opacity: 0.55; }
   /* Foil holographique (cartes possédées) : même bande iridescente que la visu 3D,
      mais en balayage lent — pas d'inclinaison au doigt dans le classeur. */
   .binder-slot-foil {
@@ -2261,11 +2272,6 @@
   .binder-slot-plus { color: rgba(255,255,255,0.28) !important; }
   .binder-slot-img { width: 100%; height: 100%; object-fit: cover; display: block; }
   .binder-slot-plus { font-size: 28px; color: var(--muted); font-weight: 300; }
-  .binder-slot-flag {
-    position: absolute; top: 4px; left: 4px;
-    font-size: 11px; font-weight: 700; font-family: 'Syne', sans-serif;
-    padding: 1px 4px; border-radius: 4px; background: rgba(0,0,0,0.5); color: #fff;
-  }
   .binder-slot-remove {
     position: absolute; top: 4px; right: 4px;
     width: 22px; height: 22px; border-radius: 50%;

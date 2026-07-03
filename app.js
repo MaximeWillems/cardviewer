@@ -1547,6 +1547,7 @@ function renderBinder() {
   if (!view) return;
   binderSpread = Math.max(0, Math.min(binderSpread, binderSpreadCount() - 1));
   view.classList.toggle('open', binderOpen);
+  if (!binderOpen) view.classList.remove('sliding'); // referme : la couverture revient au centre
   view.classList.toggle('editing', binderOpen && binderEditMode);
   const hint = document.getElementById('binder-hint'), bar = document.getElementById('binder-bar'), pal = document.getElementById('binder-palette');
   if (hint) hint.style.display = binderOpen ? 'none' : '';
@@ -1573,7 +1574,7 @@ function updateBinderEditBtn() {
 }
 // ── Fermeture éclair (Phase B) : la tirette fait le tour, puis la couverture
 // s'ouvre. Son généré en Web Audio (bruit filtré modulé), désactivable. ──────
-const ZIP_MS = 1650;
+const ZIP_MS = 1650, SLIDE_MS = 600; // durée du zip, puis de la glissade vers la droite
 let binderZipping = false, _audioCtx = null;
 function reducedMotion() { return window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches; }
 function getAudioCtx() {
@@ -1610,7 +1611,12 @@ function openBinder() {
   view.style.setProperty('--zip-ms', ZIP_MS + 'ms'); // synchronise l'anim CSS de la tirette
   view.classList.add('zipping');
   playZipSound();
-  setTimeout(() => { view.classList.remove('zipping'); binderZipping = false; binderOpen = true; renderBinder(); }, ZIP_MS);
+  // Zip → le classeur glisse à droite (sur la future page de droite) → la couverture s'ouvre.
+  setTimeout(() => {
+    view.classList.remove('zipping');
+    view.classList.add('sliding');
+    setTimeout(() => { binderZipping = false; binderOpen = true; renderBinder(); }, SLIDE_MS);
+  }, ZIP_MS);
 }
 function closeBinder() {
   if (binderZipping) return;
@@ -1649,16 +1655,14 @@ function playPageSound() {
   src.start(t); src.stop(t + dur);
 }
 
-// Feuilletage (Phase C) : la page qui tourne pivote à la reliure. dir=+1 suivant, -1 précédent.
-const FLIP_MS = 640;
+// Feuilletage : la page qui tourne pivote à la reliure. dir=+1 suivant, -1 précédent.
+// L'angle est piloté en JS (rAF) → même mécanique pour les boutons (animation
+// automatique) et le glissé souris/tactile (la page suit le doigt).
 let binderFlipping = false;
-function flipBinder(dir) {
-  if (binderFlipping || !binderOpen) return;
-  const cur = binderSpread, target = cur + dir;
-  if (target < 0 || target > binderSpreadCount() - 1) return;
-  if (reducedMotion()) { binderSpread = target; playPageSound(); renderBinder(); return; }
-  binderFlipping = true;
-  playPageSound();
+const easeOutCubic   = k => 1 - Math.pow(1 - k, 3);
+const easeInOutCubic = k => k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2;
+// Construit l'élément "page qui tourne" (faces avant/arrière + ombrage dynamique).
+function makeBinderFlip(dir, cur, target) {
   const lp = cur * 2, rp = lp + 1, tl = target * 2, tr = tl + 1;
   const spread = document.getElementById('binder-spread');
   const leftGrid = document.getElementById('binder-grid-left'), rightGrid = document.getElementById('binder-grid-right');
@@ -1675,13 +1679,41 @@ function flipBinder(dir) {
   const inner = document.createElement('div'); inner.className = 'binder-flip-inner';
   const front = document.createElement('div'); front.className = 'binder-flip-face front'; front.appendChild(makeBinderPageEl(frontIdx, dir > 0 ? 'right' : 'left'));
   const back  = document.createElement('div'); back.className  = 'binder-flip-face back';  back.appendChild(makeBinderPageEl(backIdx, dir > 0 ? 'left' : 'right'));
+  const shadeF = document.createElement('div'); shadeF.className = 'binder-flip-shade'; front.appendChild(shadeF);
+  const shadeB = document.createElement('div'); shadeB.className = 'binder-flip-shade'; back.appendChild(shadeB);
   inner.appendChild(front); inner.appendChild(back); flip.appendChild(inner);
   spread.appendChild(flip);
-  requestAnimationFrame(() => requestAnimationFrame(() => flip.classList.add('go')));
-  let finished = false;
-  const done = () => { if (finished) return; finished = true; binderSpread = target; binderFlipping = false; flip.remove(); renderBinder(); };
-  inner.addEventListener('transitionend', done, { once: true });
-  setTimeout(done, FLIP_MS + 120);
+  const setAngle = deg => {  // deg : 0 → ±180 (négatif = suivant)
+    const a = Math.min(180, Math.abs(deg));
+    inner.style.transform = `rotateY(${deg}deg)`;
+    // La face se dévoile/s'assombrit selon l'angle ; l'ombre portée gonfle au milieu du tour.
+    shadeF.style.opacity = Math.min(1, a / 110) * 0.45;
+    shadeB.style.opacity = Math.max(0, (180 - a) / 110) * 0.45;
+    const lift = Math.sin(a * Math.PI / 180);
+    inner.style.boxShadow = `0 0 ${20 + lift * 40}px rgba(0,0,0,${0.2 + lift * 0.25})`;
+  };
+  return { flip, setAngle };
+}
+function animateFlip(f, from, to, ms, ease, done) {
+  const t0 = performance.now();
+  const step = now => {
+    const k = Math.min(1, (now - t0) / ms);
+    f.setAngle(from + (to - from) * ease(k));
+    k < 1 ? requestAnimationFrame(step) : done();
+  };
+  requestAnimationFrame(step);
+}
+function finishFlip(f, target) { binderSpread = target; binderFlipping = false; f.flip.remove(); renderBinder(); }
+function cancelFlip(f) { binderFlipping = false; f.flip.remove(); renderBinder(); }
+function flipBinder(dir) {
+  if (binderFlipping || !binderOpen) return;
+  const cur = binderSpread, target = cur + dir;
+  if (target < 0 || target > binderSpreadCount() - 1) return;
+  if (reducedMotion()) { binderSpread = target; playPageSound(); renderBinder(); return; }
+  binderFlipping = true;
+  playPageSound();
+  const f = makeBinderFlip(dir, cur, target);
+  animateFlip(f, 0, dir > 0 ? -180 : 180, 560, easeInOutCubic, () => finishFlip(f, target));
 }
 
 // ── Glisser-déposer des cartes (mode édition) ────────────────────────────────
@@ -1766,7 +1798,6 @@ function buildBinderSlot(slotIndex) {
     div.innerHTML = `
       ${img ? `<img class="binder-slot-img" src="${escapeHtml(img)}" alt="" loading="lazy" draggable="false" onerror="handleImageError(this)" onload="checkCardBack(this)">` : imagePlaceholder(c || { name: slot.id })}
       ${owned ? `<span class="binder-slot-foil" aria-hidden="true" style="animation-delay:-${(slotIndex % 9) * 0.8}s"></span>` : ''}
-      ${slot.lang && LANG_FLAGS[slot.lang] ? `<span class="binder-slot-flag">${LANG_FLAGS[slot.lang]}</span>` : ''}
       <button class="binder-slot-remove" title="Retirer">×</button>`;
     div.querySelector('.binder-slot-remove').addEventListener('click', e => {
       e.stopPropagation();
@@ -4616,20 +4647,62 @@ document.querySelectorAll('.sub-nav .sub-tab').forEach(tab => {
 // Classeur : navigation entre pages + ajout de page + sélecteur de carte.
 document.getElementById('binder-prev').addEventListener('click', () => flipBinder(-1));
 document.getElementById('binder-next').addEventListener('click', () => flipBinder(1));
-// Glissé horizontal sur la double-page pour feuilleter.
+// Glissé (souris/tactile) sur la double-page : la page suit le doigt, uniquement en
+// visualisation. Relâché après la moitié (ou pichenette rapide) → la page finit de
+// tourner ; sinon elle revient se poser.
 (() => {
   const spread = document.getElementById('binder-spread');
   if (!spread) return;
-  let sx = 0, sy = 0, tracking = false;
-  const down = e => { if (binderEditMode) return; const t = e.touches ? e.touches[0] : e; sx = t.clientX; sy = t.clientY; tracking = true; };
-  const up = e => {
-    if (!tracking || binderEditMode) return; tracking = false;
-    const t = e.changedTouches ? e.changedTouches[0] : e;
-    const dx = t.clientX - sx, dy = t.clientY - sy;
-    if (Math.abs(dx) > 55 && Math.abs(dx) > Math.abs(dy) * 1.4) flipBinder(dx < 0 ? 1 : -1);
-  };
-  spread.addEventListener('touchstart', down, { passive: true });
-  spread.addEventListener('touchend', up, { passive: true });
+  spread.addEventListener('pointerdown', e => {
+    if (binderEditMode || binderFlipping || !binderOpen) return;
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    const startX = e.clientX, startY = e.clientY;
+    const pageW = spread.getBoundingClientRect().width / 2;
+    let f = null, dir = 0, lastDeg = 0, lastX = startX, lastT = performance.now(), vx = 0;
+    const degFor = dx => {
+      const k = Math.max(0, Math.min(1, (dir > 0 ? -dx : dx) / (pageW * 0.9)));
+      return (dir > 0 ? -180 : 180) * k;
+    };
+    const onMove = ev => {
+      const dx = ev.clientX - startX, dy = ev.clientY - startY;
+      const now = performance.now();
+      vx = (ev.clientX - lastX) / Math.max(1, now - lastT); lastX = ev.clientX; lastT = now;
+      if (!f) {
+        if (Math.abs(dx) < 12 || Math.abs(dx) < Math.abs(dy) * 1.2) return; // seuil : glissé horizontal net
+        const d = dx < 0 ? 1 : -1, target = binderSpread + d;
+        if (target < 0 || target > binderSpreadCount() - 1) { cleanup(); return; }
+        if (reducedMotion()) { cleanup(); flipBinder(d); return; } // pas de suivi au doigt
+        dir = d;
+        binderFlipping = true; binderDragging = true; // bloque boutons + clics carte pendant le geste
+        playPageSound();
+        f = makeBinderFlip(dir, binderSpread, target);
+      }
+      ev.preventDefault();
+      lastDeg = degFor(dx);
+      f.setAngle(lastDeg);
+    };
+    const onUp = () => {
+      cleanup();
+      if (!f) return;
+      const a = Math.abs(lastDeg);
+      const flick = dir > 0 ? vx < -0.4 : vx > 0.4; // pichenette : vitesse au relâcher
+      const target = binderSpread + dir, full = dir > 0 ? -180 : 180;
+      const unDrag = () => setTimeout(() => { binderDragging = false; }, 0);
+      if (a > 90 || (flick && a > 25)) {
+        animateFlip(f, lastDeg, full, Math.max(160, 420 * (180 - a) / 180), easeOutCubic, () => { finishFlip(f, target); unDrag(); });
+      } else {
+        animateFlip(f, lastDeg, 0, Math.max(140, 300 * a / 180), easeOutCubic, () => { cancelFlip(f); unDrag(); });
+      }
+    };
+    const cleanup = () => {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      window.removeEventListener('pointercancel', onUp);
+    };
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+    window.addEventListener('pointercancel', onUp);
+  });
 })();
 document.getElementById('binder-addpage').addEventListener('click', () => {
   binder.pages += 2; binder.slots.push(...new Array(18).fill(null)); binder.pageBgs.push(null, null);
