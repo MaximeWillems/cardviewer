@@ -1581,27 +1581,55 @@ function getAudioCtx() {
   if (!_audioCtx) { try { _audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {} }
   return _audioCtx;
 }
-function playZipSound() {
-  if (prefs.binderSound === false) return;
-  const ctx = getAudioCtx(); if (!ctx) return;
+function audioReady() {
+  if (prefs.binderSound === false) return null;
+  const ctx = getAudioCtx(); if (!ctx) return null;
   if (ctx.state === 'suspended') { try { ctx.resume(); } catch (e) {} }
-  const t = ctx.currentTime, dur = 0.8;
-  const buf = ctx.createBuffer(1, Math.floor(ctx.sampleRate * dur), ctx.sampleRate);
-  const d = buf.getChannelData(0);
-  for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1; // bruit blanc
+  return ctx;
+}
+// Zip : train de clics de dents individuels — cadence et intensité qui suivent la
+// tirette (montée en vitesse, creux aux coins du parcours) — sur un lit de friction
+// textile. Durée calée sur ZIP_MS (l'anim CSS de la tirette).
+function playZipSound() {
+  const ctx = audioReady(); if (!ctx) return;
+  const t0 = ctx.currentTime, total = ZIP_MS / 1000;
+  const start = 0.07 * total, end = 0.97 * total, run = end - start; // la tirette bouge de 7% à 97%
+  const sr = ctx.sampleRate, n = Math.floor(sr * total);
+  // Les dents : clics de 3 ms (sinus aigu + bruit) semés le long du parcours.
+  const buf = ctx.createBuffer(1, n, sr), d = buf.getChannelData(0);
+  const corner = k => 1 - 0.55 * Math.exp(-Math.pow((k - 0.30) / 0.05, 2))
+                    - 0.55 * Math.exp(-Math.pow((k - 0.68) / 0.05, 2)); // ralentit aux coins
+  let tc = start;
+  while (tc < end) {
+    const k = (tc - start) / run;
+    const amp = (0.45 + 0.4 * Math.sin(Math.PI * k)) * corner(k);
+    const idx = Math.floor(tc * sr), len = Math.floor(sr * 0.003);
+    const f = 2400 + Math.random() * 2200;
+    for (let i = 0; i < len && idx + i < n; i++) {
+      const env = Math.exp(-i / (sr * 0.0008));
+      d[idx + i] += (Math.sin(2 * Math.PI * f * i / sr) * 0.7 + (Math.random() * 2 - 1) * 0.6) * env * amp;
+    }
+    const rate = (90 + 50 * Math.sin(Math.PI * k)) * Math.max(0.4, corner(k));
+    tc += (1 / rate) * (0.8 + Math.random() * 0.4); // léger jitter : dents pas parfaitement régulières
+  }
   const src = ctx.createBufferSource(); src.buffer = buf;
-  const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 7;
-  bp.frequency.setValueAtTime(420, t); bp.frequency.exponentialRampToValueAtTime(1700, t + dur);
-  const gain = ctx.createGain();
-  gain.gain.setValueAtTime(0.0001, t);
-  gain.gain.exponentialRampToValueAtTime(0.22, t + 0.03);
-  gain.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-  const lfo = ctx.createOscillator(); lfo.type = 'square';
-  lfo.frequency.setValueAtTime(28, t); lfo.frequency.exponentialRampToValueAtTime(95, t + dur); // "cliquetis" des dents
-  const lfoGain = ctx.createGain(); lfoGain.gain.value = 0.5;
-  lfo.connect(lfoGain); lfoGain.connect(gain.gain);
-  src.connect(bp); bp.connect(gain); gain.connect(ctx.destination);
-  src.start(t); src.stop(t + dur); lfo.start(t); lfo.stop(t + dur);
+  const hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 900;
+  const cg = ctx.createGain(); cg.gain.value = 0.17;
+  src.connect(hp); hp.connect(cg); cg.connect(ctx.destination);
+  src.start(t0);
+  // Le lit de friction : souffle textile discret qui monte avec la course.
+  const fb = ctx.createBuffer(1, n, sr), fd = fb.getChannelData(0);
+  for (let i = 0; i < n; i++) fd[i] = Math.random() * 2 - 1;
+  const fsrc = ctx.createBufferSource(); fsrc.buffer = fb;
+  const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 1.2;
+  bp.frequency.setValueAtTime(1200, t0); bp.frequency.linearRampToValueAtTime(2600, t0 + total);
+  const fg = ctx.createGain();
+  fg.gain.setValueAtTime(0.0001, t0);
+  fg.gain.exponentialRampToValueAtTime(0.05, t0 + start + 0.08);
+  fg.gain.setValueAtTime(0.05, t0 + end - 0.1);
+  fg.gain.exponentialRampToValueAtTime(0.0001, t0 + total);
+  fsrc.connect(bp); bp.connect(fg); fg.connect(ctx.destination);
+  fsrc.start(t0); fsrc.stop(t0 + total);
 }
 function openBinder() {
   if (binderOpen || binderZipping) return;
@@ -1615,13 +1643,17 @@ function openBinder() {
   setTimeout(() => {
     view.classList.remove('zipping');
     view.classList.add('sliding');
-    setTimeout(() => { binderZipping = false; binderOpen = true; renderBinder(); }, SLIDE_MS);
+    playSlideSound();
+    setTimeout(() => {
+      binderZipping = false; binderOpen = true; renderBinder();
+      playPageSound(800); // la couverture se rabat comme une grande page
+    }, SLIDE_MS);
   }, ZIP_MS);
 }
 function closeBinder() {
   if (binderZipping) return;
   binderOpen = false;
-  if (!reducedMotion()) playZipSound();
+  if (!reducedMotion()) playPageSound(650); // la couverture se referme (pas de re-zip sonore)
   renderBinder();
 }
 function updateBinderSoundBtn() {
@@ -1640,19 +1672,71 @@ function openPageZoom(side) {
   lockBodyScroll();
 }
 function closePageZoom() { document.getElementById('binder-zoom-overlay').classList.remove('open'); unlockBodyScroll(); }
-function playPageSound() {
-  if (prefs.binderSound === false) return;
-  const ctx = getAudioCtx(); if (!ctx) return;
-  if (ctx.state === 'suspended') { try { ctx.resume(); } catch (e) {} }
-  const t = ctx.currentTime, dur = 0.3;
-  const buf = ctx.createBuffer(1, Math.floor(ctx.sampleRate * dur), ctx.sampleRate);
-  const d = buf.getChannelData(0);
-  for (let i = 0; i < d.length; i++) { const env = 1 - i / d.length; d[i] = (Math.random() * 2 - 1) * env * env; } // froissement bref
+// Tourne de page : "whoosh" d'air (bruit filtré, enveloppe en cloche, filtre qui
+// descend avec la vitesse de la page) + clap doux quand la page se pose.
+function playPageSound(ms = 560) {
+  const ctx = audioReady(); if (!ctx) return;
+  const t0 = ctx.currentTime, dur = ms / 1000;
+  const sr = ctx.sampleRate, n = Math.floor(sr * dur);
+  const buf = ctx.createBuffer(1, n, sr), d = buf.getChannelData(0);
+  for (let i = 0; i < n; i++) d[i] = Math.random() * 2 - 1;
   const src = ctx.createBufferSource(); src.buffer = buf;
-  const hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 1100;
-  const g = ctx.createGain(); g.gain.value = 0.13;
-  src.connect(hp); hp.connect(g); g.connect(ctx.destination);
-  src.start(t); src.stop(t + dur);
+  const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 0.8;
+  bp.frequency.setValueAtTime(2800, t0);
+  bp.frequency.exponentialRampToValueAtTime(550, t0 + dur);
+  const g = ctx.createGain();
+  g.gain.setValueAtTime(0.0001, t0);
+  g.gain.exponentialRampToValueAtTime(0.13, t0 + dur * 0.42);
+  g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur * 0.95);
+  src.connect(bp); bp.connect(g); g.connect(ctx.destination);
+  src.start(t0); src.stop(t0 + dur);
+  // Clap : petit choc grave + fouetté de bruit au moment où la page atterrit.
+  const tc = t0 + dur * 0.86;
+  const osc = ctx.createOscillator(); osc.type = 'sine';
+  osc.frequency.setValueAtTime(150, tc); osc.frequency.exponentialRampToValueAtTime(70, tc + 0.07);
+  const og = ctx.createGain();
+  og.gain.setValueAtTime(0.0001, tc);
+  og.gain.exponentialRampToValueAtTime(0.11, tc + 0.008);
+  og.gain.exponentialRampToValueAtTime(0.0001, tc + 0.09);
+  osc.connect(og); og.connect(ctx.destination);
+  osc.start(tc); osc.stop(tc + 0.1);
+  const cn = Math.floor(sr * 0.05), cb = ctx.createBuffer(1, cn, sr), cd = cb.getChannelData(0);
+  for (let i = 0; i < cn; i++) { const e = 1 - i / cn; cd[i] = (Math.random() * 2 - 1) * e * e; }
+  const cs = ctx.createBufferSource(); cs.buffer = cb;
+  const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 1800;
+  const cg = ctx.createGain(); cg.gain.value = 0.1;
+  cs.connect(lp); lp.connect(cg); cg.connect(ctx.destination);
+  cs.start(tc);
+}
+// Bouffée de bruit filtré (petits gestes : saisir / reposer une page, glissade).
+function noiseBurst(dur, filterType, freq, gain) {
+  const ctx = audioReady(); if (!ctx) return;
+  const sr = ctx.sampleRate, n = Math.floor(sr * dur);
+  const buf = ctx.createBuffer(1, n, sr), d = buf.getChannelData(0);
+  for (let i = 0; i < n; i++) { const e = 1 - i / n; d[i] = (Math.random() * 2 - 1) * e * e; }
+  const src = ctx.createBufferSource(); src.buffer = buf;
+  const f = ctx.createBiquadFilter(); f.type = filterType; f.frequency.value = freq;
+  const g = ctx.createGain(); g.gain.value = gain;
+  src.connect(f); f.connect(g); g.connect(ctx.destination);
+  src.start(ctx.currentTime);
+}
+const playPageLift   = () => noiseBurst(0.09, 'highpass', 2000, 0.07); // on saisit la page
+const playPageSettle = () => noiseBurst(0.14, 'lowpass', 1400, 0.08);  // elle se repose sans tourner
+// Glissade du classeur fermé vers la droite : frottement doux, en cloche sur SLIDE_MS.
+function playSlideSound() {
+  const ctx = audioReady(); if (!ctx) return;
+  const t0 = ctx.currentTime, dur = SLIDE_MS / 1000;
+  const sr = ctx.sampleRate, n = Math.floor(sr * dur);
+  const buf = ctx.createBuffer(1, n, sr), d = buf.getChannelData(0);
+  for (let i = 0; i < n; i++) d[i] = Math.random() * 2 - 1;
+  const src = ctx.createBufferSource(); src.buffer = buf;
+  const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 0.9; bp.frequency.value = 480;
+  const g = ctx.createGain();
+  g.gain.setValueAtTime(0.0001, t0);
+  g.gain.exponentialRampToValueAtTime(0.09, t0 + dur * 0.4);
+  g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+  src.connect(bp); bp.connect(g); g.connect(ctx.destination);
+  src.start(t0); src.stop(t0 + dur);
 }
 
 // Feuilletage : la page qui tourne pivote à la reliure. dir=+1 suivant, -1 précédent.
@@ -4674,7 +4758,7 @@ document.getElementById('binder-next').addEventListener('click', () => flipBinde
         if (reducedMotion()) { cleanup(); flipBinder(d); return; } // pas de suivi au doigt
         dir = d;
         binderFlipping = true; binderDragging = true; // bloque boutons + clics carte pendant le geste
-        playPageSound();
+        playPageLift(); // on saisit la page ; le whoosh viendra au relâcher
         f = makeBinderFlip(dir, binderSpread, target);
       }
       ev.preventDefault();
@@ -4689,8 +4773,11 @@ document.getElementById('binder-next').addEventListener('click', () => flipBinde
       const target = binderSpread + dir, full = dir > 0 ? -180 : 180;
       const unDrag = () => setTimeout(() => { binderDragging = false; }, 0);
       if (a > 90 || (flick && a > 25)) {
-        animateFlip(f, lastDeg, full, Math.max(160, 420 * (180 - a) / 180), easeOutCubic, () => { finishFlip(f, target); unDrag(); });
+        const ms = Math.max(160, 420 * (180 - a) / 180);
+        playPageSound(ms + 140); // whoosh calé sur la fin du tour
+        animateFlip(f, lastDeg, full, ms, easeOutCubic, () => { finishFlip(f, target); unDrag(); });
       } else {
+        playPageSettle(); // la page se repose sans tourner
         animateFlip(f, lastDeg, 0, Math.max(140, 300 * a / 180), easeOutCubic, () => { cancelFlip(f); unDrag(); });
       }
     };
