@@ -364,7 +364,7 @@ function rarityKinds() { return RARITY_KINDS; }
 function makeFilterState(sort) {
   return {
     query: '', rarities: new Set(rarityKinds()), type: 'all', artist: 'all',
-    set: 'all', series: 'all', tag: 'all', lang: 'all', dupOnly: false,
+    set: 'all', series: 'all', tag: 'all', lang: 'all', source: 'all', dupOnly: false,
     sort: sort || 'pokedex', priceMin: '', priceMax: '', artistCounts: new Map(),
   };
 }
@@ -527,9 +527,29 @@ const ACQ_SOURCES = [
   { v: 'other', label: '• Autre' },
 ];
 const ACQ_LABEL = Object.fromEntries(ACQ_SOURCES.map(s => [s.v, s.label]));
+const ACQ_ICON  = { buy: '🛒', pack: '📦', trade: '🔄', gift: '🎁', other: '' };
 function todayISO() { const d = new Date(); return d.toISOString().slice(0, 10); }
 function getAcq(id, lang) { return (collRec(id, lang) || {}).acq || null; }
 function setAcquisition(id, lang, acq) { ensureRec(id, lang).acq = acq; }
+// Acquisition de la carte possédée (1re langue possédée) pour badge / tri / filtre.
+function acqOf(id) { const l = ownedLangs(id)[0]; return l ? getAcq(id, l) : null; }
+function getAcqDate(card) { const a = acqOf(card.id); return (a && a.d) || ''; }
+function acqBadgeHtml(id) {
+  const a = acqOf(id);
+  const icon = a && a.src ? ACQ_ICON[a.src] : '';
+  if (!icon) return '';
+  const title = (ACQ_LABEL[a.src] || '') + (a.d ? ' · ' + a.d : '');
+  return `<div class="card-acq" title="${escapeHtml(title)}">${icon}</div>`;
+}
+// Regroupe une date d'acquisition en tranches lisibles pour les sections.
+function acqBucket(dateStr) {
+  if (!dateStr) return 'Sans date';
+  const diff = (new Date(todayISO()) - new Date(dateStr)) / 86400000;
+  if (diff <= 0)  return "Aujourd'hui";
+  if (diff <= 7)  return '7 derniers jours';
+  if (diff <= 30) return '30 derniers jours';
+  return 'Plus ancien';
+}
 
 function getBestPrice(cardId) {
   for (const type of ['owned', 'wanted']) {
@@ -683,6 +703,11 @@ function filterCards(cards, st) {
     if (st.set !== 'all' && (c.set?.id || '') !== st.set) return false;
     if (st.series !== 'all' && (c.set?.serie?.name || '') !== st.series) return false;
     if (st.tag !== 'all' && !getTags(c.id).includes(st.tag)) return false;
+    if (st.source && st.source !== 'all') {
+      const a = acqOf(c.id);
+      if (st.source === '__none') { if (a && a.src) return false; }
+      else if (!a || a.src !== st.source) return false;
+    }
     if (q && !(
       (c.name || '').toLowerCase().includes(q) ||
       (c.romaji && c.romaji.includes(q)) ||
@@ -774,6 +799,11 @@ function sortByConfig(cards, sort, artistCounts = new Map()) {
       case 'rarity':       return collator.compare(a.rarity || '', b.rarity || '') || getDexNumber(a) - getDexNumber(b) || collator.compare(a.name || '', b.name || '');
       case 'artist-count': return (artistCounts.get(b.illustrator) || 0) - (artistCounts.get(a.illustrator) || 0) || collator.compare(a.illustrator || '', b.illustrator || '') || getDexNumber(a) - getDexNumber(b);
       case 'artist-name':  return collator.compare(a.illustrator || '', b.illustrator || '') || getDexNumber(a) - getDexNumber(b);
+      case 'acq-date': {   // récentes d'abord ; sans date en dernier
+        const da = getAcqDate(a), db = getAcqDate(b);
+        if (da !== db) return (db || '') < (da || '') ? -1 : 1;
+        return collator.compare(a.name || '', b.name || '');
+      }
       case 'price-asc':    return getUserPriceValue(a) - getUserPriceValue(b) || collator.compare(a.name || '', b.name || '');
       case 'price-desc':   return getUserPriceValue(b) - getUserPriceValue(a) || collator.compare(a.name || '', b.name || '');
       case 'market-asc':   return getMarketPriceValue(a) - getMarketPriceValue(b) || collator.compare(a.name || '', b.name || '');
@@ -784,7 +814,7 @@ function sortByConfig(cards, sort, artistCounts = new Map()) {
 }
 
 function shouldShowSections(sort) {
-  return ['pokedex', 'name-asc', 'name-desc', 'set', 'set-release', 'rarity', 'artist-count', 'artist-name'].includes(sort);
+  return ['pokedex', 'name-asc', 'name-desc', 'set', 'set-release', 'rarity', 'artist-count', 'artist-name', 'acq-date'].includes(sort);
 }
 
 function priceBucket(v, noneLabel) {
@@ -810,6 +840,7 @@ function getSectionKey(card, sort) {
   }
   if (sort === 'price-asc'  || sort === 'price-desc')  return priceBucket(getUserPriceValue(card), 'Sans prix saisi');
   if (sort === 'market-asc' || sort === 'market-desc') return priceBucket(getMarketPriceValue(card), 'Prix non consulté');
+  if (sort === 'acq-date') return acqBucket(getAcqDate(card));
   return '';
 }
 
@@ -990,6 +1021,7 @@ function buildCardEl(c, ctx, idx) {
       : imagePlaceholder(c)}
     ${langFlagsHtml(c.id)}
     ${qtyBadgeHtml(c.id)}
+    ${acqBadgeHtml(c.id)}
     <div class="card-body">
       ${getBadge(c.rarity, c.rarityKind)}
       <div class="card-price-tag">
@@ -1923,6 +1955,7 @@ function renderFilterControls(ctx) {
       </div>
       <select id="${sortId}" class="sort-select" aria-label="Trier les cartes">
         ${SORT_FILTERS_HTML}
+        ${isColl ? '<optgroup label="── Ma collection ──"><option value="acq-date">Récemment ajoutées</option></optgroup>' : ''}
       </select>
       <button type="button" class="filters-toggle" id="${prefix}filters-toggle" aria-expanded="false" title="Afficher / masquer les filtres">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="6" x2="20" y2="6"/><line x1="7" y1="12" x2="17" y2="12"/><line x1="10" y1="18" x2="14" y2="18"/></svg>
@@ -1952,6 +1985,15 @@ function renderFilterControls(ctx) {
           <select id="${prefix}tag-filter" aria-label="Filtrer par tag"><option value="all">Tous les tags</option></select>
         </div>
         ${isColl ? `
+        <div class="adv-field">
+          <label>Source</label>
+          <select id="coll-source-filter" aria-label="Filtrer par source">
+            <option value="all">Toutes les sources</option>
+            ${ACQ_SOURCES.map(s => `<option value="${s.v}"${st.source === s.v ? ' selected' : ''}>${s.label}</option>`).join('')}
+            <option value="__none"${st.source === '__none' ? ' selected' : ''}>Sans source</option>
+          </select>
+        </div>` : ''}
+        ${isColl ? `
         <div class="adv-field price-field">
           <label>Prix (€)</label>
           <div class="adv-price">
@@ -1980,6 +2022,7 @@ function updateAdvCount(ctx) {
   if (st.set !== 'all') n++;
   if (st.series !== 'all') n++;
   if (st.tag !== 'all') n++;
+  if (st.source && st.source !== 'all') n++;
   if (st.priceMin !== '' || st.priceMax !== '') n++;
   const badge = document.getElementById((ctx === 'collection' ? 'coll-' : '') + 'filters-count');
   if (badge) { badge.textContent = n || ''; badge.style.display = n ? '' : 'none'; }
@@ -1991,12 +2034,13 @@ function resetFilters(ctx) {
   const st = S[ctx];
   const prefix = ctx === 'collection' ? 'coll-' : '';
   st.query = ''; st.rarities = new Set(rarityKinds());
-  st.type = 'all'; st.artist = 'all'; st.set = 'all'; st.series = 'all'; st.tag = 'all';
+  st.type = 'all'; st.artist = 'all'; st.set = 'all'; st.series = 'all'; st.tag = 'all'; st.source = 'all';
   st.priceMin = ''; st.priceMax = '';
   const s = document.getElementById(ctx === 'collection' ? 'coll-search' : 'search'); if (s) s.value = '';
   ['type-filter', 'artist-filter', 'set-filter', 'series-filter', 'tag-filter'].forEach(id => {
     const el = document.getElementById(prefix + id); if (el) el.value = 'all';
   });
+  const srcEl = document.getElementById('coll-source-filter'); if (srcEl) srcEl.value = 'all';
   const mn = document.getElementById('price-min-filter'), mx = document.getElementById('price-max-filter');
   if (mn) mn.value = ''; if (mx) mx.value = '';
   updateRarityButtons(ctx);
@@ -2277,6 +2321,9 @@ function wireFilters(ctx) {
 
   const tagEl = document.getElementById(prefix + 'tag-filter');
   if (tagEl) tagEl.addEventListener('change', e => { st.tag = e.target.value; apply(); });
+
+  const sourceEl = document.getElementById('coll-source-filter');
+  if (sourceEl) { sourceEl.value = st.source; sourceEl.addEventListener('change', e => { st.source = e.target.value; apply(); }); }
 
   const sortEl = document.getElementById(isColl ? 'coll-sort' : 'sort');
   if (sortEl) {
@@ -3020,6 +3067,7 @@ async function openModal(card, list, index) {
   const oPrices = getPriceData(card.id, 'owned', mlang);
   const wPrices = getPriceData(card.id, 'wanted', mlang);
   const tPrices = getPriceData(card.id, 'trade', mlang);
+  const acq = getAcq(card.id, mlang) || {};
   document.getElementById('modal-info').innerHTML = `
     <div class="modal-position">${position}</div>
     <div class="modal-name">${escapeHtml(card.name || '—')}</div>
@@ -3068,6 +3116,19 @@ async function openModal(card, list, index) {
           <input class="price-input" id="pi-owned-max" type="number" min="0" step="0.01" placeholder="max" value="${escapeHtml(oPrices.max)}">
         </div>
         <button class="price-input-save" id="pi-owned-save">OK</button>
+      </div>
+      <div class="acq-edit">
+        <div class="acq-edit-field">
+          <div class="price-input-label">Acquise le</div>
+          <input class="price-input" id="acq-date" type="date" value="${escapeHtml(acq.d || '')}">
+        </div>
+        <div class="acq-edit-field">
+          <div class="price-input-label">Source</div>
+          <select class="price-input" id="acq-source">
+            <option value="">—</option>
+            ${ACQ_SOURCES.map(s => `<option value="${s.v}"${acq.src === s.v ? ' selected' : ''}>${s.label}</option>`).join('')}
+          </select>
+        </div>
       </div>
     </div>
     <div class="price-input-section ${isWanted(card.id, mlang) ? 'visible' : ''}" id="price-section-wanted">
@@ -3226,6 +3287,16 @@ async function openModal(card, list, index) {
     }, mlang);
     showToast('✦ Prix collection sauvegardé');
   });
+  const saveAcq = () => {
+    const d = document.getElementById('acq-date').value || '';
+    const src = document.getElementById('acq-source').value || '';
+    if (!d && !src) { const r = collRec(card.id, mlang); if (r) delete r.acq; }
+    else setAcquisition(card.id, mlang, { d, src });
+    saveCollection();
+    if (currentTab === 'collection') renderCollection();
+  };
+  document.getElementById('acq-date')?.addEventListener('change', saveAcq);
+  document.getElementById('acq-source')?.addEventListener('change', saveAcq);
   document.getElementById('pi-wanted-save')?.addEventListener('click', () => {
     setPriceData(card.id, 'wanted', {
       val: document.getElementById('pi-wanted-val').value,
