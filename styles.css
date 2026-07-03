@@ -2127,7 +2127,16 @@
       radial-gradient(ellipse 62% 6% at 50% 50%, rgba(226,231,238,0.95), rgba(120,128,140,0.55) 62%, transparent 74%),
       radial-gradient(ellipse 62% 6% at 50% 80%, rgba(226,231,238,0.95), rgba(120,128,140,0.55) 62%, transparent 74%);
   }
-  .binder-hint { font-size: 12px; color: var(--muted); letter-spacing: 0.03em; margin-top: -0.25rem; margin-bottom: 1rem; }
+  .binder-hint {
+    font-size: 15px; color: var(--muted); opacity: 0.6; letter-spacing: 0.03em;
+    margin-top: -0.25rem; margin-bottom: 1rem;
+    animation: binderHintPulse 2.4s ease-in-out infinite;
+  }
+  @keyframes binderHintPulse {
+    0%, 100% { opacity: 0.45; transform: scale(1); }
+    50%      { opacity: 0.85; transform: scale(1.06); }
+  }
+  @media (prefers-reduced-motion: reduce) { .binder-hint { animation: none; opacity: 0.6; } }
   .binder-close { color: var(--muted); }
   @media (prefers-reduced-motion: reduce) {
     .binder-cover, .binder-spread { transition: none; }
