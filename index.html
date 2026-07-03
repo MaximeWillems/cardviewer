@@ -147,14 +147,26 @@
 
 <!-- ── CLASSEUR ─────────────────────────────────── -->
 <div class="binder-view" id="binder-view">
-  <div class="binder-bar">
-    <button class="binder-nav" id="binder-prev" aria-label="Page précédente">‹</button>
-    <span class="binder-pageinfo" id="binder-pageinfo">Page 1 / 5</span>
-    <button class="binder-nav" id="binder-next" aria-label="Page suivante">›</button>
-    <button class="binder-addpage" id="binder-addpage" title="Ajouter une page">+ page</button>
+  <div class="binder-stage" id="binder-stage">
+    <button class="binder-cover" id="binder-cover" aria-label="Ouvrir le classeur">
+      <span class="binder-cover-shine"></span>
+      <span class="binder-cover-label">Mon<br>classeur</span>
+    </button>
+    <div class="binder-spread" id="binder-spread">
+      <div class="binder-page left"><div class="binder-grid" id="binder-grid-left"></div></div>
+      <div class="binder-rings" aria-hidden="true"></div>
+      <div class="binder-page right"><div class="binder-grid" id="binder-grid-right"></div></div>
+    </div>
+  </div>
+  <div class="binder-hint" id="binder-hint">👆 Clique pour ouvrir le classeur</div>
+  <div class="binder-bar" id="binder-bar">
+    <button class="binder-nav" id="binder-prev" aria-label="Double-page précédente">‹</button>
+    <span class="binder-pageinfo" id="binder-pageinfo"></span>
+    <button class="binder-nav" id="binder-next" aria-label="Double-page suivante">›</button>
+    <button class="binder-addpage" id="binder-addpage" title="Ajouter des pages">+ pages</button>
+    <button class="binder-addpage" id="binder-close" title="Fermer le classeur">Fermer</button>
   </div>
   <div class="binder-palette" id="binder-palette"></div>
-  <div class="binder-grid" id="binder-grid"></div>
 </div>
 
 <!-- Sélecteur de carte pour le classeur -->

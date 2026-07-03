@@ -164,7 +164,7 @@ if (!binder || !Array.isArray(binder.slots)) binder = { pages: 5, slots: new Arr
 // Couleur de fond par page (migration depuis l'ancien fond global binder.bg).
 if (!Array.isArray(binder.pageBgs)) binder.pageBgs = new Array(binder.pages).fill(binder.bg || null);
 while (binder.pageBgs.length < binder.pages) binder.pageBgs.push(null);
-let binderPage = 0;
+let binderSpread = 0, binderOpen = false; // double-page courante + classeur ouvert ?
 function saveBinder() { localStorage.setItem(LS_BINDER, JSON.stringify(binder)); }
 function snapshotCard(c) {
   return {
@@ -1484,37 +1484,57 @@ let binderPickSlot = -1; // emplacement en cours d'attribution
 const BINDER_COLORS = ['#c0392b', '#e67e22', '#f39c12', '#f1c40f', '#7cb342', '#27ae60', '#16a085', '#0aa3c2',
                        '#2980b9', '#3f51b5', '#8e44ad', '#e84393', '#7b2d3a', '#8d6e63', '#607d8b', '#95a5a6',
                        '#ecf0f1', '#2b2b2b'];
-function pageBg() { return binder.pageBgs[binderPage] || null; }
-function applyBinderBg() {
-  const grid = document.getElementById('binder-grid');
-  if (grid) grid.style.background = pageBg() || '';
+function binderSpreadCount() { return Math.max(1, Math.ceil(binder.pages / 2)); }
+function applyBinderBg(lp, rp) {
+  const L = document.getElementById('binder-grid-left'), R = document.getElementById('binder-grid-right');
+  if (L) L.style.background = binder.pageBgs[lp] || '';
+  if (R) R.style.background = (rp < binder.pages ? (binder.pageBgs[rp] || '') : '');
 }
-function renderBinderPalette() {
+function renderBinderPalette(lp, rp) {
   const el = document.getElementById('binder-palette');
   if (!el) return;
-  const cur = pageBg();
-  el.innerHTML = `<span class="binder-palette-label">Fond de la page ${binderPage + 1} :</span>` + BINDER_COLORS.map(col =>
+  const cur = binder.pageBgs[lp] || null;
+  el.innerHTML = `<span class="binder-palette-label">Fond de la double-page :</span>` + BINDER_COLORS.map(col =>
     `<button class="binder-swatch${cur === col ? ' selected' : ''}" style="background:${col}" data-col="${col}" aria-label="Fond ${col}"></button>`
   ).join('');
   el.querySelectorAll('.binder-swatch').forEach(b => b.addEventListener('click', () => {
-    binder.pageBgs[binderPage] = (pageBg() === b.dataset.col) ? null : b.dataset.col; // re-clic = fond neutre
-    saveBinder(); renderBinderPalette(); applyBinderBg();
+    const nv = (cur === b.dataset.col) ? null : b.dataset.col; // re-clic = fond neutre
+    binder.pageBgs[lp] = nv;
+    if (rp < binder.pages) binder.pageBgs[rp] = nv;
+    saveBinder(); renderBinder();
   }));
 }
-
-function renderBinder() {
-  const grid = document.getElementById('binder-grid');
-  const info = document.getElementById('binder-pageinfo');
+// Peint une page (9 poches) ; page au-delà du total = page vide (dos de couverture).
+function renderBinderPage(gridId, pageIndex) {
+  const grid = document.getElementById(gridId);
   if (!grid) return;
-  if (binderPage >= binder.pages) binderPage = binder.pages - 1;
-  if (binderPage < 0) binderPage = 0;
-  if (info) info.textContent = `Page ${binderPage + 1} / ${binder.pages}`;
-  renderBinderPalette();
-  applyBinderBg();
+  const page = grid.parentElement;
   grid.innerHTML = '';
-  const start = binderPage * 9;
+  if (pageIndex >= binder.pages) { page.classList.add('empty-page'); return; }
+  page.classList.remove('empty-page');
+  const start = pageIndex * 9;
   for (let i = 0; i < 9; i++) grid.appendChild(buildBinderSlot(start + i));
 }
+function renderBinder() {
+  const view = document.getElementById('binder-view');
+  if (!view) return;
+  binderSpread = Math.max(0, Math.min(binderSpread, binderSpreadCount() - 1));
+  view.classList.toggle('open', binderOpen);
+  const hint = document.getElementById('binder-hint'), bar = document.getElementById('binder-bar'), pal = document.getElementById('binder-palette');
+  if (hint) hint.style.display = binderOpen ? 'none' : '';
+  if (bar)  bar.style.display  = binderOpen ? '' : 'none';
+  if (pal)  pal.style.display  = binderOpen ? '' : 'none';
+  if (!binderOpen) return; // rien à peindre sous la couverture fermée
+  const lp = binderSpread * 2, rp = lp + 1;
+  renderBinderPage('binder-grid-left', lp);
+  renderBinderPage('binder-grid-right', rp);
+  applyBinderBg(lp, rp);
+  renderBinderPalette(lp, rp);
+  const info = document.getElementById('binder-pageinfo');
+  if (info) info.textContent = (rp < binder.pages) ? `Pages ${lp + 1}–${rp + 1} / ${binder.pages}` : `Page ${lp + 1} / ${binder.pages}`;
+}
+function openBinder()  { if (binderOpen) return; binderOpen = true;  renderBinder(); }
+function closeBinder() { binderOpen = false; renderBinder(); }
 
 function buildBinderSlot(slotIndex) {
   const slot = binder.slots[slotIndex];
@@ -4347,7 +4367,7 @@ function setActiveTab(tab) {
   if (currentTab !== 'collection' && selectionMode) setSelectionMode(false);
   if (currentTab === 'collection') { populateFilters('collection'); renderCollection(); }
   if (currentTab === 'master') { masterSelected = null; renderMaster(); }
-  if (currentTab === 'binder') renderBinder();
+  if (currentTab === 'binder') { binderOpen = false; renderBinder(); } // toujours fermé à l'entrée
   if (currentTab === 'tierlist') renderTierlist();
   if (currentTab === 'echange') renderEchange();
   if (currentTab === 'stats') renderStats();
@@ -4369,12 +4389,14 @@ document.querySelectorAll('.sub-nav .sub-tab').forEach(tab => {
 });
 
 // Classeur : navigation entre pages + ajout de page + sélecteur de carte.
-document.getElementById('binder-prev').addEventListener('click', () => { if (binderPage > 0) { binderPage--; renderBinder(); } });
-document.getElementById('binder-next').addEventListener('click', () => { if (binderPage < binder.pages - 1) { binderPage++; renderBinder(); } });
+document.getElementById('binder-prev').addEventListener('click', () => { if (binderSpread > 0) { binderSpread--; renderBinder(); } });
+document.getElementById('binder-next').addEventListener('click', () => { if (binderSpread < binderSpreadCount() - 1) { binderSpread++; renderBinder(); } });
 document.getElementById('binder-addpage').addEventListener('click', () => {
-  binder.pages++; binder.slots.push(...new Array(9).fill(null)); binder.pageBgs.push(null);
-  saveBinder(); binderPage = binder.pages - 1; renderBinder();
+  binder.pages += 2; binder.slots.push(...new Array(18).fill(null)); binder.pageBgs.push(null, null);
+  saveBinder(); binderSpread = binderSpreadCount() - 1; renderBinder();
 });
+document.getElementById('binder-cover').addEventListener('click', openBinder);
+document.getElementById('binder-close').addEventListener('click', closeBinder);
 document.getElementById('binder-picker-close').addEventListener('click', closeBinderPicker);
 document.getElementById('binder-picker').addEventListener('click', e => { if (e.target === e.currentTarget) closeBinderPicker(); });
 document.getElementById('binder-picker-search').addEventListener('input', e => renderBinderPicker(e.target.value));
