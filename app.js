@@ -1559,6 +1559,10 @@ function renderBinder() {
   renderBinderPage('binder-grid-left', lp);
   renderBinderPage('binder-grid-right', rp);
   applyBinderBg(lp, rp);
+  updateBinderChrome(lp, rp);
+}
+// Barre d'infos + palette (sans repeindre les grilles — utilisé aussi en fin de tour de page).
+function updateBinderChrome(lp, rp) {
   if (binderEditMode) renderBinderPalette(lp, rp);
   const info = document.getElementById('binder-pageinfo');
   if (info) info.textContent = (rp < binder.pages) ? `Pages ${lp + 1}–${rp + 1} / ${binder.pages}` : `Page ${lp + 1} / ${binder.pages}`;
@@ -1746,23 +1750,34 @@ let binderFlipping = false;
 const easeOutCubic   = k => 1 - Math.pow(1 - k, 3);
 const easeInOutCubic = k => k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2;
 // Construit l'élément "page qui tourne" (faces avant/arrière + ombrage dynamique).
+// Anti-clignotement : la face avant est un CLONE du DOM affiché (images déjà
+// décodées), le dos et la page dévoilée chargent leurs images en eager (elles ont
+// le temps du demi-tour pour arriver, cachées sous la page tant qu'elle n'a pas
+// passé 90°).
 function makeBinderFlip(dir, cur, target) {
-  const lp = cur * 2, rp = lp + 1, tl = target * 2, tr = tl + 1;
+  const tl = target * 2, tr = tl + 1;
   const spread = document.getElementById('binder-spread');
   const leftGrid = document.getElementById('binder-grid-left'), rightGrid = document.getElementById('binder-grid-right');
-  // Dévoile déjà, sous la page qui tourne, la page destination du côté révélé.
-  if (dir > 0) { paintBinderGrid(rightGrid, tr); applyGridBg(rightGrid, tr); }
-  else         { paintBinderGrid(leftGrid, tl);  applyGridBg(leftGrid, tl); }
   const turningPage = (dir > 0 ? rightGrid : leftGrid).parentElement;
   const sr = spread.getBoundingClientRect(), pr = turningPage.getBoundingClientRect();
-  const frontIdx = dir > 0 ? rp : lp;   // face visible au départ
-  const backIdx  = dir > 0 ? tl : tr;   // dos révélé pendant la rotation
+  // Clone AVANT de repeindre la grille dessous.
+  const frontPage = turningPage.cloneNode(true);
+  frontPage.removeAttribute('id');
+  frontPage.querySelectorAll('[id]').forEach(el => el.removeAttribute('id'));
+  const zb = frontPage.querySelector('.binder-zoom-btn'); if (zb) zb.remove();
+  const backIdx = dir > 0 ? tl : tr;   // dos révélé pendant la rotation
+  const backPage = makeBinderPageEl(backIdx, dir > 0 ? 'left' : 'right');
+  backPage.querySelectorAll('img').forEach(i => { i.loading = 'eager'; });
+  // Dévoile déjà, sous la page qui tourne, la page destination du côté révélé.
+  const revealGrid = dir > 0 ? rightGrid : leftGrid;
+  paintBinderGrid(revealGrid, dir > 0 ? tr : tl); applyGridBg(revealGrid, dir > 0 ? tr : tl);
+  revealGrid.querySelectorAll('img').forEach(i => { i.loading = 'eager'; });
   const flip = document.createElement('div');
   flip.className = 'binder-flip ' + (dir > 0 ? 'next' : 'prev');
   flip.style.cssText = `left:${pr.left - sr.left}px;top:${pr.top - sr.top}px;width:${pr.width}px;height:${pr.height}px`;
   const inner = document.createElement('div'); inner.className = 'binder-flip-inner';
-  const front = document.createElement('div'); front.className = 'binder-flip-face front'; front.appendChild(makeBinderPageEl(frontIdx, dir > 0 ? 'right' : 'left'));
-  const back  = document.createElement('div'); back.className  = 'binder-flip-face back';  back.appendChild(makeBinderPageEl(backIdx, dir > 0 ? 'left' : 'right'));
+  const front = document.createElement('div'); front.className = 'binder-flip-face front'; front.appendChild(frontPage);
+  const back  = document.createElement('div'); back.className  = 'binder-flip-face back';  back.appendChild(backPage);
   const shadeF = document.createElement('div'); shadeF.className = 'binder-flip-shade'; front.appendChild(shadeF);
   const shadeB = document.createElement('div'); shadeB.className = 'binder-flip-shade'; back.appendChild(shadeB);
   inner.appendChild(front); inner.appendChild(back); flip.appendChild(inner);
@@ -1776,7 +1791,7 @@ function makeBinderFlip(dir, cur, target) {
     const lift = Math.sin(a * Math.PI / 180);
     inner.style.boxShadow = `0 0 ${20 + lift * 40}px rgba(0,0,0,${0.2 + lift * 0.25})`;
   };
-  return { flip, setAngle };
+  return { flip, setAngle, dir, cur, target };
 }
 function animateFlip(f, from, to, ms, ease, done) {
   const t0 = performance.now();
@@ -1787,8 +1802,32 @@ function animateFlip(f, from, to, ms, ease, done) {
   };
   requestAnimationFrame(step);
 }
-function finishFlip(f, target) { binderSpread = target; binderFlipping = false; f.flip.remove(); renderBinder(); }
-function cancelFlip(f) { binderFlipping = false; f.flip.remove(); renderBinder(); }
+// Fin de tour sans clignotement : on peint la grille SOUS la page qui tourne (dont le
+// contenu final est identique), on attend le décodage des images, PUIS on retire la page.
+function removeFlipWhenPainted(f) {
+  const imgs = [...document.querySelectorAll('#binder-grid-left img, #binder-grid-right img')];
+  Promise.all(imgs.map(i => i.decode ? i.decode().catch(() => {}) : Promise.resolve()))
+    .then(() => requestAnimationFrame(() => requestAnimationFrame(() => f.flip.remove())));
+}
+function finishFlip(f) {
+  binderSpread = f.target; binderFlipping = false;
+  const lp = f.target * 2, rp = lp + 1;
+  // Le côté révélé a été pré-peint au départ ; seul l'autre côté reste à peindre.
+  if (f.dir > 0) renderBinderPage('binder-grid-left', lp);
+  else           renderBinderPage('binder-grid-right', rp);
+  applyBinderBg(lp, rp);
+  updateBinderChrome(lp, rp);
+  removeFlipWhenPainted(f);
+}
+function cancelFlip(f) {
+  binderFlipping = false;
+  const lp = f.cur * 2, rp = lp + 1;
+  // Repeint le côté qui avait été pré-peint avec la destination (retour à l'état courant).
+  if (f.dir > 0) renderBinderPage('binder-grid-right', rp);
+  else           renderBinderPage('binder-grid-left', lp);
+  applyBinderBg(lp, rp);
+  removeFlipWhenPainted(f);
+}
 function flipBinder(dir) {
   if (binderFlipping || !binderOpen) return;
   const cur = binderSpread, target = cur + dir;
@@ -1797,7 +1836,7 @@ function flipBinder(dir) {
   binderFlipping = true;
   playPageSound();
   const f = makeBinderFlip(dir, cur, target);
-  animateFlip(f, 0, dir > 0 ? -180 : 180, 560, easeInOutCubic, () => finishFlip(f, target));
+  animateFlip(f, 0, dir > 0 ? -180 : 180, 560, easeInOutCubic, () => finishFlip(f));
 }
 
 // ── Glisser-déposer des cartes (mode édition) ────────────────────────────────
@@ -4770,12 +4809,12 @@ document.getElementById('binder-next').addEventListener('click', () => flipBinde
       if (!f) return;
       const a = Math.abs(lastDeg);
       const flick = dir > 0 ? vx < -0.4 : vx > 0.4; // pichenette : vitesse au relâcher
-      const target = binderSpread + dir, full = dir > 0 ? -180 : 180;
+      const full = dir > 0 ? -180 : 180;
       const unDrag = () => setTimeout(() => { binderDragging = false; }, 0);
       if (a > 90 || (flick && a > 25)) {
         const ms = Math.max(160, 420 * (180 - a) / 180);
         playPageSound(ms + 140); // whoosh calé sur la fin du tour
-        animateFlip(f, lastDeg, full, ms, easeOutCubic, () => { finishFlip(f, target); unDrag(); });
+        animateFlip(f, lastDeg, full, ms, easeOutCubic, () => { finishFlip(f); unDrag(); });
       } else {
         playPageSettle(); // la page se repose sans tourner
         animateFlip(f, lastDeg, 0, Math.max(140, 300 * a / 180), easeOutCubic, () => { cancelFlip(f); unDrag(); });
