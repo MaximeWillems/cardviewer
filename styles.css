@@ -11,6 +11,7 @@
     --border: rgba(var(--fg-rgb), 0.12);
     --text: #14161c;
     --muted: #5f6775;
+    --muted-rgb: 95, 103, 117;
     --accent: #1d4ed8;             /* BLEU (marque, possédée) */
     --accent-rgb: 29, 78, 216;
     --accent2: #c62828;            /* ROUGE (à obtenir, secondaire) */
@@ -36,6 +37,7 @@
     --border: rgba(var(--fg-rgb), 0.08);
     --text: #f0f1f3;
     --muted: #8a909c;
+    --muted-rgb: 138, 144, 156;
     --accent: #5b9dff;             /* BLEU vif sur fond sombre */
     --accent-rgb: 91, 157, 255;
     --accent2: #f26a64;            /* ROUGE clair sur fond sombre */
@@ -2127,16 +2129,29 @@
       radial-gradient(ellipse 62% 6% at 50% 50%, rgba(226,231,238,0.95), rgba(120,128,140,0.55) 62%, transparent 74%),
       radial-gradient(ellipse 62% 6% at 50% 80%, rgba(226,231,238,0.95), rgba(120,128,140,0.55) 62%, transparent 74%);
   }
+  /* Effet brillant : une bande plus opaque balaie le texte de gauche à droite */
   .binder-hint {
-    font-size: 15px; color: var(--muted); opacity: 0.6; letter-spacing: 0.03em;
+    font-size: 15px; letter-spacing: 0.03em;
     margin-top: -0.25rem; margin-bottom: 1rem;
-    animation: binderHintPulse 2.4s ease-in-out infinite;
+    color: rgba(var(--muted-rgb), 0.42);   /* repli lisible si le clip texte n'est pas supporté */
+    background-image: linear-gradient(100deg,
+      rgba(var(--muted-rgb), 0.42) 0%,
+      rgba(var(--muted-rgb), 0.42) 40%,
+      rgba(var(--muted-rgb), 0.95) 50%,
+      rgba(var(--muted-rgb), 0.42) 60%,
+      rgba(var(--muted-rgb), 0.42) 100%);
+    background-size: 200% 100%; background-repeat: no-repeat;
+    -webkit-background-clip: text; background-clip: text;
+    -webkit-text-fill-color: transparent;
+    animation: binderHintShine 3.2s linear infinite;
   }
-  @keyframes binderHintPulse {
-    0%, 100% { opacity: 0.45; transform: scale(1); }
-    50%      { opacity: 0.85; transform: scale(1.06); }
+  @keyframes binderHintShine {
+    0%   { background-position: 150% center; }
+    100% { background-position: -50% center; }
   }
-  @media (prefers-reduced-motion: reduce) { .binder-hint { animation: none; opacity: 0.6; } }
+  @media (prefers-reduced-motion: reduce) {
+    .binder-hint { animation: none; -webkit-text-fill-color: rgba(var(--muted-rgb), 0.55); }
+  }
   .binder-close { color: var(--muted); }
   @media (prefers-reduced-motion: reduce) {
     .binder-cover, .binder-spread { transition: none; }
