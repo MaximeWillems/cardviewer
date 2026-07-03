@@ -2228,6 +2228,35 @@
   /* Carte pas (encore) dans la collection : grisée/transparente ; se dé-grise seule une fois obtenue */
   .binder-slot.not-owned .binder-slot-img { opacity: 0.4; filter: grayscale(0.7); }
   .binder-slot.not-owned .binder-slot-flag { opacity: 0.55; }
+  /* Foil holographique (cartes possédées) : même bande iridescente que la visu 3D,
+     mais en balayage lent — pas d'inclinaison au doigt dans le classeur. */
+  .binder-slot-foil {
+    position: absolute; inset: 0; pointer-events: none; border-radius: inherit;
+    background: linear-gradient(115deg,
+      transparent 18%,
+      rgba(255,40,140,0.55) 33%,
+      rgba(255,210,60,0.50) 42%,
+      rgba(70,255,180,0.50) 50%,
+      rgba(60,180,255,0.50) 58%,
+      rgba(200,70,255,0.55) 67%,
+      transparent 82%);
+    background-size: 230% 230%;
+    mix-blend-mode: color-dodge;
+    opacity: 0.14;
+    filter: saturate(1.5);
+    animation: binderFoilSweep 7s ease-in-out infinite alternate;
+  }
+  .binder-slot-foil::after {  /* fines stries holo, très discrètes */
+    content: ''; position: absolute; inset: 0; border-radius: inherit;
+    background: repeating-linear-gradient(100deg,
+      rgba(255,255,255,0.06) 0 2px, transparent 2px 6px);
+    mix-blend-mode: overlay; opacity: 0.5;
+  }
+  @keyframes binderFoilSweep {
+    0%   { background-position: 12% 20%; }
+    100% { background-position: 88% 80%; }
+  }
+  @media (prefers-reduced-motion: reduce) { .binder-slot-foil { animation: none; background-position: 50% 50%; } }
   .binder-slot:hover { border-color: rgba(var(--accent-rgb),0.6); }
   .binder-slot-plus { color: rgba(255,255,255,0.28) !important; }
   .binder-slot-img { width: 100%; height: 100%; object-fit: cover; display: block; }

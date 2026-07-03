@@ -1762,8 +1762,10 @@ function buildBinderSlot(slotIndex) {
   if (slot) {
     const c = lookupCard(slot.id);
     const img = imgSrc(c);
+    const owned = ownedSet.has(slot.id);
     div.innerHTML = `
       ${img ? `<img class="binder-slot-img" src="${escapeHtml(img)}" alt="" loading="lazy" draggable="false" onerror="handleImageError(this)" onload="checkCardBack(this)">` : imagePlaceholder(c || { name: slot.id })}
+      ${owned ? `<span class="binder-slot-foil" aria-hidden="true" style="animation-delay:-${(slotIndex % 9) * 0.8}s"></span>` : ''}
       ${slot.lang && LANG_FLAGS[slot.lang] ? `<span class="binder-slot-flag">${LANG_FLAGS[slot.lang]}</span>` : ''}
       <button class="binder-slot-remove" title="Retirer">×</button>`;
     div.querySelector('.binder-slot-remove').addEventListener('click', e => {
