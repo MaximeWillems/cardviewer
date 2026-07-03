@@ -1572,7 +1572,7 @@ function updateBinderEditBtn() {
 }
 // ── Fermeture éclair (Phase B) : la tirette fait le tour, puis la couverture
 // s'ouvre. Son généré en Web Audio (bruit filtré modulé), désactivable. ──────
-const ZIP_MS = 850;
+const ZIP_MS = 1300;
 let binderZipping = false, _audioCtx = null;
 function reducedMotion() { return window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches; }
 function getAudioCtx() {
@@ -1606,6 +1606,7 @@ function openBinder() {
   const view = document.getElementById('binder-view');
   if (reducedMotion()) { binderOpen = true; renderBinder(); return; }
   binderZipping = true;
+  view.style.setProperty('--zip-ms', ZIP_MS + 'ms'); // synchronise l'anim CSS de la tirette
   view.classList.add('zipping');
   playZipSound();
   setTimeout(() => { view.classList.remove('zipping'); binderZipping = false; binderOpen = true; renderBinder(); }, ZIP_MS);

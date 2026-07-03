@@ -2070,7 +2070,7 @@
   .binder-zip-pull {
     position: absolute; left: 11.93%; top: 0%; transform: translate(-50%, -50%) rotate(180deg);
     opacity: 0;   /* invisible au repos, nichée sous le bord haut-gauche (côté dos) */
-    width: 16px; height: 26px; border-radius: 3px 3px 5px 5px;
+    width: 16px; height: 32px; border-radius: 3px 3px 5px 5px;
     background: linear-gradient(180deg, rgba(182,236,115,0.96), rgba(126,194,58,0.92) 55%, rgba(87,147,36,0.96));
     box-shadow: 0 2px 5px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.5), inset 0 -1px 0 rgba(0,0,0,0.35);
   }
@@ -2085,7 +2085,7 @@
     background: linear-gradient(180deg, #43454c, #17181b 70%, #0d0e10);
     box-shadow: inset 0 1px 0 rgba(255,255,255,0.28), 0 1px 2px rgba(0,0,0,0.5);
   }
-  .binder-view.zipping .binder-zip-pull { animation: zipAround var(--zip-ms, 0.85s) ease-in-out forwards; }
+  .binder-view.zipping .binder-zip-pull { animation: zipAround var(--zip-ms, 1.3s) ease-in-out forwards; }
   @keyframes zipAround {  /* la languette sort (haut-gauche) PUIS fait le tour par la droite ;
                              elle pivote pour rester perpendiculaire au bord (haut→droite→bas). */
     0%    { left: 11.93%; top: 0%;     opacity: 0; transform: translate(-50%,-50%) rotate(180deg); }
