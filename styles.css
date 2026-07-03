@@ -2220,6 +2220,21 @@
     display: none;
   }
   .binder-slot.filled:hover .binder-slot-remove { display: block; }
+  /* Glisser-déposer en mode édition */
+  .binder-view.editing .binder-slot.drag-handle { cursor: grab; touch-action: none; }
+  .binder-view.editing .binder-slot.drag-source { opacity: 0.32; }
+  .binder-view.editing .binder-slot.drag-over {
+    outline: 2px dashed rgba(var(--accent-rgb),0.9); outline-offset: -2px;
+    box-shadow: 0 0 0 3px rgba(var(--accent-rgb),0.25) inset;
+  }
+  body.binder-dragging { cursor: grabbing; user-select: none; -webkit-user-select: none; }
+  .binder-drag-ghost {
+    position: fixed; z-index: 9999; pointer-events: none;
+    border-radius: 7px; overflow: hidden;
+    box-shadow: 0 12px 28px rgba(0,0,0,0.45); opacity: 0.92;
+    transform: translate(0,0); will-change: transform;
+  }
+  .binder-drag-ghost img { width: 100%; height: 100%; object-fit: cover; display: block; }
 
   /* Sélecteur de carte du classeur */
   .binder-picker-search {

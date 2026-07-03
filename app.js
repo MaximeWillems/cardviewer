@@ -1682,22 +1682,94 @@ function flipBinder(dir) {
   setTimeout(done, FLIP_MS + 120);
 }
 
+// ── Glisser-déposer des cartes (mode édition) ────────────────────────────────
+// Déplacement limité à la double-page affichée : on échange la poche source et
+// la poche cible (déposer sur une poche vide = simple déplacement).
+let binderDragging = false;
+function enableBinderSlotDrag(div, slotIndex) {
+  div.classList.add('drag-handle');
+  div.addEventListener('pointerdown', e => startBinderDrag(e, slotIndex, div));
+}
+function slotUnderPoint(x, y, exclude) {
+  for (const el of document.elementsFromPoint(x, y)) {
+    const s = el.closest && el.closest('.binder-slot');
+    if (s && s !== exclude && s.closest('#binder-spread')) return s;
+  }
+  return null;
+}
+function startBinderDrag(e, slotIndex, slotEl) {
+  if (!binderEditMode) return;
+  if (e.pointerType === 'mouse' && e.button !== 0) return; // clic gauche uniquement
+  const startX = e.clientX, startY = e.clientY;
+  let ghost = null, dragging = false, curTarget = null;
+  const onMove = ev => {
+    const dx = ev.clientX - startX, dy = ev.clientY - startY;
+    if (!dragging) {
+      if (Math.hypot(dx, dy) < 7) return; // seuil : distingue tap/clic d'un glissé
+      dragging = true; binderDragging = true;
+      const r = slotEl.getBoundingClientRect();
+      ghost = document.createElement('div');
+      ghost.className = 'binder-drag-ghost';
+      ghost.style.cssText = `width:${r.width}px;height:${r.height}px;left:${r.left}px;top:${r.top}px`;
+      const img = slotEl.querySelector('.binder-slot-img');
+      ghost.innerHTML = img ? `<img src="${img.getAttribute('src')}" alt="">` : slotEl.innerHTML;
+      document.body.appendChild(ghost);
+      slotEl.classList.add('drag-source');
+      document.body.classList.add('binder-dragging');
+    }
+    ev.preventDefault();
+    ghost.style.transform = `translate(${ev.clientX - startX}px, ${ev.clientY - startY}px)`;
+    const tgt = slotUnderPoint(ev.clientX, ev.clientY, slotEl);
+    if (tgt !== curTarget) {
+      if (curTarget) curTarget.classList.remove('drag-over');
+      curTarget = tgt;
+      if (curTarget) curTarget.classList.add('drag-over');
+    }
+  };
+  const onUp = () => {
+    window.removeEventListener('pointermove', onMove);
+    window.removeEventListener('pointerup', onUp);
+    window.removeEventListener('pointercancel', onUp);
+    if (ghost) ghost.remove();
+    if (curTarget) curTarget.classList.remove('drag-over');
+    slotEl.classList.remove('drag-source');
+    document.body.classList.remove('binder-dragging');
+    if (dragging) {
+      if (curTarget) {
+        const ti = +curTarget.dataset.slotIndex;
+        if (ti !== slotIndex) moveBinderSlot(slotIndex, ti);
+      }
+      setTimeout(() => { binderDragging = false; }, 0); // laisse passer le click fantôme
+    }
+  };
+  window.addEventListener('pointermove', onMove);
+  window.addEventListener('pointerup', onUp);
+  window.addEventListener('pointercancel', onUp);
+}
+function moveBinderSlot(from, to) {
+  const s = binder.slots;
+  [s[from], s[to]] = [s[to], s[from]]; // échange source ↔ cible
+  saveBinder(); renderBinder();
+}
+
 function buildBinderSlot(slotIndex) {
   const slot = binder.slots[slotIndex];
   const div = document.createElement('div');
   div.className = 'binder-slot' + (slot ? ' filled' : '');
+  div.dataset.slotIndex = slotIndex;
   if (slot) {
     const c = lookupCard(slot.id);
     const img = imgSrc(c);
     div.innerHTML = `
-      ${img ? `<img class="binder-slot-img" src="${escapeHtml(img)}" alt="" loading="lazy" onerror="handleImageError(this)" onload="checkCardBack(this)">` : imagePlaceholder(c || { name: slot.id })}
+      ${img ? `<img class="binder-slot-img" src="${escapeHtml(img)}" alt="" loading="lazy" draggable="false" onerror="handleImageError(this)" onload="checkCardBack(this)">` : imagePlaceholder(c || { name: slot.id })}
       ${slot.lang && LANG_FLAGS[slot.lang] ? `<span class="binder-slot-flag">${LANG_FLAGS[slot.lang]}</span>` : ''}
       <button class="binder-slot-remove" title="Retirer">×</button>`;
     div.querySelector('.binder-slot-remove').addEventListener('click', e => {
       e.stopPropagation();
       binder.slots[slotIndex] = null; saveBinder(); renderBinder();
     });
-    div.addEventListener('click', () => { if (c) openModal(c, [c], 0); });
+    div.addEventListener('click', () => { if (binderDragging) return; if (c) openModal(c, [c], 0); });
+    if (binderEditMode) enableBinderSlotDrag(div, slotIndex);
   } else {
     div.innerHTML = '<span class="binder-slot-plus">+</span>';
     if (binderEditMode) div.addEventListener('click', () => openBinderPicker(slotIndex));
@@ -4542,9 +4614,9 @@ document.getElementById('binder-next').addEventListener('click', () => flipBinde
   const spread = document.getElementById('binder-spread');
   if (!spread) return;
   let sx = 0, sy = 0, tracking = false;
-  const down = e => { const t = e.touches ? e.touches[0] : e; sx = t.clientX; sy = t.clientY; tracking = true; };
+  const down = e => { if (binderEditMode) return; const t = e.touches ? e.touches[0] : e; sx = t.clientX; sy = t.clientY; tracking = true; };
   const up = e => {
-    if (!tracking) return; tracking = false;
+    if (!tracking || binderEditMode) return; tracking = false;
     const t = e.changedTouches ? e.changedTouches[0] : e;
     const dx = t.clientX - sx, dy = t.clientY - sy;
     if (Math.abs(dx) > 55 && Math.abs(dx) > Math.abs(dy) * 1.4) flipBinder(dx < 0 ? 1 : -1);
