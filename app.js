@@ -518,6 +518,19 @@ function updateCardPricePill(el, cardId) {
   if (sellPill)   sellPill.textContent   = getPriceLabel(cardId, 'trade',  tradeLangOf(cardId));
 }
 
+// ── Acquisition (date + source par carte ; le prix payé vit dans paid.val) ──
+const ACQ_SOURCES = [
+  { v: 'buy',   label: '🛒 Achat' },
+  { v: 'pack',  label: '📦 Booster' },
+  { v: 'trade', label: '🔄 Échange' },
+  { v: 'gift',  label: '🎁 Cadeau' },
+  { v: 'other', label: '• Autre' },
+];
+const ACQ_LABEL = Object.fromEntries(ACQ_SOURCES.map(s => [s.v, s.label]));
+function todayISO() { const d = new Date(); return d.toISOString().slice(0, 10); }
+function getAcq(id, lang) { return (collRec(id, lang) || {}).acq || null; }
+function setAcquisition(id, lang, acq) { ensureRec(id, lang).acq = acq; }
+
 function getBestPrice(cardId) {
   for (const type of ['owned', 'wanted']) {
     const d = getPriceData(cardId, type, priceLangOf(cardId, type)); // langue de possession
@@ -2327,6 +2340,9 @@ function updateCollStat() {
     dupBtn.style.display = S.collection.collTab === 'owned' ? '' : 'none';
     dupBtn.classList.toggle('active', !!S.collection.dupOnly);
   }
+  // « Passer en collection » : onglet À obtenir + mode Sélection.
+  const recvBtn = document.getElementById('btn-receive');
+  if (recvBtn) recvBtn.style.display = (S.collection.collTab === 'wanted' && selectionMode) ? '' : 'none';
   applyPricesVisible();
 }
 
@@ -3505,6 +3521,86 @@ function closeConfig() { document.getElementById('config-overlay').classList.rem
 function openSettings()  { document.getElementById('settings-overlay').classList.add('open'); }
 function closeSettings() { document.getElementById('settings-overlay').classList.remove('open'); }
 
+/* ── Réception : faire passer des cartes « À obtenir » → « Collection » ──────
+   Réutilise le mode Sélection. Modale : date + source communs, prix par carte
+   (pré-rempli au prix marché). Enregistre acq={d,src} et paid.val par carte.
+   ──────────────────────────────────────────────────────────────────────── */
+function openReceiveModal() {
+  if (!selectedIds.size) { showToast('Sélectionne d\'abord les cartes reçues', 'info'); return; }
+  document.getElementById('receive-date').value = todayISO();
+  const src = document.getElementById('receive-source');
+  src.innerHTML = ACQ_SOURCES.map(s => `<option value="${s.v}">${s.label}</option>`).join('');
+  renderReceiveRows();
+  document.getElementById('receive-overlay').classList.add('open');
+  lockBodyScroll();
+}
+function closeReceiveModal() {
+  document.getElementById('receive-overlay').classList.remove('open');
+  unlockBodyScroll();
+}
+function renderReceiveRows() {
+  const list = document.getElementById('receive-list');
+  list.innerHTML = [...selectedIds].map(id => {
+    const c = lookupCard(id) || { id, name: id };
+    const img = imgSrc(c);
+    const market = c.apiPrice != null ? Number(c.apiPrice).toFixed(2) : '';
+    return `<div class="receive-row">
+      ${img ? `<img class="receive-thumb" src="${escapeHtml(img)}" alt="" loading="lazy" onerror="this.style.visibility='hidden'">` : '<div class="receive-thumb noimg">?</div>'}
+      <div class="receive-info">
+        <div class="receive-name">${escapeHtml(c.name || '—')}</div>
+        <div class="receive-sub">${escapeHtml(c.set?.name || '')}${c.localId ? ' · N°' + escapeHtml(String(c.localId)) : ''}</div>
+      </div>
+      <span class="receive-price">
+        <input type="number" min="0" step="0.01" class="receive-price-input" data-id="${escapeHtml(id)}" placeholder="${market || 'prix'}" value="${market}">
+        <span class="receive-eur">€</span>
+      </span>
+    </div>`;
+  }).join('');
+  updateReceiveTotal();
+}
+function updateReceiveTotal() {
+  let total = 0, n = 0;
+  document.querySelectorAll('#receive-list .receive-price-input').forEach(inp => {
+    n++; const v = parseFloat(inp.value); if (!isNaN(v)) total += v;
+  });
+  const el = document.getElementById('receive-total');
+  if (el) el.textContent = `${n} carte${n > 1 ? 's' : ''}${total > 0 ? ' · ' + fmtEur(total) : ''}`;
+}
+function fillReceiveMarket() {
+  document.querySelectorAll('#receive-list .receive-price-input').forEach(inp => {
+    const c = lookupCard(inp.dataset.id);
+    if (c && c.apiPrice != null) inp.value = Number(c.apiPrice).toFixed(2);
+  });
+  updateReceiveTotal();
+}
+function clearReceivePrices() {
+  document.querySelectorAll('#receive-list .receive-price-input').forEach(inp => { inp.value = ''; });
+  updateReceiveTotal();
+}
+function confirmReceive() {
+  const d = document.getElementById('receive-date').value || todayISO();
+  const src = document.getElementById('receive-source').value || 'buy';
+  const inputs = [...document.querySelectorAll('#receive-list .receive-price-input')];
+  if (!inputs.length) { closeReceiveModal(); return; }
+  let total = 0;
+  inputs.forEach(inp => {
+    const id = inp.dataset.id;
+    const lang = langsWith(id, 'wanted')[0] || cardLangFor(lookupCard(id) || { id }) || currentLang;
+    const r = ensureRec(id, lang);
+    r.qty = (r.qty || 0) + 1;
+    r.wanted = false;
+    const price = inp.value.trim() !== '' ? parseFloat(inp.value) : NaN;
+    if (!isNaN(price)) { r.paid = { val: String(price), min: '', max: '' }; total += price; }
+    r.acq = { d, src };
+    snapshotById(id);
+  });
+  afterCollectionChange();
+  closeReceiveModal();
+  setSelectionMode(false);
+  populateFilters('collection'); renderCollection(); updateTotalsBar();
+  showToast(`✦ ${inputs.length} carte${inputs.length > 1 ? 's' : ''} ajoutée${inputs.length > 1 ? 's' : ''}${total > 0 ? ' — ' + fmtEur(total) : ''}`);
+}
+
 /* ── Panneau d'ajout / scan de cartes ─────────────────────────────────────
    Saisie du numéro (+ total / nom si doute) → candidats du catalogue courant
    via findScanCandidates → tap pour ajouter à la collection. La caméra (OCR)
@@ -4185,6 +4281,7 @@ function setSelectionMode(on) {
   btn.textContent = on ? '☑ Sélection active' : '☐ Sélection';
   document.getElementById('btn-select-all').style.display   = on ? '' : 'none';
   document.getElementById('btn-deselect-all').style.display = on ? '' : 'none';
+  document.getElementById('btn-receive').style.display = (on && S.collection.collTab === 'wanted') ? '' : 'none';
   document.querySelectorAll('#coll-grid .card').forEach(el => {
     el.classList.toggle('selectable', on);
     el.classList.remove('selected');
@@ -4214,6 +4311,16 @@ document.getElementById('btn-deselect-all').addEventListener('click', () => {
   lastClickedId = null;
   updateTotalsBar();
 });
+
+// Réception : À obtenir → Collection (modale prix par carte).
+document.getElementById('btn-receive').addEventListener('click', openReceiveModal);
+document.getElementById('receive-close').addEventListener('click', closeReceiveModal);
+document.getElementById('receive-cancel').addEventListener('click', closeReceiveModal);
+document.getElementById('receive-overlay').addEventListener('click', e => { if (e.target === e.currentTarget) closeReceiveModal(); });
+document.getElementById('receive-fill-market').addEventListener('click', fillReceiveMarket);
+document.getElementById('receive-clear').addEventListener('click', clearReceivePrices);
+document.getElementById('receive-confirm').addEventListener('click', confirmReceive);
+document.getElementById('receive-list').addEventListener('input', e => { if (e.target.classList.contains('receive-price-input')) updateReceiveTotal(); });
 
 // Navigation tactile (swipe) dans la modale.
 (() => {

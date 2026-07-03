@@ -1685,6 +1685,34 @@
   .settings-row-sub { font-size: 11px; color: var(--muted); margin-top: 2px; }
   .settings-row .config-btn { flex-shrink: 0; }
 
+  /* ── Réception : À obtenir → Collection ─────── */
+  .receive-common { display: flex; gap: 12px; flex-wrap: wrap; }
+  .receive-field { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); }
+  .receive-field input, .receive-field select {
+    padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--input-bg); color: var(--text); font-size: 13px;
+  }
+  .receive-actions-top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .receive-total { margin-left: auto; font-family: 'Syne', sans-serif; font-weight: 700; font-size: 13px; color: var(--accent); }
+  .receive-list { display: flex; flex-direction: column; gap: 6px; max-height: 52vh; overflow-y: auto; overscroll-behavior: contain; }
+  .receive-row {
+    display: flex; align-items: center; gap: 10px; padding: 6px;
+    border: 1px solid var(--border); border-radius: 10px; background: var(--surface);
+  }
+  .receive-thumb { width: 38px; aspect-ratio: 3/4; object-fit: cover; border-radius: 5px; flex-shrink: 0; background: var(--surface2); }
+  .receive-thumb.noimg { display: flex; align-items: center; justify-content: center; color: var(--muted); font-weight: 700; }
+  .receive-info { flex: 1; min-width: 0; }
+  .receive-name { font-family: 'Syne', sans-serif; font-weight: 700; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .receive-sub { font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .receive-price { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
+  .receive-price-input {
+    width: 74px; padding: 7px 8px; text-align: right;
+    border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--input-bg); color: var(--text); font-size: 13px;
+  }
+  .receive-price-input:focus { border-color: var(--accent); outline: none; }
+  .receive-eur { font-size: 12px; color: var(--muted); }
+
   /* ── Collection view ────────────────────────── */
   .collection-view { display: none; max-width: 1200px; margin: 0 auto; padding: 0 2rem; }
   .collection-view.active { display: block; }

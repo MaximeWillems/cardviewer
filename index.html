@@ -94,6 +94,7 @@
     <button class="coll-toolbar-btn" id="btn-select-mode">☐ Sélection</button>
     <button class="coll-toolbar-btn" id="btn-select-all" style="display:none">Tout sélectionner</button>
     <button class="coll-toolbar-btn" id="btn-deselect-all" style="display:none">Désélectionner</button>
+    <button class="coll-toolbar-btn" id="btn-receive" style="display:none">✓ Passer en collection</button>
     <button class="coll-toolbar-btn" id="btn-dup-only" style="display:none">⧉ Doublons</button>
     <button class="coll-toolbar-btn" id="btn-share-sell" style="display:none">📋 Partager la liste</button>
     <button class="coll-toolbar-btn" id="btn-export" title="Exporter les cartes en image">⬇ Exporter</button>
@@ -349,6 +350,36 @@
           <div class="settings-row-sub">Sauvegarde / restauration de la collection</div>
         </div>
         <button class="config-btn" id="btn-config">⇅ Importer / exporter</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Réception : À obtenir → Collection ───────────────── -->
+<div class="config-overlay" id="receive-overlay">
+  <div class="config-modal" role="dialog" aria-modal="true" aria-labelledby="receive-title">
+    <div class="config-head">
+      <div class="config-title" id="receive-title">Passer en collection</div>
+      <button class="config-close" id="receive-close" aria-label="Fermer">✕</button>
+    </div>
+    <div class="config-body">
+      <div class="receive-common">
+        <label class="receive-field">Date
+          <input type="date" id="receive-date">
+        </label>
+        <label class="receive-field">Source
+          <select id="receive-source"></select>
+        </label>
+      </div>
+      <div class="receive-actions-top">
+        <button class="config-btn" id="receive-fill-market">Tout au prix marché</button>
+        <button class="config-btn" id="receive-clear">Vider les prix</button>
+        <span class="receive-total" id="receive-total"></span>
+      </div>
+      <div class="receive-list" id="receive-list"></div>
+      <div class="config-actions">
+        <button class="config-btn" id="receive-cancel">Annuler</button>
+        <button class="config-btn primary" id="receive-confirm">✓ Ajouter à ma collection</button>
       </div>
     </div>
   </div>
