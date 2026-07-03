@@ -13,8 +13,8 @@
 </script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=20260703q">
-<link rel="stylesheet" href="master-filter-patch.css?v=20260703q">
+<link rel="stylesheet" href="styles.css?v=20260703r">
+<link rel="stylesheet" href="master-filter-patch.css?v=20260703r">
 </head>
 <body>
 
@@ -234,7 +234,11 @@
       <button class="config-close" id="binder-picker-close" aria-label="Fermer">✕</button>
     </div>
     <div class="config-body">
-      <input class="binder-picker-search" id="binder-picker-search" type="text" placeholder="Rechercher dans ma collection…" autocomplete="off">
+      <div class="tier-picker-tabs">
+        <button class="binder-src-tab active" data-src="owned">Ma collection</button>
+        <button class="binder-src-tab" data-src="wanted">À obtenir</button>
+      </div>
+      <input class="binder-picker-search" id="binder-picker-search" type="text" placeholder="Rechercher…" autocomplete="off">
       <div class="binder-picker-grid" id="binder-picker-grid"></div>
     </div>
   </div>
@@ -487,6 +491,6 @@
 
 <div id="toast"></div>
 
-<script src="app.js?v=20260703q"></script>
+<script src="app.js?v=20260703r"></script>
 </body>
 </html>

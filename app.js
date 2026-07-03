@@ -1481,6 +1481,7 @@ async function renderMasterDetail() {
    ════════════════════════════════════════════════════════════════════════ */
 function lookupCard(id) { return allCards.find(c => c.id === id) || cardSnapshots[id] || null; }
 let binderPickSlot = -1; // emplacement en cours d'attribution
+let binderPickerSrc = 'owned'; // source du sélecteur : 'owned' (collection) ou 'wanted' (à obtenir)
 
 // Couleurs communes pour le fond du classeur (thèmes), + blanc cassé et noir cassé.
 const BINDER_COLORS = ['#c0392b', '#e67e22', '#f39c12', '#f1c40f', '#7cb342', '#27ae60', '#16a085', '#0aa3c2',
@@ -1756,7 +1757,7 @@ function moveBinderSlot(from, to) {
 function buildBinderSlot(slotIndex) {
   const slot = binder.slots[slotIndex];
   const div = document.createElement('div');
-  div.className = 'binder-slot' + (slot ? ' filled' : '');
+  div.className = 'binder-slot' + (slot ? ' filled' : '') + (slot && !ownedSet.has(slot.id) ? ' not-owned' : '');
   div.dataset.slotIndex = slotIndex;
   if (slot) {
     const c = lookupCard(slot.id);
@@ -1780,6 +1781,8 @@ function buildBinderSlot(slotIndex) {
 
 function openBinderPicker(slotIndex) {
   binderPickSlot = slotIndex;
+  binderPickerSrc = 'owned';
+  document.querySelectorAll('.binder-src-tab').forEach(t => t.classList.toggle('active', t.dataset.src === 'owned'));
   document.getElementById('binder-picker-search').value = '';
   renderBinderPicker('');
   document.getElementById('binder-picker').classList.add('open');
@@ -1793,16 +1796,17 @@ function renderBinderPicker(query) {
   const grid = document.getElementById('binder-picker-grid');
   if (!grid) return;
   const q = (query || '').toLowerCase().trim();
-  let cards = getCollectionPool().filter(c => ownedSet.has(c.id));
+  const set = binderPickerSrc === 'wanted' ? wantedSet : ownedSet;
+  let cards = getCollectionPool().filter(c => set.has(c.id));
   if (q) cards = cards.filter(c =>
     (c.name || '').toLowerCase().includes(q) ||
     (c.romaji && c.romaji.includes(q)) ||
     String(c.localId || '').includes(q));
   cards = sortByConfig(cards, 'set').slice(0, 300);
-  if (!cards.length) { grid.innerHTML = '<div class="scan-empty">Aucune carte possédée.</div>'; return; }
+  if (!cards.length) { grid.innerHTML = '<div class="scan-empty">Aucune carte ici.</div>'; return; }
   grid.innerHTML = '';
   cards.forEach(c => {
-    const lang = ownedLangs(c.id)[0] || currentLang;
+    const lang = (binderPickerSrc === 'wanted' ? langsWith(c.id, 'wanted')[0] : ownedLangs(c.id)[0]) || currentLang;
     const img = imgSrc(c);
     const el = document.createElement('button');
     el.type = 'button';
@@ -4647,6 +4651,11 @@ document.getElementById('binder-zoom-overlay').addEventListener('click', e => { 
 document.getElementById('binder-picker-close').addEventListener('click', closeBinderPicker);
 document.getElementById('binder-picker').addEventListener('click', e => { if (e.target === e.currentTarget) closeBinderPicker(); });
 document.getElementById('binder-picker-search').addEventListener('input', e => renderBinderPicker(e.target.value));
+document.querySelectorAll('.binder-src-tab').forEach(tab => tab.addEventListener('click', () => {
+  binderPickerSrc = tab.dataset.src;
+  document.querySelectorAll('.binder-src-tab').forEach(t => t.classList.toggle('active', t === tab));
+  renderBinderPicker(document.getElementById('binder-picker-search').value);
+}));
 
 // Tier list : ajout de rangée, export, et sélecteur (collection / à obtenir).
 document.getElementById('tier-add').addEventListener('click', () => {
