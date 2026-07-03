@@ -2068,7 +2068,7 @@
      gauche. Les % suivent le tracé #bcZip du SVG (viewBox 285×320). */
   .binder-zip { position: absolute; inset: 0; pointer-events: none; }
   .binder-zip-pull {
-    position: absolute; left: 11.93%; top: 0%; transform: translate(-50%, -50%);
+    position: absolute; left: 11.93%; top: 0%; transform: translate(-50%, -50%) rotate(180deg);
     opacity: 0;   /* invisible au repos, nichée sous le bord haut-gauche (côté dos) */
     width: 16px; height: 26px; border-radius: 3px 3px 5px 5px;
     background: linear-gradient(180deg, rgba(182,236,115,0.96), rgba(126,194,58,0.92) 55%, rgba(87,147,36,0.96));
@@ -2086,16 +2086,17 @@
     box-shadow: inset 0 1px 0 rgba(255,255,255,0.28), 0 1px 2px rgba(0,0,0,0.5);
   }
   .binder-view.zipping .binder-zip-pull { animation: zipAround var(--zip-ms, 0.85s) ease-in-out forwards; }
-  @keyframes zipAround {  /* la languette sort (haut-gauche) PUIS fait le tour par la droite */
-    0%    { left: 11.93%; top: 0%;     opacity: 0; }   /* cachée sous le bord haut-gauche */
-    8%    { left: 11.93%; top: 5%;     opacity: 1; }   /* la languette verte sort */
-    12%   { left: 11.93%; top: 5%; }                   /* petit temps de pose */
-    37.7% { left: 85.6%;  top: 5%; }                   /* longe le haut vers la droite */
-    40.7% { left: 91.2%;  top: 10%; }                  /* coin haut-droit */
-    71.3% { left: 91.2%;  top: 88.13%; }               /* descend tout le côté droit */
-    74.3% { left: 85.6%;  top: 93.13%; }               /* coin bas-droit */
+  @keyframes zipAround {  /* la languette sort (haut-gauche) PUIS fait le tour par la droite ;
+                             elle pivote pour rester perpendiculaire au bord (haut→droite→bas). */
+    0%    { left: 11.93%; top: 0%;     opacity: 0; transform: translate(-50%,-50%) rotate(180deg); }
+    8%    { left: 11.93%; top: 5%;     opacity: 1; transform: translate(-50%,-50%) rotate(180deg); }
+    12%   { left: 11.93%; top: 5%;                 transform: translate(-50%,-50%) rotate(180deg); }
+    37.7% { left: 85.6%;  top: 5%;                 transform: translate(-50%,-50%) rotate(180deg); }
+    40.7% { left: 91.2%;  top: 10%;                transform: translate(-50%,-50%) rotate(270deg); }
+    71.3% { left: 91.2%;  top: 88.13%;             transform: translate(-50%,-50%) rotate(270deg); }
+    74.3% { left: 85.6%;  top: 93.13%;             transform: translate(-50%,-50%) rotate(360deg); }
     97%   { opacity: 1; }
-    100%  { left: 11.93%; top: 93.13%; opacity: 0; }   /* finit en bas-gauche et se re-cache */
+    100%  { left: 11.93%; top: 93.13%; opacity: 0; transform: translate(-50%,-50%) rotate(360deg); }
   }
   @media (prefers-reduced-motion: reduce) { .binder-zip-pull { animation: none !important; opacity: 0; } }
 
