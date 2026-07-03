@@ -1505,16 +1505,27 @@ function renderBinderPalette(lp, rp) {
     saveBinder(); renderBinder();
   }));
 }
-// Peint une page (9 poches) ; page au-delà du total = page vide (dos de couverture).
-function renderBinderPage(gridId, pageIndex) {
-  const grid = document.getElementById(gridId);
+// Peint une page (9 poches) dans une grille ; page au-delà du total = page vide.
+function applyGridBg(grid, pageIndex) { if (grid) grid.style.background = binder.pageBgs[pageIndex] || ''; }
+function paintBinderGrid(grid, pageIndex) {
   if (!grid) return;
   const page = grid.parentElement;
   grid.innerHTML = '';
-  if (pageIndex >= binder.pages) { page.classList.add('empty-page'); return; }
-  page.classList.remove('empty-page');
+  if (pageIndex >= binder.pages) { if (page) page.classList.add('empty-page'); return; }
+  if (page) page.classList.remove('empty-page');
   const start = pageIndex * 9;
   for (let i = 0; i < 9; i++) grid.appendChild(buildBinderSlot(start + i));
+}
+function renderBinderPage(gridId, pageIndex) { paintBinderGrid(document.getElementById(gridId), pageIndex); }
+// Page autonome (pour les faces de la page qui tourne).
+function makeBinderPageEl(pageIndex, sideClass) {
+  const page = document.createElement('div');
+  page.className = 'binder-page ' + sideClass;
+  const grid = document.createElement('div'); grid.className = 'binder-grid';
+  page.appendChild(grid);
+  applyGridBg(grid, pageIndex);
+  paintBinderGrid(grid, pageIndex);
+  return page;
 }
 function renderBinder() {
   const view = document.getElementById('binder-view');
@@ -1583,6 +1594,55 @@ function closeBinder() {
 function updateBinderSoundBtn() {
   const b = document.getElementById('binder-sound');
   if (b) { const on = prefs.binderSound !== false; b.textContent = on ? '🔊' : '🔇'; b.title = on ? 'Son activé' : 'Son coupé'; }
+}
+function playPageSound() {
+  if (prefs.binderSound === false) return;
+  const ctx = getAudioCtx(); if (!ctx) return;
+  if (ctx.state === 'suspended') { try { ctx.resume(); } catch (e) {} }
+  const t = ctx.currentTime, dur = 0.3;
+  const buf = ctx.createBuffer(1, Math.floor(ctx.sampleRate * dur), ctx.sampleRate);
+  const d = buf.getChannelData(0);
+  for (let i = 0; i < d.length; i++) { const env = 1 - i / d.length; d[i] = (Math.random() * 2 - 1) * env * env; } // froissement bref
+  const src = ctx.createBufferSource(); src.buffer = buf;
+  const hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 1100;
+  const g = ctx.createGain(); g.gain.value = 0.13;
+  src.connect(hp); hp.connect(g); g.connect(ctx.destination);
+  src.start(t); src.stop(t + dur);
+}
+
+// Feuilletage (Phase C) : la page qui tourne pivote à la reliure. dir=+1 suivant, -1 précédent.
+const FLIP_MS = 640;
+let binderFlipping = false;
+function flipBinder(dir) {
+  if (binderFlipping || !binderOpen) return;
+  const cur = binderSpread, target = cur + dir;
+  if (target < 0 || target > binderSpreadCount() - 1) return;
+  if (reducedMotion()) { binderSpread = target; playPageSound(); renderBinder(); return; }
+  binderFlipping = true;
+  playPageSound();
+  const lp = cur * 2, rp = lp + 1, tl = target * 2, tr = tl + 1;
+  const spread = document.getElementById('binder-spread');
+  const leftGrid = document.getElementById('binder-grid-left'), rightGrid = document.getElementById('binder-grid-right');
+  // Dévoile déjà, sous la page qui tourne, la page destination du côté révélé.
+  if (dir > 0) { paintBinderGrid(rightGrid, tr); applyGridBg(rightGrid, tr); }
+  else         { paintBinderGrid(leftGrid, tl);  applyGridBg(leftGrid, tl); }
+  const turningPage = (dir > 0 ? rightGrid : leftGrid).parentElement;
+  const sr = spread.getBoundingClientRect(), pr = turningPage.getBoundingClientRect();
+  const frontIdx = dir > 0 ? rp : lp;   // face visible au départ
+  const backIdx  = dir > 0 ? tl : tr;   // dos révélé pendant la rotation
+  const flip = document.createElement('div');
+  flip.className = 'binder-flip ' + (dir > 0 ? 'next' : 'prev');
+  flip.style.cssText = `left:${pr.left - sr.left}px;top:${pr.top - sr.top}px;width:${pr.width}px;height:${pr.height}px`;
+  const inner = document.createElement('div'); inner.className = 'binder-flip-inner';
+  const front = document.createElement('div'); front.className = 'binder-flip-face front'; front.appendChild(makeBinderPageEl(frontIdx, dir > 0 ? 'right' : 'left'));
+  const back  = document.createElement('div'); back.className  = 'binder-flip-face back';  back.appendChild(makeBinderPageEl(backIdx, dir > 0 ? 'left' : 'right'));
+  inner.appendChild(front); inner.appendChild(back); flip.appendChild(inner);
+  spread.appendChild(flip);
+  requestAnimationFrame(() => requestAnimationFrame(() => flip.classList.add('go')));
+  let finished = false;
+  const done = () => { if (finished) return; finished = true; binderSpread = target; binderFlipping = false; flip.remove(); renderBinder(); };
+  inner.addEventListener('transitionend', done, { once: true });
+  setTimeout(done, FLIP_MS + 120);
 }
 
 function buildBinderSlot(slotIndex) {
@@ -4438,8 +4498,23 @@ document.querySelectorAll('.sub-nav .sub-tab').forEach(tab => {
 });
 
 // Classeur : navigation entre pages + ajout de page + sélecteur de carte.
-document.getElementById('binder-prev').addEventListener('click', () => { if (binderSpread > 0) { binderSpread--; renderBinder(); } });
-document.getElementById('binder-next').addEventListener('click', () => { if (binderSpread < binderSpreadCount() - 1) { binderSpread++; renderBinder(); } });
+document.getElementById('binder-prev').addEventListener('click', () => flipBinder(-1));
+document.getElementById('binder-next').addEventListener('click', () => flipBinder(1));
+// Glissé horizontal sur la double-page pour feuilleter.
+(() => {
+  const spread = document.getElementById('binder-spread');
+  if (!spread) return;
+  let sx = 0, sy = 0, tracking = false;
+  const down = e => { const t = e.touches ? e.touches[0] : e; sx = t.clientX; sy = t.clientY; tracking = true; };
+  const up = e => {
+    if (!tracking) return; tracking = false;
+    const t = e.changedTouches ? e.changedTouches[0] : e;
+    const dx = t.clientX - sx, dy = t.clientY - sy;
+    if (Math.abs(dx) > 55 && Math.abs(dx) > Math.abs(dy) * 1.4) flipBinder(dx < 0 ? 1 : -1);
+  };
+  spread.addEventListener('touchstart', down, { passive: true });
+  spread.addEventListener('touchend', up, { passive: true });
+})();
 document.getElementById('binder-addpage').addEventListener('click', () => {
   binder.pages += 2; binder.slots.push(...new Array(18).fill(null)); binder.pageBgs.push(null, null);
   saveBinder(); binderSpread = binderSpreadCount() - 1; renderBinder();

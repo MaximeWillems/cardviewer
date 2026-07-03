@@ -2086,11 +2086,23 @@
   @media (prefers-reduced-motion: reduce) { .binder-zip-pull { animation: none !important; } }
 
   .binder-spread {
+    position: relative;
     display: flex; align-items: stretch; justify-content: center;
     width: min(94vw, 720px); z-index: 1;
+    perspective: 1700px;
     opacity: 0; transform: scale(0.92); pointer-events: none;
     transition: opacity 0.5s ease 0.35s, transform 0.6s cubic-bezier(.2,.7,.2,1) 0.3s;
   }
+  /* Page qui tourne (Phase C) */
+  .binder-flip { position: absolute; z-index: 5; }
+  .binder-flip-inner { position: relative; width: 100%; height: 100%; transform-style: preserve-3d; transition: transform 0.64s cubic-bezier(.35,.05,.2,1); box-shadow: 0 0 40px rgba(0,0,0,0.25); }
+  .binder-flip.next .binder-flip-inner { transform-origin: left center; }
+  .binder-flip.prev .binder-flip-inner { transform-origin: right center; }
+  .binder-flip.next.go .binder-flip-inner { transform: rotateY(-180deg); }
+  .binder-flip.prev.go .binder-flip-inner { transform: rotateY(180deg); }
+  .binder-flip-face { position: absolute; inset: 0; backface-visibility: hidden; }
+  .binder-flip-face.back { transform: rotateY(180deg); }
+  .binder-flip-face .binder-page { width: 100%; height: 100%; }
   .binder-view.open .binder-spread { opacity: 1; transform: none; pointer-events: auto; }
   .binder-page {
     flex: 1; min-width: 0; background: #efe9db; padding: 10px;
