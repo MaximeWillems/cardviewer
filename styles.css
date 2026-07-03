@@ -2040,7 +2040,9 @@
 
   .binder-cover {
     position: relative;
-    width: min(78vw, 360px); aspect-ratio: 285 / 320;
+    /* Hauteur calée sur celle de la double-page ouverte (min(94vw,720px) × ratio pages),
+       largeur dérivée par l'aspect-ratio → panneau réaliste, pas de saut de taille à l'ouverture. */
+    height: calc(min(94vw, 720px) * 0.626); width: auto; aspect-ratio: 285 / 320;
     border: none; background: transparent; cursor: pointer; padding: 0;
     transform-origin: 3% center; z-index: 2;
     transition: transform 0.8s cubic-bezier(.2,.7,.15,1), opacity 0.45s ease 0.3s;
@@ -2061,11 +2063,13 @@
   .binder-zoom-grid .binder-slot { aspect-ratio: 3 / 4; }
   .binder-view.open .binder-cover { transform: rotateY(-155deg); opacity: 0; pointer-events: none; }
 
-  /* Fermeture éclair : tirette verte translucide (style Vault X) suivant le contour du zip.
-     Les % correspondent au rail SVG (rect x13 y13 w252 h288 dans un viewBox 285×320). */
+  /* Fermeture éclair en U (dos à gauche = pas de zip). La tirette est cachée dans un coin
+     gauche au repos, puis apparaît et parcourt bas → droite → haut à l'ouverture, jamais la
+     gauche. Les % suivent le tracé #bcZip du SVG (viewBox 285×320). */
   .binder-zip { position: absolute; inset: 0; pointer-events: none; }
   .binder-zip-pull {
-    position: absolute; left: 92.98%; top: 94.06%; transform: translate(-50%, -50%);
+    position: absolute; left: 11.93%; top: 93.13%; transform: translate(-50%, -50%);
+    opacity: 0;   /* invisible au repos, nichée au coin bas-gauche (côté dos) */
     width: 16px; height: 26px; border-radius: 3px 3px 5px 5px;
     background: linear-gradient(180deg, rgba(182,236,115,0.96), rgba(126,194,58,0.92) 55%, rgba(87,147,36,0.96));
     box-shadow: 0 2px 5px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.5), inset 0 -1px 0 rgba(0,0,0,0.35);
@@ -2082,14 +2086,17 @@
     box-shadow: inset 0 1px 0 rgba(255,255,255,0.28), 0 1px 2px rgba(0,0,0,0.5);
   }
   .binder-view.zipping .binder-zip-pull { animation: zipAround var(--zip-ms, 0.85s) linear forwards; }
-  @keyframes zipAround {  /* vitesse constante : côtés 288/252/288/252 → 27% / 50% / 77% / 100% */
-    0%   { left: 92.98%; top: 94.06%; }
-    27%  { left: 92.98%; top: 4.06%; }
-    50%  { left: 4.56%;  top: 4.06%; }
-    77%  { left: 4.56%;  top: 94.06%; }
-    100% { left: 92.98%; top: 94.06%; }
+  @keyframes zipAround {  /* bas-gauche(caché) → bas → droite → haut → haut-gauche(caché) ; % pondérés par longueur */
+    0%    { left: 11.93%; top: 93.13%; opacity: 0; }
+    5%    { opacity: 1; }
+    29.2% { left: 85.6%;  top: 93.13%; }
+    32.6% { left: 91.2%;  top: 88.13%; }
+    67.4% { left: 91.2%;  top: 10%; }
+    70.8% { left: 85.6%;  top: 5%; }
+    95%   { opacity: 1; }
+    100%  { left: 11.93%; top: 5%; opacity: 0; }
   }
-  @media (prefers-reduced-motion: reduce) { .binder-zip-pull { animation: none !important; } }
+  @media (prefers-reduced-motion: reduce) { .binder-zip-pull { animation: none !important; opacity: 0; } }
 
   .binder-spread {
     position: relative;
