@@ -165,6 +165,7 @@ if (!binder || !Array.isArray(binder.slots)) binder = { pages: 5, slots: new Arr
 if (!Array.isArray(binder.pageBgs)) binder.pageBgs = new Array(binder.pages).fill(binder.bg || null);
 while (binder.pageBgs.length < binder.pages) binder.pageBgs.push(null);
 let binderSpread = 0, binderOpen = false; // double-page courante + classeur ouvert ?
+let binderEditMode = false; // false = visualisation, true = édition (poches +, palette, ×)
 function saveBinder() { localStorage.setItem(LS_BINDER, JSON.stringify(binder)); }
 function snapshotCard(c) {
   return {
@@ -1494,14 +1495,27 @@ function applyBinderBg(lp, rp) {
 function renderBinderPalette(lp, rp) {
   const el = document.getElementById('binder-palette');
   if (!el) return;
-  const cur = binder.pageBgs[lp] || null;
-  el.innerHTML = `<span class="binder-palette-label">Fond de la double-page :</span>` + BINDER_COLORS.map(col =>
-    `<button class="binder-swatch${cur === col ? ' selected' : ''}" style="background:${col}" data-col="${col}" aria-label="Fond ${col}"></button>`
-  ).join('');
+  const swatchesFor = (pageIndex) => {
+    const cur = binder.pageBgs[pageIndex] || null;
+    return BINDER_COLORS.map(col =>
+      `<button class="binder-swatch${cur === col ? ' selected' : ''}" style="background:${col}" data-col="${col}" data-page="${pageIndex}" aria-label="Fond ${col}"></button>`
+    ).join('');
+  };
+  const rightExists = rp < binder.pages;
+  el.innerHTML = `
+    <div class="binder-palette-col">
+      <span class="binder-palette-label">Fond page ${lp + 1}</span>
+      <div class="binder-palette-row">${swatchesFor(lp)}</div>
+    </div>` +
+    (rightExists ? `
+    <div class="binder-palette-col">
+      <span class="binder-palette-label">Fond page ${rp + 1}</span>
+      <div class="binder-palette-row">${swatchesFor(rp)}</div>
+    </div>` : '');
   el.querySelectorAll('.binder-swatch').forEach(b => b.addEventListener('click', () => {
-    const nv = (cur === b.dataset.col) ? null : b.dataset.col; // re-clic = fond neutre
-    binder.pageBgs[lp] = nv;
-    if (rp < binder.pages) binder.pageBgs[rp] = nv;
+    const pageIdx = +b.dataset.page;
+    const cur = binder.pageBgs[pageIdx] || null;
+    binder.pageBgs[pageIdx] = (cur === b.dataset.col) ? null : b.dataset.col; // re-clic = fond neutre
     saveBinder(); renderBinder();
   }));
 }
@@ -1532,18 +1546,29 @@ function renderBinder() {
   if (!view) return;
   binderSpread = Math.max(0, Math.min(binderSpread, binderSpreadCount() - 1));
   view.classList.toggle('open', binderOpen);
+  view.classList.toggle('editing', binderOpen && binderEditMode);
   const hint = document.getElementById('binder-hint'), bar = document.getElementById('binder-bar'), pal = document.getElementById('binder-palette');
   if (hint) hint.style.display = binderOpen ? 'none' : '';
   if (bar)  bar.style.display  = binderOpen ? '' : 'none';
-  if (pal)  pal.style.display  = binderOpen ? '' : 'none';
+  if (pal)  pal.style.display  = (binderOpen && binderEditMode) ? '' : 'none';
+  updateBinderEditBtn();
   if (!binderOpen) return; // rien à peindre sous la couverture fermée
   const lp = binderSpread * 2, rp = lp + 1;
   renderBinderPage('binder-grid-left', lp);
   renderBinderPage('binder-grid-right', rp);
   applyBinderBg(lp, rp);
-  renderBinderPalette(lp, rp);
+  if (binderEditMode) renderBinderPalette(lp, rp);
   const info = document.getElementById('binder-pageinfo');
   if (info) info.textContent = (rp < binder.pages) ? `Pages ${lp + 1}–${rp + 1} / ${binder.pages}` : `Page ${lp + 1} / ${binder.pages}`;
+}
+function updateBinderEditBtn() {
+  const b = document.getElementById('binder-edit');
+  if (!b) return;
+  b.textContent = binderEditMode ? '✓ Terminer' : '✏️ Modifier';
+  b.classList.toggle('active', binderEditMode);
+  b.title = binderEditMode ? 'Quitter le mode modification' : 'Modifier le classeur';
+  const addPage = document.getElementById('binder-addpage');
+  if (addPage) addPage.style.display = binderEditMode ? '' : 'none';
 }
 // ── Fermeture éclair (Phase B) : la tirette fait le tour, puis la couverture
 // s'ouvre. Son généré en Web Audio (bruit filtré modulé), désactivable. ──────
@@ -1675,7 +1700,7 @@ function buildBinderSlot(slotIndex) {
     div.addEventListener('click', () => { if (c) openModal(c, [c], 0); });
   } else {
     div.innerHTML = '<span class="binder-slot-plus">+</span>';
-    div.addEventListener('click', () => openBinderPicker(slotIndex));
+    if (binderEditMode) div.addEventListener('click', () => openBinderPicker(slotIndex));
   }
   return div;
 }
@@ -4488,7 +4513,7 @@ function setActiveTab(tab) {
   if (currentTab !== 'collection' && selectionMode) setSelectionMode(false);
   if (currentTab === 'collection') { populateFilters('collection'); renderCollection(); }
   if (currentTab === 'master') { masterSelected = null; renderMaster(); }
-  if (currentTab === 'binder') { binderOpen = false; renderBinder(); } // toujours fermé à l'entrée
+  if (currentTab === 'binder') { binderOpen = false; binderEditMode = false; renderBinder(); } // toujours fermé + visu à l'entrée
   if (currentTab === 'tierlist') renderTierlist();
   if (currentTab === 'echange') renderEchange();
   if (currentTab === 'stats') renderStats();
@@ -4533,6 +4558,10 @@ document.getElementById('binder-addpage').addEventListener('click', () => {
 });
 document.getElementById('binder-cover').addEventListener('click', openBinder);
 document.getElementById('binder-close').addEventListener('click', closeBinder);
+document.getElementById('binder-edit').addEventListener('click', () => {
+  binderEditMode = !binderEditMode;
+  renderBinder();
+});
 document.getElementById('binder-sound').addEventListener('click', () => {
   prefs.binderSound = prefs.binderSound === false; // bascule
   savePrefs(); updateBinderSoundBtn();

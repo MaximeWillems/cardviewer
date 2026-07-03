@@ -2157,16 +2157,25 @@
     padding: 8px 12px; border-radius: var(--radius); cursor: pointer;
   }
   .binder-addpage:hover { border-color: rgba(var(--accent-rgb),0.5); }
-  .binder-palette { display: flex; flex-wrap: wrap; gap: 9px; align-items: center; justify-content: center; margin-bottom: 1.1rem; }
-  .binder-palette-label { font-size: 11px; color: var(--muted); font-weight: 600; margin-right: 2px; width: 100%; text-align: center; }
+  .binder-palette { display: flex; flex-wrap: wrap; gap: 22px; align-items: flex-start; justify-content: center; margin-bottom: 1.1rem; }
+  .binder-palette-col { display: flex; flex-direction: column; align-items: center; gap: 6px; max-width: 300px; }
+  .binder-palette-label { font-size: 11px; color: var(--muted); font-weight: 600; letter-spacing: 0.03em; text-transform: uppercase; }
+  .binder-palette-row { display: flex; flex-wrap: wrap; gap: 7px; justify-content: center; }
   .binder-swatch {
-    width: 26px; height: 26px; border-radius: 50%;
+    width: 24px; height: 24px; border-radius: 50%;
     border: none; padding: 0; cursor: pointer;
     box-shadow: 0 1px 2px rgba(0,0,0,0.25);
     transition: transform 0.1s;
   }
   .binder-swatch:hover { transform: scale(1.12); }
   .binder-swatch.selected { outline: 2px solid var(--text); outline-offset: 2px; }
+  /* Bouton "Modifier" : accent quand actif */
+  .binder-edit-toggle.active { background: rgba(var(--accent-rgb),0.18); border-color: rgba(var(--accent-rgb),0.6); color: var(--accent); }
+  /* Mode VISUALISATION : les poches se contentent d'afficher les cartes, sans + / × / hover d'édition */
+  .binder-view:not(.editing) .binder-slot-plus,
+  .binder-view:not(.editing) .binder-slot-remove { display: none !important; }
+  .binder-view:not(.editing) .binder-slot:not(.filled) { cursor: default; background: rgba(0,0,0,0.035); border-style: dashed; border-color: rgba(0,0,0,0.1); box-shadow: none; }
+  .binder-view:not(.editing) .binder-slot:hover { border-color: rgba(0,0,0,0.14); }
   .binder-grid {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
