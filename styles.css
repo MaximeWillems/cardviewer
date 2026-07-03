@@ -1729,6 +1729,33 @@
   .acq-edit { display: flex; gap: 10px; margin-top: 8px; }
   .acq-edit-field { flex: 1; display: flex; flex-direction: column; gap: 4px; }
 
+  /* ── Bilan (stats) ──────────────────────────── */
+  .stats-view { display: none; max-width: 1000px; margin: 0 auto; padding: 1.25rem 2rem 4rem; }
+  .stats-view.active { display: block; }
+  .stats-h { font-family: 'Syne', sans-serif; font-weight: 800; font-size: 1.3rem; margin-bottom: 1rem; }
+  .stats-hint { font-size: 12px; color: var(--muted); margin-bottom: 1rem; }
+  .stats-empty { color: var(--muted); padding: 3rem 0; text-align: center; }
+  .stats-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 1.5rem; }
+  .stat-kpi {
+    border: 1px solid var(--border); border-radius: 14px; background: var(--surface);
+    padding: 16px; display: flex; flex-direction: column; gap: 4px;
+  }
+  .stat-kpi-val { font-family: 'Syne', sans-serif; font-weight: 800; font-size: 1.5rem; line-height: 1; }
+  .stat-kpi-lbl { font-size: 12px; color: var(--muted); }
+  .stat-kpi-lbl span { display: block; font-size: 11px; opacity: 0.8; margin-top: 2px; }
+  .stat-kpi.pos .stat-kpi-val { color: #33b56a; }
+  .stat-kpi.neg .stat-kpi-val { color: #e05a5a; }
+  .stats-block {
+    border: 1px solid var(--border); border-radius: 14px; background: var(--surface);
+    padding: 14px 16px; margin-bottom: 1rem;
+  }
+  .stats-block-title { font-family: 'Syne', sans-serif; font-weight: 700; font-size: 13px; margin-bottom: 10px; }
+  .stats-bar-row { display: flex; align-items: center; gap: 10px; padding: 4px 0; font-size: 12px; }
+  .stats-bar-lbl { flex: 0 0 30%; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .stats-bar-track { flex: 1; height: 8px; border-radius: 100px; background: var(--surface2); overflow: hidden; }
+  .stats-bar-fill { display: block; height: 100%; background: var(--accent); border-radius: 100px; }
+  .stats-bar-val { flex: 0 0 auto; font-family: 'Syne', sans-serif; font-weight: 700; color: var(--muted); white-space: nowrap; }
+
   /* ── Collection view ────────────────────────── */
   .collection-view { display: none; max-width: 1200px; margin: 0 auto; padding: 0 2rem; }
   .collection-view.active { display: block; }

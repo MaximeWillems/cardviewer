@@ -3993,6 +3993,78 @@ function shareSellList() {
   copyText(text, '📋 Liste de vente copiée');
 }
 
+/* ── Bilan (stats de collection : dépensé, valeur, plus-value…) ────────────── */
+function computeStats() {
+  const byId = new Map(getCollectionPool().map(c => [c.id, c]));
+  const uniqueIds = new Set();
+  let units = 0, spent = 0, market = 0, spentCards = 0;
+  const byMonth = {}, bySource = {}, bySet = {};
+  for (const id in collection) {
+    const byLang = collection[id];
+    for (const lang in byLang) {
+      const r = byLang[lang];
+      if (!(r.qty > 0)) continue;
+      uniqueIds.add(id); units += r.qty;
+      const c = byId.get(id);
+      const paid = r.paid && r.paid.val ? parseFloat(r.paid.val) : NaN;
+      const mk   = c && c.apiPrice != null ? Number(c.apiPrice) : NaN;
+      if (!isNaN(paid)) { spent += paid * r.qty; spentCards += r.qty; }
+      if (!isNaN(mk))   market += mk * r.qty;
+      const mo = r.acq && r.acq.d ? r.acq.d.slice(0, 7) : null;
+      if (mo && !isNaN(paid)) byMonth[mo] = (byMonth[mo] || 0) + paid * r.qty;
+      const src = (r.acq && r.acq.src) || '__none';
+      (bySource[src] = bySource[src] || { n: 0, spent: 0 });
+      bySource[src].n += r.qty; if (!isNaN(paid)) bySource[src].spent += paid * r.qty;
+      const setName = (c && c.set && c.set.name) || 'Extension inconnue';
+      (bySet[setName] = bySet[setName] || { n: 0, spent: 0 });
+      bySet[setName].n += r.qty; if (!isNaN(paid)) bySet[setName].spent += paid * r.qty;
+    }
+  }
+  return { uniques: uniqueIds.size, units, spent, market, spentCards, byMonth, bySource, bySet };
+}
+function fmtMonth(ym) {
+  const [y, m] = ym.split('-');
+  const names = ['jan', 'fév', 'mar', 'avr', 'mai', 'juin', 'juil', 'août', 'sep', 'oct', 'nov', 'déc'];
+  return `${names[parseInt(m, 10) - 1] || m} ${y}`;
+}
+function renderStats() {
+  const el = document.getElementById('stats-content');
+  if (!el) return;
+  const s = computeStats();
+  if (!s.units) { el.innerHTML = '<div class="stats-empty">Ta collection est vide — ajoute des cartes pour voir ton bilan.</div>'; return; }
+  const hidden = !pricesVisible;
+  const eur = v => hidden ? '•••' : fmtEur(v);
+  const pnl = s.market - s.spent;
+  const pct = s.spent > 0 ? (pnl / s.spent * 100) : null;
+
+  const kpis = `<div class="stats-kpis">
+    <div class="stat-kpi"><div class="stat-kpi-val">${s.units}</div><div class="stat-kpi-lbl">exemplaires<span>${s.uniques} uniques</span></div></div>
+    <div class="stat-kpi"><div class="stat-kpi-val">${eur(s.spent)}</div><div class="stat-kpi-lbl">dépensé<span>${s.spentCards} chiffrée${s.spentCards > 1 ? 's' : ''}</span></div></div>
+    <div class="stat-kpi"><div class="stat-kpi-val">${eur(s.market)}</div><div class="stat-kpi-lbl">valeur marché</div></div>
+    <div class="stat-kpi ${pnl >= 0 ? 'pos' : 'neg'}"><div class="stat-kpi-val">${hidden ? '•••' : (pnl >= 0 ? '+' : '') + fmtEur(pnl)}</div><div class="stat-kpi-lbl">plus-value${pct != null && !hidden ? `<span>${pnl >= 0 ? '+' : ''}${pct.toFixed(0)} %</span>` : ''}</div></div>
+  </div>`;
+
+  const months = Object.keys(s.byMonth).sort().slice(-12);
+  const maxM = Math.max(1, ...months.map(m => s.byMonth[m]));
+  const monthsHtml = (months.length && !hidden) ? `<div class="stats-block"><div class="stats-block-title">Dépenses par mois</div>${
+    months.map(m => `<div class="stats-bar-row"><span class="stats-bar-lbl">${fmtMonth(m)}</span><span class="stats-bar-track"><span class="stats-bar-fill" style="width:${s.byMonth[m] / maxM * 100}%"></span></span><span class="stats-bar-val">${fmtEur(s.byMonth[m])}</span></div>`).join('')
+  }</div>` : '';
+
+  const srcOrder = [...ACQ_SOURCES.map(x => x.v), '__none'].filter(v => s.bySource[v]);
+  const srcHtml = `<div class="stats-block"><div class="stats-block-title">Par source</div>${
+    srcOrder.map(v => { const o = s.bySource[v]; const lbl = v === '__none' ? 'Sans source' : (ACQ_LABEL[v] || v); return `<div class="stats-bar-row"><span class="stats-bar-lbl">${lbl}</span><span class="stats-bar-val">${o.n} · ${eur(o.spent)}</span></div>`; }).join('')
+  }</div>`;
+
+  const sets = Object.entries(s.bySet).sort((a, b) => (hidden ? b[1].n - a[1].n : b[1].spent - a[1].spent)).slice(0, 8);
+  const maxS = Math.max(1, ...sets.map(x => hidden ? x[1].n : x[1].spent));
+  const setsHtml = `<div class="stats-block"><div class="stats-block-title">Extensions ${hidden ? '(nombre)' : '(dépense)'}</div>${
+    sets.map(([name, o]) => { const w = (hidden ? o.n : o.spent) / maxS * 100; return `<div class="stats-bar-row"><span class="stats-bar-lbl">${escapeHtml(name)}</span><span class="stats-bar-track"><span class="stats-bar-fill" style="width:${w}%"></span></span><span class="stats-bar-val">${o.n}${hidden ? '' : ' · ' + fmtEur(o.spent)}</span></div>`; }).join('')
+  }</div>`;
+
+  const hint = hidden ? '<div class="stats-hint">💶 Active l\'affichage des prix (€, en haut) pour voir les montants.</div>' : '';
+  el.innerHTML = `<h2 class="stats-h">Bilan de ma collection</h2>${hint}${kpis}${monthsHtml}${srcHtml}${setsHtml}`;
+}
+
 function applyImportedConfig(text, opts = {}) {
   const silent = !!opts.silent;
   let data;
@@ -4241,7 +4313,7 @@ syncCatalogSelects();
 
 // 9) Onglets principaux.
 // « Ma Collection » est une section qui regroupe plusieurs sous-vues.
-const COLL_SECTION   = ['collection', 'master', 'binder', 'tierlist', 'echange'];
+const COLL_SECTION   = ['collection', 'stats', 'master', 'binder', 'tierlist', 'echange'];
 const CATALOG_BAR_TABS = ['explore', 'collection', 'master'];
 
 function setActiveTab(tab) {
@@ -4270,6 +4342,7 @@ function setActiveTab(tab) {
   document.getElementById('binder-view').classList.toggle('active', currentTab === 'binder');
   document.getElementById('tierlist-view').classList.toggle('active', currentTab === 'tierlist');
   document.getElementById('echange-view').classList.toggle('active', currentTab === 'echange');
+  document.getElementById('stats-view').classList.toggle('active', currentTab === 'stats');
   document.getElementById('explore-controls').style.display = currentTab === 'explore' ? '' : 'none';
   if (currentTab !== 'collection' && selectionMode) setSelectionMode(false);
   if (currentTab === 'collection') { populateFilters('collection'); renderCollection(); }
@@ -4277,6 +4350,7 @@ function setActiveTab(tab) {
   if (currentTab === 'binder') renderBinder();
   if (currentTab === 'tierlist') renderTierlist();
   if (currentTab === 'echange') renderEchange();
+  if (currentTab === 'stats') renderStats();
 }
 // Nav principale : Explorer (data-view) ou bascule vers la section Collection (data-section).
 document.querySelectorAll('.app-nav .nav-tab').forEach(tab => {
