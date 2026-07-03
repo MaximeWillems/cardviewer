@@ -154,9 +154,15 @@
       <span class="binder-zip" aria-hidden="true"><span class="binder-zip-pull"></span></span>
     </button>
     <div class="binder-spread" id="binder-spread">
-      <div class="binder-page left"><div class="binder-grid" id="binder-grid-left"></div></div>
+      <div class="binder-page left">
+        <button class="binder-zoom-btn" data-side="left" title="Agrandir la page">⤢</button>
+        <div class="binder-grid" id="binder-grid-left"></div>
+      </div>
       <div class="binder-rings" aria-hidden="true"></div>
-      <div class="binder-page right"><div class="binder-grid" id="binder-grid-right"></div></div>
+      <div class="binder-page right">
+        <button class="binder-zoom-btn" data-side="right" title="Agrandir la page">⤢</button>
+        <div class="binder-grid" id="binder-grid-right"></div>
+      </div>
     </div>
   </div>
   <div class="binder-hint" id="binder-hint">👆 Clique pour ouvrir le classeur</div>
@@ -169,6 +175,19 @@
     <button class="binder-addpage" id="binder-close" title="Fermer le classeur">Fermer</button>
   </div>
   <div class="binder-palette" id="binder-palette"></div>
+</div>
+
+<!-- Zoom d'une page du classeur -->
+<div class="config-overlay" id="binder-zoom-overlay">
+  <div class="config-modal binder-zoom-modal" role="dialog" aria-modal="true">
+    <div class="config-head">
+      <div class="config-title" id="binder-zoom-title">Page</div>
+      <button class="config-close" id="binder-zoom-close" aria-label="Fermer">✕</button>
+    </div>
+    <div class="config-body">
+      <div class="binder-zoom-grid" id="binder-zoom-grid"></div>
+    </div>
+  </div>
 </div>
 
 <!-- Sélecteur de carte pour le classeur -->

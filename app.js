@@ -1595,6 +1595,18 @@ function updateBinderSoundBtn() {
   const b = document.getElementById('binder-sound');
   if (b) { const on = prefs.binderSound !== false; b.textContent = on ? '🔊' : '🔇'; b.title = on ? 'Son activé' : 'Son coupé'; }
 }
+// Zoom d'une page (surtout mobile : la double-page rend les cartes petites).
+function openPageZoom(side) {
+  const lp = binderSpread * 2, pageIndex = side === 'right' ? lp + 1 : lp;
+  if (pageIndex >= binder.pages) { showToast('Page vide', 'info'); return; }
+  document.getElementById('binder-zoom-title').textContent = 'Page ' + (pageIndex + 1);
+  const grid = document.getElementById('binder-zoom-grid');
+  grid.style.background = binder.pageBgs[pageIndex] || '';
+  paintBinderGrid(grid, pageIndex);
+  document.getElementById('binder-zoom-overlay').classList.add('open');
+  lockBodyScroll();
+}
+function closePageZoom() { document.getElementById('binder-zoom-overlay').classList.remove('open'); unlockBodyScroll(); }
 function playPageSound() {
   if (prefs.binderSound === false) return;
   const ctx = getAudioCtx(); if (!ctx) return;
@@ -4527,6 +4539,9 @@ document.getElementById('binder-sound').addEventListener('click', () => {
   showToast(prefs.binderSound ? '🔊 Sons du classeur activés' : '🔇 Sons du classeur coupés', 'info');
 });
 updateBinderSoundBtn();
+document.querySelectorAll('.binder-zoom-btn').forEach(b => b.addEventListener('click', e => { e.stopPropagation(); openPageZoom(b.dataset.side); }));
+document.getElementById('binder-zoom-close').addEventListener('click', closePageZoom);
+document.getElementById('binder-zoom-overlay').addEventListener('click', e => { if (e.target === e.currentTarget) closePageZoom(); });
 document.getElementById('binder-picker-close').addEventListener('click', closeBinderPicker);
 document.getElementById('binder-picker').addEventListener('click', e => { if (e.target === e.currentTarget) closeBinderPicker(); });
 document.getElementById('binder-picker-search').addEventListener('input', e => renderBinderPicker(e.target.value));
