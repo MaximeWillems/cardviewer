@@ -2288,6 +2288,10 @@
     box-shadow: 0 0 0 3px rgba(var(--accent-rgb),0.25) inset;
   }
   body.binder-dragging { cursor: grabbing; user-select: none; -webkit-user-select: none; }
+  /* Pas de sélection HTML native dans le classeur : le glissé sert au drag & drop
+     (cartes en édition, feuilletage en visualisation), pas à sélectionner. */
+  .binder-view, .binder-zoom-grid { user-select: none; -webkit-user-select: none; }
+  .binder-slot-img, .binder-drag-ghost img { -webkit-user-drag: none; -webkit-touch-callout: none; }
   .binder-drag-ghost {
     position: fixed; z-index: 9999; pointer-events: none;
     border-radius: 7px; overflow: hidden;
