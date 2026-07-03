@@ -2059,7 +2059,7 @@
     background: rgba(0,0,0,0.4); color: #fff; font-size: 14px; cursor: pointer; opacity: 0.72;
   }
   .binder-zoom-btn:hover { opacity: 1; }
-  .binder-zoom-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+  .binder-zoom-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; background: #141519; padding: 8px; border-radius: 8px; }
   .binder-zoom-grid .binder-slot { aspect-ratio: 3 / 4; }
   .binder-view.open .binder-cover { transform: rotateY(-155deg); opacity: 0; pointer-events: none; }
 
@@ -2127,21 +2127,22 @@
   .binder-page {
     position: relative;
     flex: 1; min-width: 0; padding: 10px;
-    background: linear-gradient(160deg, #f3eee2, #e7dfcd);
+    background: linear-gradient(160deg, #202127, #141519);
   }
-  .binder-page.left  { border-radius: 6px 2px 2px 6px; box-shadow: inset -20px 0 26px -18px rgba(0,0,0,0.45), inset 0 0 24px rgba(0,0,0,0.08); }
-  .binder-page.right { border-radius: 2px 6px 6px 2px; box-shadow: inset 20px 0 26px -18px rgba(0,0,0,0.45), inset 0 0 24px rgba(0,0,0,0.08); }
-  .binder-page.empty-page { background: #e6dfce; }
+  .binder-page.left  { border-radius: 6px 2px 2px 6px; box-shadow: inset -22px 0 30px -18px rgba(0,0,0,0.7), inset 0 0 26px rgba(0,0,0,0.25); }
+  .binder-page.right { border-radius: 2px 6px 6px 2px; box-shadow: inset 22px 0 30px -18px rgba(0,0,0,0.7), inset 0 0 26px rgba(0,0,0,0.25); }
+  .binder-page.empty-page { background: #141519; }
+  /* Milieu sobre : simple pliure centrale (creux sombre + léger reflet sur l'arête),
+     plus d'anneaux métalliques. */
   .binder-rings {
-    flex: 0 0 20px; align-self: stretch; position: relative;
-    background: linear-gradient(90deg, rgba(0,0,0,0.35), rgba(0,0,0,0.08) 32%, rgba(255,255,255,0.12) 50%, rgba(0,0,0,0.08) 68%, rgba(0,0,0,0.35));
+    flex: 0 0 14px; align-self: stretch; position: relative;
+    background: linear-gradient(90deg,
+      rgba(0,0,0,0.6), rgba(0,0,0,0.28) 42%, rgba(0,0,0,0.42) 50%, rgba(0,0,0,0.28) 58%, rgba(0,0,0,0.6));
   }
-  .binder-rings::before {  /* 3 anneaux métalliques */
-    content: ''; position: absolute; inset: 0;
-    background-image:
-      radial-gradient(ellipse 62% 6% at 50% 20%, rgba(226,231,238,0.95), rgba(120,128,140,0.55) 62%, transparent 74%),
-      radial-gradient(ellipse 62% 6% at 50% 50%, rgba(226,231,238,0.95), rgba(120,128,140,0.55) 62%, transparent 74%),
-      radial-gradient(ellipse 62% 6% at 50% 80%, rgba(226,231,238,0.95), rgba(120,128,140,0.55) 62%, transparent 74%);
+  .binder-rings::before {  /* léger reflet sur l'arête de la pliure, estompé en haut/bas */
+    content: ''; position: absolute; top: 4%; bottom: 4%; left: 50%; width: 1px;
+    transform: translateX(-50%); border-radius: 2px;
+    background: linear-gradient(180deg, transparent, rgba(255,255,255,0.06) 15%, rgba(255,255,255,0.06) 85%, transparent);
   }
   /* Effet brillant : une bande plus opaque balaie le texte de gauche à droite */
   .binder-hint {
@@ -2201,8 +2202,8 @@
   /* Mode VISUALISATION : les poches se contentent d'afficher les cartes, sans + / × / hover d'édition */
   .binder-view:not(.editing) .binder-slot-plus,
   .binder-view:not(.editing) .binder-slot-remove { display: none !important; }
-  .binder-view:not(.editing) .binder-slot:not(.filled) { cursor: default; background: rgba(0,0,0,0.035); border-style: dashed; border-color: rgba(0,0,0,0.1); box-shadow: none; }
-  .binder-view:not(.editing) .binder-slot:hover { border-color: rgba(0,0,0,0.14); }
+  .binder-view:not(.editing) .binder-slot:not(.filled) { cursor: default; background: rgba(255,255,255,0.02); border-style: dashed; border-color: rgba(255,255,255,0.08); box-shadow: none; }
+  .binder-view:not(.editing) .binder-slot:hover { border-color: rgba(255,255,255,0.12); }
   .binder-grid {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
@@ -2217,21 +2218,15 @@
     position: relative;
     aspect-ratio: 3 / 4;
     border-radius: 7px;
-    background: rgba(0,0,0,0.055);
-    border: 1px solid rgba(0,0,0,0.14);
-    box-shadow: inset 0 1px 3px rgba(0,0,0,0.18);
+    background: rgba(255,255,255,0.025);
+    border: 1px solid rgba(255,255,255,0.13);
     display: flex; align-items: center; justify-content: center;
     cursor: pointer;
     overflow: hidden;
   }
-  /* reflet plastique de la pochette */
-  .binder-slot::after {
-    content: ''; position: absolute; inset: 0; border-radius: inherit; pointer-events: none; z-index: 2;
-    background: linear-gradient(135deg, rgba(255,255,255,0.32) 0%, rgba(255,255,255,0.08) 20%, transparent 40%);
-  }
-  .binder-slot.filled { border-color: rgba(0,0,0,0.22); }
+  .binder-slot.filled { border-color: rgba(255,255,255,0.16); }
   .binder-slot:hover { border-color: rgba(var(--accent-rgb),0.6); }
-  .binder-slot-plus { color: rgba(0,0,0,0.32) !important; }
+  .binder-slot-plus { color: rgba(255,255,255,0.28) !important; }
   .binder-slot-img { width: 100%; height: 100%; object-fit: cover; display: block; }
   .binder-slot-plus { font-size: 28px; color: var(--muted); font-weight: 300; }
   .binder-slot-flag {
