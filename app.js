@@ -232,6 +232,7 @@ const defaultPrefs = {
   masterExcludes: {},
   syncKey: '',        // clé perso de synchro auto entre appareils (vide = désactivé)
   syncAppliedTs: 0,   // horodatage de la dernière version synchronisée reflétée localement
+  binderSound: true,  // bruitages du classeur (zip / feuilletage)
 };
 let prefs = { ...defaultPrefs, ...JSON.parse(localStorage.getItem(LS_PREFS) || '{}') };
 prefs.listOrder = { ...defaultPrefs.listOrder, ...(prefs.listOrder || {}) };
@@ -1533,8 +1534,56 @@ function renderBinder() {
   const info = document.getElementById('binder-pageinfo');
   if (info) info.textContent = (rp < binder.pages) ? `Pages ${lp + 1}–${rp + 1} / ${binder.pages}` : `Page ${lp + 1} / ${binder.pages}`;
 }
-function openBinder()  { if (binderOpen) return; binderOpen = true;  renderBinder(); }
-function closeBinder() { binderOpen = false; renderBinder(); }
+// ── Fermeture éclair (Phase B) : la tirette fait le tour, puis la couverture
+// s'ouvre. Son généré en Web Audio (bruit filtré modulé), désactivable. ──────
+const ZIP_MS = 850;
+let binderZipping = false, _audioCtx = null;
+function reducedMotion() { return window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches; }
+function getAudioCtx() {
+  if (!_audioCtx) { try { _audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {} }
+  return _audioCtx;
+}
+function playZipSound() {
+  if (prefs.binderSound === false) return;
+  const ctx = getAudioCtx(); if (!ctx) return;
+  if (ctx.state === 'suspended') { try { ctx.resume(); } catch (e) {} }
+  const t = ctx.currentTime, dur = 0.8;
+  const buf = ctx.createBuffer(1, Math.floor(ctx.sampleRate * dur), ctx.sampleRate);
+  const d = buf.getChannelData(0);
+  for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1; // bruit blanc
+  const src = ctx.createBufferSource(); src.buffer = buf;
+  const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 7;
+  bp.frequency.setValueAtTime(420, t); bp.frequency.exponentialRampToValueAtTime(1700, t + dur);
+  const gain = ctx.createGain();
+  gain.gain.setValueAtTime(0.0001, t);
+  gain.gain.exponentialRampToValueAtTime(0.22, t + 0.03);
+  gain.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  const lfo = ctx.createOscillator(); lfo.type = 'square';
+  lfo.frequency.setValueAtTime(28, t); lfo.frequency.exponentialRampToValueAtTime(95, t + dur); // "cliquetis" des dents
+  const lfoGain = ctx.createGain(); lfoGain.gain.value = 0.5;
+  lfo.connect(lfoGain); lfoGain.connect(gain.gain);
+  src.connect(bp); bp.connect(gain); gain.connect(ctx.destination);
+  src.start(t); src.stop(t + dur); lfo.start(t); lfo.stop(t + dur);
+}
+function openBinder() {
+  if (binderOpen || binderZipping) return;
+  const view = document.getElementById('binder-view');
+  if (reducedMotion()) { binderOpen = true; renderBinder(); return; }
+  binderZipping = true;
+  view.classList.add('zipping');
+  playZipSound();
+  setTimeout(() => { view.classList.remove('zipping'); binderZipping = false; binderOpen = true; renderBinder(); }, ZIP_MS);
+}
+function closeBinder() {
+  if (binderZipping) return;
+  binderOpen = false;
+  if (!reducedMotion()) playZipSound();
+  renderBinder();
+}
+function updateBinderSoundBtn() {
+  const b = document.getElementById('binder-sound');
+  if (b) { const on = prefs.binderSound !== false; b.textContent = on ? '🔊' : '🔇'; b.title = on ? 'Son activé' : 'Son coupé'; }
+}
 
 function buildBinderSlot(slotIndex) {
   const slot = binder.slots[slotIndex];
@@ -4397,6 +4446,12 @@ document.getElementById('binder-addpage').addEventListener('click', () => {
 });
 document.getElementById('binder-cover').addEventListener('click', openBinder);
 document.getElementById('binder-close').addEventListener('click', closeBinder);
+document.getElementById('binder-sound').addEventListener('click', () => {
+  prefs.binderSound = prefs.binderSound === false; // bascule
+  savePrefs(); updateBinderSoundBtn();
+  showToast(prefs.binderSound ? '🔊 Sons du classeur activés' : '🔇 Sons du classeur coupés', 'info');
+});
+updateBinderSoundBtn();
 document.getElementById('binder-picker-close').addEventListener('click', closeBinderPicker);
 document.getElementById('binder-picker').addEventListener('click', e => { if (e.target === e.currentTarget) closeBinderPicker(); });
 document.getElementById('binder-picker-search').addEventListener('input', e => renderBinderPicker(e.target.value));
