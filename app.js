@@ -169,7 +169,7 @@ let binderEditMode = false; // false = visualisation, true = édition (poches +,
 function saveBinder() { localStorage.setItem(LS_BINDER, JSON.stringify(binder)); }
 function snapshotCard(c) {
   return {
-    id: c.id, image: c.image, altImage: c.altImage, name: c.name, nameEn: c.nameEn, romaji: c.romaji,
+    id: c.id, image: c.image, altImage: c.altImage, altSrc: c.altSrc, name: c.name, nameEn: c.nameEn, romaji: c.romaji,
     localId: c.localId, rarity: c.rarity, rarityKind: c.rarityKind,
     types: c.types, dexId: c.dexId, illustrator: c.illustrator,
     apiPrice: c.apiPrice, region: c.region,
@@ -772,21 +772,58 @@ function getSetName(card) { return card.set?.name || ''; }
 // Repli d'image pour les cartes sans illustration chez TCGdex (surtout des
 // promos : sets smp/mep entiers, etc.). pokemontcg.io a ces visuels et son URL
 // est déterministe à partir de l'id TCGdex "setid-localId".
+// TCGdex → pokemontcg.io : la plupart des sets partagent le même id, mais les
+// side-sets « .5 » et les Trainer/Galarian Galleries divergent (conventions
+// différentes selon l'ère) → table validée, sinon on fabriquerait des URL 404
+// (ex. les Illustration/Ultra Rare des galeries SWSH sans visuel TCGdex).
+const PTCG_SET_REMAP = {
+  'sm3.5': 'sm35', 'sm7.5': 'sm75',
+  'swsh9.5tg': 'swsh9tg', 'swsh10.5tg': 'swsh10tg', 'swsh11.5tg': 'swsh11tg',
+  'swsh12.5gg': 'swsh12pt5gg',
+};
 function pokeAltBase(id) {
   const i = String(id).indexOf('-');
-  return i < 0 ? null : `https://images.pokemontcg.io/${String(id).slice(0, i)}/${String(id).slice(i + 1)}`;
+  if (i < 0) return null;
+  const setId = String(id).slice(0, i), localId = String(id).slice(i + 1);
+  return `https://images.pokemontcg.io/${PTCG_SET_REMAP[setId] || setId}/${localId}`;
 }
-// Renseigne c.altImage sur les cartes internationales sans image TCGdex.
+// Limitless : tpci/{SET}/{SET}_{NUM3}_R_EN — numéro PUREMENT numérique requis.
+// Sert de repli pour les sets promo récents (svp, mep, futurs) souvent absents
+// de pokemontcg.io. Les promos à n° alphanumérique (swshp SWSH074, smp SM125…)
+// ne matchent pas → elles restent sur pokemontcg.io, qui les couvre.
+function limitlessBase(setId, localId) {
+  const m = String(localId ?? '').match(/^(\d{1,3})$/);
+  if (!m) return null;
+  const S = setId.toUpperCase();
+  return `https://limitlesstcg.nyc3.cdn.digitaloceanspaces.com/tpci/${S}/${S}_${m[1].padStart(3, '0')}_R_EN`;
+}
+// Renseigne c.altImage (+ c.altSrc) sur les cartes internationales sans image
+// TCGdex. Tout set promo (PROMO_SET_IDS) au n° numérique passe par Limitless ;
+// sinon pokemontcg.io. Recalcule à chaque fois (pas de garde) : les caches avec
+// une ancienne URL 404 se réparent tout seuls au chargement.
 function applyAltImages(cards) {
-  if (currentRegion === 'asian') return; // ids JP non mappables sur pokemontcg.io
-  cards.forEach(c => { if (!c.image && !c.altImage) { const b = pokeAltBase(c.id); if (b) c.altImage = b; } });
+  if (currentRegion === 'asian') return; // ids JP non mappables
+  cards.forEach(c => {
+    if (c.image) return;
+    const i = String(c.id).indexOf('-'); if (i < 0) return;
+    const setId = String(c.id).slice(0, i);
+    if (PROMO_SET_IDS.includes(setId)) {
+      const lb = limitlessBase(setId, c.localId ?? String(c.id).slice(i + 1));
+      if (lb) { c.altImage = lb; c.altSrc = 'limitless'; return; }
+    }
+    const pb = pokeAltBase(c.id);
+    if (pb) { c.altImage = pb; c.altSrc = 'ptcg'; }
+  });
 }
 // Source d'image unifiée. q : 'low' (grille), 'high' (modale, webp), 'highpng' (3D).
-// TCGdex = base + suffixe ; repli pokemontcg.io = URL complète (.png / _hires.png).
+// TCGdex = base + suffixe ; repli pokemontcg.io (.png/_hires.png) ou Limitless (_SM/_LG.png).
 function imgSrc(card, q = 'low') {
   if (!card) return '';
   if (card.image) return card.image + (q === 'highpng' ? '/high.png' : q === 'high' ? '/high.webp' : '/low.webp');
-  if (card.altImage) return q === 'low' ? card.altImage + '.png' : card.altImage + '_hires.png';
+  if (card.altImage) {
+    if (card.altSrc === 'limitless') return card.altImage + (q === 'low' ? '_SM.png' : '_LG.png');
+    return q === 'low' ? card.altImage + '.png' : card.altImage + '_hires.png';
+  }
   return '';
 }
 
@@ -1023,7 +1060,7 @@ function buildCardEl(c, ctx, idx) {
       : imagePlaceholder(c)}
     ${langFlagsHtml(c.id)}
     ${qtyBadgeHtml(c.id)}
-    ${acqBadgeHtml(c.id)}
+    ${ctx === 'collection' ? '' : acqBadgeHtml(c.id)}
     <div class="card-body">
       ${getBadge(c.rarity, c.rarityKind)}
       <div class="card-price-tag">
@@ -4053,9 +4090,13 @@ function confirmReceive() {
   const src = document.getElementById('receive-source').value || 'buy';
   const inputs = [...document.querySelectorAll('#receive-list .receive-price-input')];
   if (!inputs.length) { closeReceiveModal(); return; }
+  const beforeMasters = masterStatusSnapshot(); // pour la célébration : progression avant/après
+  const beforeBinder  = binderIncompleteIds();
+  const receivedIds = [];
   let total = 0;
   inputs.forEach(inp => {
     const id = inp.dataset.id;
+    receivedIds.push(id);
     const lang = langsWith(id, 'wanted')[0] || cardLangFor(lookupCard(id) || { id }) || currentLang;
     const r = ensureRec(id, lang);
     r.qty = (r.qty || 0) + 1;
@@ -4070,6 +4111,116 @@ function confirmReceive() {
   setSelectionMode(false);
   populateFilters('collection'); renderCollection(); updateTotalsBar();
   showToast(`✦ ${inputs.length} carte${inputs.length > 1 ? 's' : ''} ajoutée${inputs.length > 1 ? 's' : ''}${total > 0 ? ' — ' + fmtEur(total) : ''}`);
+  showReceiveAchievements(beforeMasters, beforeBinder, receivedIds);
+}
+
+/* ── Célébration à la réception : progression Master Set + poches du classeur ──
+   Façon tableau de défis Smash : une plaque apparaît, la barre du master set se
+   remplit (burst à 100 %), et les poches du classeur qui étaient « incomplètes »
+   (grisées) poppent en foil. Purement visuel — bruitages coupés par défaut. */
+function masterStatusSnapshot() {
+  const memo = {};
+  const groupsFor = (mode, lang) => (memo[mode + '|' + lang] ||= masterGroups(mode, lang));
+  const map = {};
+  startedMasters.forEach(m => {
+    const lang = m.lang || 'fr';
+    if (regionOfLang(lang) !== currentRegion) return; // cartes non chargées → progression incalculable
+    const g = groupsFor(m.mode, lang).find(x => x.key === m.key);
+    map[m.mode + ':' + m.key + ':' + lang] = {
+      mode: m.mode, key: m.key, lang,
+      label: m.label || (g && g.label) || m.key,
+      owned: g ? g.owned : 0, total: g ? g.total : 0,
+    };
+  });
+  return map;
+}
+
+function binderIncompleteIds() {
+  const s = new Set();
+  binder.slots.forEach(slot => { if (slot && slot.id && !ownedSet.has(slot.id)) s.add(slot.id); });
+  return s;
+}
+
+function showReceiveAchievements(beforeMasters, beforeBinder, receivedIds) {
+  const entries = [];
+  const after = masterStatusSnapshot();
+  Object.keys(after).forEach(k => {
+    const a = after[k], b = beforeMasters[k];
+    const from = b ? b.owned : 0;
+    if (a.total > 0 && a.owned > from) {
+      entries.push({ type: 'master', mode: a.mode, lang: a.lang, label: a.label,
+        from, to: a.owned, total: a.total, complete: a.owned === a.total && from < a.total });
+    }
+  });
+  const rid = new Set(receivedIds);
+  const popped = [...beforeBinder].filter(id => rid.has(id) && ownedSet.has(id));
+  if (popped.length) entries.push({ type: 'binder', ids: popped });
+  if (entries.length) renderAchievements(entries);
+}
+
+let _achvTimers = [];
+function renderAchievements(entries) {
+  const overlay = document.getElementById('achv-overlay');
+  const stack = document.getElementById('achv-stack');
+  if (!overlay || !stack) return;
+  _achvTimers.forEach(clearTimeout); _achvTimers = [];
+  stack.innerHTML = '';
+  const reduce = reducedMotion();
+  entries.forEach((e, i) => {
+    const el = buildAchievementEl(e);
+    el.style.animationDelay = (i * 0.12) + 's';
+    stack.appendChild(el);
+    if (e.type === 'master') {
+      const fill = el.querySelector('.achv-bar-fill');
+      const toPct = e.total ? Math.round(e.to / e.total * 100) : 0;
+      if (reduce) fill.style.width = toPct + '%';
+      else requestAnimationFrame(() => requestAnimationFrame(() => { fill.style.width = toPct + '%'; }));
+    }
+  });
+  overlay.classList.add('show');
+  stack.onclick = hideAchievements;
+  _achvTimers.push(setTimeout(hideAchievements, 3200 + entries.length * 500));
+}
+
+function hideAchievements() {
+  const overlay = document.getElementById('achv-overlay');
+  if (overlay) overlay.classList.remove('show');
+  _achvTimers.forEach(clearTimeout); _achvTimers = [];
+}
+
+function buildAchievementEl(e) {
+  const el = document.createElement('div');
+  el.className = 'achv-card achv-' + e.type + (e.complete ? ' complete' : '');
+  if (e.type === 'master') {
+    const fromPct = e.total ? Math.round(e.from / e.total * 100) : 0;
+    const badge = e.complete ? '🏆' : (e.mode === 'artist' ? '🎨' : '📦');
+    const kicker = e.complete ? '★ Master set complété' : 'Progression';
+    const right = e.complete ? '✓' : `<span class="achv-delta">+${e.to - e.from}</span>`;
+    el.innerHTML = `
+      <div class="achv-shine" aria-hidden="true"></div>
+      <div class="achv-badge">${badge}</div>
+      <div class="achv-body">
+        <div class="achv-kicker">${escapeHtml(kicker)}</div>
+        <div class="achv-title">${LANG_FLAGS[e.lang] || ''} ${escapeHtml(e.label)}</div>
+        <div class="achv-bar"><span class="achv-bar-fill" style="width:${fromPct}%"></span></div>
+        <div class="achv-count">${e.to} / ${e.total} ${right}</div>
+      </div>`;
+  } else {
+    const thumbs = e.ids.slice(0, 8).map((id, i) => {
+      const c = lookupCard(id); const img = c ? imgSrc(c) : '';
+      return `<span class="achv-poke" style="animation-delay:${(0.2 + i * 0.11).toFixed(2)}s">${img ? `<img src="${escapeHtml(img)}" alt="" loading="lazy">` : ''}<span class="achv-poke-foil"></span></span>`;
+    }).join('');
+    const more = e.ids.length > 8 ? `<span class="achv-poke-more">+${e.ids.length - 8}</span>` : '';
+    el.innerHTML = `
+      <div class="achv-shine" aria-hidden="true"></div>
+      <div class="achv-badge">🗂️</div>
+      <div class="achv-body">
+        <div class="achv-kicker">Classeur</div>
+        <div class="achv-title">${e.ids.length} poche${e.ids.length > 1 ? 's' : ''} complétée${e.ids.length > 1 ? 's' : ''}</div>
+        <div class="achv-pokes">${thumbs}${more}</div>
+      </div>`;
+  }
+  return el;
 }
 
 /* ── Panneau d'ajout / scan de cartes ─────────────────────────────────────
