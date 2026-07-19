@@ -787,15 +787,22 @@ function pokeAltBase(id) {
   const setId = String(id).slice(0, i), localId = String(id).slice(i + 1);
   return `https://images.pokemontcg.io/${PTCG_SET_REMAP[setId] || setId}/${localId}`;
 }
-// Limitless : tpci/{SET}/{SET}_{NUM3}_R_EN — numéro PUREMENT numérique requis.
-// Sert de repli pour les sets promo récents (svp, mep, futurs) souvent absents
-// de pokemontcg.io. Les promos à n° alphanumérique (swshp SWSH074, smp SM125…)
-// ne matchent pas → elles restent sur pokemontcg.io, qui les couvre.
+// Limitless : tpci/{SET}/{SET}_{NUM3}_R_{LANG}_{taille}.png — n° PUREMENT
+// numérique requis. Repli pour les sets promo récents (svp, mep, futurs) souvent
+// absents de pokemontcg.io. Les promos à n° alphanumérique (swshp SWSH074,
+// smp SM125…) ne matchent pas → elles restent sur pokemontcg.io, qui les couvre.
+// La langue est posée au rendu (imgSrc), pas ici : base = « …_R ».
 function limitlessBase(setId, localId) {
   const m = String(localId ?? '').match(/^(\d{1,3})$/);
   if (!m) return null;
   const S = setId.toUpperCase();
-  return `https://limitlesstcg.nyc3.cdn.digitaloceanspaces.com/tpci/${S}/${S}_${m[1].padStart(3, '0')}_R_EN`;
+  return `https://limitlesstcg.nyc3.cdn.digitaloceanspaces.com/tpci/${S}/${S}_${m[1].padStart(3, '0')}_R`;
+}
+// Limitless propose EN/FR/DE/ES/IT/PT (mêmes codes que l'appli, en majuscules).
+const LIMITLESS_LANGS = new Set(['EN', 'FR', 'DE', 'ES', 'IT', 'PT']);
+function limitlessLang() {
+  const L = String(currentLang || 'en').toUpperCase();
+  return LIMITLESS_LANGS.has(L) ? L : 'EN';
 }
 // Renseigne c.altImage (+ c.altSrc) sur les cartes internationales sans image
 // TCGdex. Tout set promo (PROMO_SET_IDS) au n° numérique passe par Limitless ;
@@ -821,7 +828,7 @@ function imgSrc(card, q = 'low') {
   if (!card) return '';
   if (card.image) return card.image + (q === 'highpng' ? '/high.png' : q === 'high' ? '/high.webp' : '/low.webp');
   if (card.altImage) {
-    if (card.altSrc === 'limitless') return card.altImage + (q === 'low' ? '_SM.png' : '_LG.png');
+    if (card.altSrc === 'limitless') return `${card.altImage}_${limitlessLang()}${q === 'low' ? '_SM' : '_LG'}.png`;
     return q === 'low' ? card.altImage + '.png' : card.altImage + '_hires.png';
   }
   return '';
@@ -958,6 +965,11 @@ function checkCardBack(img) {
 }
 
 function handleImageError(img) {
+  // Repli langue Limitless : si la version localisée (FR/DE/…) manque, on réessaie
+  // en anglais avant d'abandonner. Pas de boucle : l'EN ne se re-réessaie pas.
+  const src = img.getAttribute('src') || img.src || '';
+  const lm = src.match(/(limitlesstcg[^ "']*_R_)([A-Z]{2})(_(?:XS|SM|MD|LG)\.png)$/);
+  if (lm && lm[2] !== 'EN') { img.style.opacity = '0'; img.setAttribute('src', lm[1] + 'EN' + lm[3]); return; }
   const d = img.dataset;
   const card = {
     name: img.alt || 'Carte',
