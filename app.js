@@ -2046,6 +2046,13 @@ let tierPickerSrc = 'owned';
 
 function closeTierMenus() { document.querySelectorAll('.tier-menu').forEach(m => m.remove()); }
 
+// Ids déjà placés dans une rangée : masqués du sélecteur (pas de doublon).
+function tierlistPlacedIds() {
+  const s = new Set();
+  tierlist.tiers.forEach(t => t.cards.forEach(c => s.add(c.id)));
+  return s;
+}
+
 function renderTierlist() {
   const root = document.getElementById('tier-rows');
   if (!root) return;
@@ -2164,11 +2171,15 @@ function renderTierPicker(query) {
   if (!grid) return;
   const q = (query || '').toLowerCase().trim();
   const set = tierPickerSrc === 'wanted' ? wantedSet : ownedSet;
-  let cards = getCollectionPool().filter(c => set.has(c.id));
+  const placed = tierlistPlacedIds(); // déjà classées → retirées du choix
+  let cards = getCollectionPool().filter(c => set.has(c.id) && !placed.has(c.id));
   if (q) cards = cards.filter(c =>
     (c.name || '').toLowerCase().includes(q) || (c.romaji && c.romaji.includes(q)) || String(c.localId || '').includes(q));
   cards = sortByConfig(cards, 'set').slice(0, 300);
-  if (!cards.length) { grid.innerHTML = '<div class="scan-empty">Aucune carte ici.</div>'; return; }
+  if (!cards.length) {
+    grid.innerHTML = `<div class="scan-empty">${placed.size ? 'Toutes les cartes sont déjà classées.' : 'Aucune carte ici.'}</div>`;
+    return;
+  }
   grid.innerHTML = '';
   cards.forEach(c => {
     const lang = (tierPickerSrc === 'wanted' ? langsWith(c.id, 'wanted')[0] : ownedLangs(c.id)[0]) || currentLang;

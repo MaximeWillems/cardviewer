@@ -2351,6 +2351,10 @@
     font-size: 11px; font-weight: 700; font-family: 'Syne', sans-serif; color: var(--text);
     padding: 2px 4px 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   }
+  /* Sélecteur de la tier list : vignettes plus grandes que dans le classeur,
+     pour bien reconnaître l'illustration avant de classer. */
+  #tier-picker-grid { grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 10px; }
+  #tier-picker-grid .binder-pick-name { font-size: 12px; padding: 3px 5px 6px; }
 
   /* ── Tier list ────────────────────────────────── */
   .tierlist-view { display: none; max-width: 1000px; margin: 0 auto; padding: 1.25rem 2rem 4rem; }
