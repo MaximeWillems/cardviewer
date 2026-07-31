@@ -2380,13 +2380,17 @@
     text-shadow: 0 1px 2px rgba(0,0,0,0.35); border-radius: 8px; cursor: pointer;
     word-break: break-word; text-align: center; padding: 4px;
   }
-  .tier-ctrls { display: flex; gap: 4px; }
+  /* 4 contrôles (↑ ↓ 🎨 ×) sur 2 lignes : la colonne ne fait que 76px. */
+  .tier-ctrls { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
   .tier-ctrl {
-    flex: 1; height: 26px; border-radius: 6px;
+    height: 26px; border-radius: 6px;
     border: 1px solid var(--border); background: var(--surface2); color: var(--text);
     font-size: 13px; cursor: pointer; line-height: 1; padding: 0;
   }
   .tier-ctrl:hover { background: var(--surface); }
+  .tier-ctrl:disabled { opacity: 0.3; cursor: default; }
+  .tier-ctrl:disabled:hover { background: var(--surface2); }
+  .tier-move { font-size: 15px; font-weight: 700; }
   .tier-strip {
     flex: 1; min-height: 84px;
     display: flex; flex-wrap: wrap; align-content: flex-start; gap: 6px;

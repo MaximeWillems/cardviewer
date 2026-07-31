@@ -2046,6 +2046,15 @@ let tierPickerSrc = 'owned';
 
 function closeTierMenus() { document.querySelectorAll('.tier-menu').forEach(m => m.remove()); }
 
+// Échange la rangée avec sa voisine (dir : -1 monter, +1 descendre).
+function moveTierRow(index, dir) {
+  const to = index + dir;
+  const t = tierlist.tiers;
+  if (to < 0 || to >= t.length) return;
+  [t[index], t[to]] = [t[to], t[index]];
+  renderTierlist();
+}
+
 // Ids déjà placés dans une rangée : masqués du sélecteur (pas de doublon).
 function tierlistPlacedIds() {
   const s = new Set();
@@ -2077,8 +2086,14 @@ function buildTierRow(tier, index) {
 
   const ctrls = document.createElement('div');
   ctrls.className = 'tier-ctrls';
-  ctrls.innerHTML = `<button class="tier-ctrl tier-color-btn" title="Couleur">🎨</button>` +
+  const last = tierlist.tiers.length - 1;
+  ctrls.innerHTML = `<button class="tier-ctrl tier-move" title="Monter la rangée"${index === 0 ? ' disabled' : ''}>↑</button>` +
+    `<button class="tier-ctrl tier-move" title="Descendre la rangée"${index === last ? ' disabled' : ''}>↓</button>` +
+    `<button class="tier-ctrl tier-color-btn" title="Couleur">🎨</button>` +
     `<button class="tier-ctrl tier-remove" title="Supprimer la rangée">×</button>`;
+  const [upBtn, downBtn] = ctrls.querySelectorAll('.tier-move');
+  upBtn.addEventListener('click', e => { e.stopPropagation(); moveTierRow(index, -1); });
+  downBtn.addEventListener('click', e => { e.stopPropagation(); moveTierRow(index, 1); });
   ctrls.querySelector('.tier-color-btn').addEventListener('click', e => { e.stopPropagation(); openTierColorMenu(index, e.currentTarget); });
   ctrls.querySelector('.tier-remove').addEventListener('click', () => {
     if (tierlist.tiers.length <= 1) return;
