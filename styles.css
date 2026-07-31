@@ -2342,11 +2342,13 @@
   }
   .binder-pick {
     display: flex; flex-direction: column; gap: 4px;
+    min-height: 45px;
     padding: 0; border: 1px solid var(--border); border-radius: 8px;
     background: var(--surface); cursor: pointer; overflow: hidden; text-align: center;
   }
   .binder-pick:hover { border-color: rgba(var(--accent-rgb),0.5); }
-  .binder-pick img, .binder-pick .image-placeholder { width: 100%; aspect-ratio: 3/4; object-fit: cover; }
+  /* flex: none → la vignette ne se fait pas écraser par la hauteur du conteneur */
+  .binder-pick img, .binder-pick .image-placeholder { width: 100%; aspect-ratio: 3/4; object-fit: cover; flex: none; }
   .binder-pick-name {
     font-size: 11px; font-weight: 700; font-family: 'Syne', sans-serif; color: var(--text);
     padding: 2px 4px 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
