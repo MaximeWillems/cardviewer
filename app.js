@@ -2122,6 +2122,9 @@ function buildTierCard(slot, tierIndex, cardIndex) {
   const img = imgSrc(c);
   const el = document.createElement('div');
   el.className = 'tier-card';
+  el.title = c
+    ? `${c.name || ''}${c.localId ? ' · N°' + c.localId : ''}${c.set?.name ? ' — ' + c.set.name : ''}`
+    : slot.id;
   el.innerHTML = img
     ? `<img src="${escapeHtml(img)}" alt="" loading="lazy" onerror="handleImageError(this)" onload="checkCardBack(this)">`
     : imagePlaceholder(c || { name: slot.id });
@@ -2233,8 +2236,8 @@ function exportTierImage() {
   .trow{display:flex;align-items:stretch;gap:6px;margin-bottom:6px}
   .trow:last-child{margin-bottom:0}
   .tlbl{min-width:64px;width:64px;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:22px;color:#fff;border-radius:6px;text-shadow:0 1px 2px rgba(0,0,0,.4);word-break:break-word;text-align:center;padding:4px}
-  .tstrip{flex:1;display:flex;flex-wrap:wrap;gap:5px;background:#0d0d0f;border-radius:6px;padding:5px;min-height:84px}
-  .tc{width:60px;height:84px;object-fit:cover;border-radius:4px;background:#222}
+  .tstrip{flex:1;display:flex;flex-wrap:wrap;gap:5px;background:#0d0d0f;border-radius:6px;padding:5px;min-height:129px}
+  .tc{width:92px;height:129px;object-fit:cover;border-radius:4px;background:#222}
   .tc-none{background:#222}
   .prog{font-size:12px;color:#999}
 </style></head><body>
