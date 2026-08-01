@@ -255,6 +255,21 @@ function saveTrade()  { saveCollection(); }
 function savePrices() { saveCollection(); }
 function saveTags()   { localStorage.setItem(LS_TAGS,   JSON.stringify(tagsMap)); scheduleSyncPush(); }
 
+// Purge des priorités devenues orphelines (carte obtenue ou retirée des « à
+// obtenir » avant que le nettoyage n'existe). Placé ICI et pas plus haut :
+// saveCollection → scheduleSyncPush lit prefs et syncReady, déclarés juste au-dessus.
+function cleanOrphanPrios() {
+  let changed = false;
+  for (const id of Object.keys(collection)) {
+    for (const l of Object.keys(collection[id] || {})) {
+      const r = collection[id][l];
+      if (r && r.prio && !r.wanted) { delete r.prio; pruneRec(id, l); changed = true; }
+    }
+  }
+  if (changed) { rebuildProjections(); saveCollection(); }
+}
+cleanOrphanPrios();
+
 /* ── Tags personnalisés par carte ─────────────────────────────────────── */
 function getTags(id) { return tagsMap[id] || []; }
 function addTag(id, tag) {
@@ -366,7 +381,7 @@ function rarityKinds() { return RARITY_KINDS; }
 function makeFilterState(sort) {
   return {
     query: '', rarities: new Set(rarityKinds()), type: 'all', artist: 'all',
-    set: 'all', series: 'all', tag: 'all', lang: 'all', source: 'all', dupOnly: false,
+    set: 'all', series: 'all', tag: 'all', lang: 'all', source: 'all', prio: 'all', dupOnly: false,
     sort: sort || 'pokedex', priceMin: '', priceMax: '', artistCounts: new Map(),
   };
 }
@@ -452,6 +467,7 @@ function toggleOwned(id, lang = currentLang) {
 function toggleWanted(id, lang = currentLang) {
   const r = ensureRec(id, lang);
   r.wanted = !r.wanted;
+  if (!r.wanted) delete r.prio; // pas de priorité orpheline sur une carte plus voulue
   pruneRec(id, lang);
   snapshotById(id);
   afterCollectionChange();
@@ -484,6 +500,7 @@ function setQty(id, lang, n) {
 function setWanted(id, lang, val) {
   const r = ensureRec(id, lang);
   r.wanted = !!val;
+  if (!val) delete r.prio;
   pruneRec(id, lang);
 }
 
@@ -571,16 +588,29 @@ function setPrio(id, lang, v) {
   pruneRec(id, lang);
 }
 // Priorité affichée pour une carte : celle de la langue où elle est « à obtenir ».
-function prioOf(id) { return getPrio(id, langsWith(id, 'wanted')[0] || currentLang); }
+// Langue « autorité » pour la priorité : celle de l'enregistrement où la carte est
+// déjà « à obtenir ». wantedSet est une projection TOUTES langues, donc sans ça on
+// pourrait écrire la priorité sur une langue et la relire sur une autre.
+function prioLangOf(id, prefer) {
+  const ls = langsWith(id, 'wanted');
+  if (!ls.length) return prefer || currentLang;
+  return (prefer && ls.includes(prefer)) ? prefer : ls[0];
+}
+function prioOf(id) {
+  for (const l of langsWith(id, 'wanted')) { const p = getPrio(id, l); if (p) return p; }
+  return 0;
+}
 function prioBadgeHtml(id) {
   const p = PRIO_BY_V[prioOf(id)];
   return p ? `<div class="card-prio" title="${escapeHtml(p.label + ' — ' + p.hint)}">${p.icon}</div>` : '';
 }
+// Pas de bouton « aucune » : recliquer sur le niveau actif le retire.
 function modalPrioBtnsHtml(id, lang) {
   const cur = getPrio(id, lang);
-  return PRIO_LEVELS.map(p =>
-    `<button class="prio-btn${cur === p.v ? ' active' : ''}" data-prio="${p.v}" title="${escapeHtml(p.hint)}">${p.icon} ${escapeHtml(p.label)}</button>`
-  ).join('') + `<button class="prio-btn${cur ? '' : ' active'}" data-prio="0" title="Sans priorité">—</button>`;
+  return PRIO_LEVELS.map(p => {
+    const on = cur === p.v;
+    return `<button class="prio-btn${on ? ' active' : ''}" data-prio="${p.v}" aria-pressed="${on}" title="${escapeHtml(on ? 'Cliquer pour retirer la priorité' : p.hint)}">${p.icon} ${escapeHtml(p.label)}</button>`;
+  }).join('');
 }
 
 function getBestPrice(cardId) {
@@ -739,6 +769,11 @@ function filterCards(cards, st) {
       const a = acqOf(c.id);
       if (st.source === '__none') { if (a && a.src) return false; }
       else if (!a || a.src !== st.source) return false;
+    }
+    if (st.prio && st.prio !== 'all') {
+      const p = prioOf(c.id);
+      if (st.prio === '__none') { if (p) return false; }
+      else if (p !== Number(st.prio)) return false;
     }
     if (q && !(
       (c.name || '').toLowerCase().includes(q) ||
@@ -2517,6 +2552,15 @@ function renderFilterControls(ctx) {
           </select>
         </div>` : ''}
         ${isColl ? `
+        <div class="adv-field prio-field">
+          <label>Priorité</label>
+          <select id="coll-prio-filter" aria-label="Filtrer par priorité">
+            <option value="all">Toutes les priorités</option>
+            ${PRIO_LEVELS.map(p => `<option value="${p.v}"${st.prio === String(p.v) ? ' selected' : ''}>${p.icon} ${escapeHtml(p.label)}</option>`).join('')}
+            <option value="__none"${st.prio === '__none' ? ' selected' : ''}>Sans priorité</option>
+          </select>
+        </div>` : ''}
+        ${isColl ? `
         <div class="adv-field price-field">
           <label>Prix (€)</label>
           <div class="adv-price">
@@ -2546,6 +2590,7 @@ function updateAdvCount(ctx) {
   if (st.series !== 'all') n++;
   if (st.tag !== 'all') n++;
   if (st.source && st.source !== 'all') n++;
+  if (st.prio && st.prio !== 'all') n++;
   if (st.priceMin !== '' || st.priceMax !== '') n++;
   const badge = document.getElementById((ctx === 'collection' ? 'coll-' : '') + 'filters-count');
   if (badge) { badge.textContent = n || ''; badge.style.display = n ? '' : 'none'; }
@@ -2558,12 +2603,14 @@ function resetFilters(ctx) {
   const prefix = ctx === 'collection' ? 'coll-' : '';
   st.query = ''; st.rarities = new Set(rarityKinds());
   st.type = 'all'; st.artist = 'all'; st.set = 'all'; st.series = 'all'; st.tag = 'all'; st.source = 'all';
+  st.prio = 'all';
   st.priceMin = ''; st.priceMax = '';
   const s = document.getElementById(ctx === 'collection' ? 'coll-search' : 'search'); if (s) s.value = '';
   ['type-filter', 'artist-filter', 'set-filter', 'series-filter', 'tag-filter'].forEach(id => {
     const el = document.getElementById(prefix + id); if (el) el.value = 'all';
   });
   const srcEl = document.getElementById('coll-source-filter'); if (srcEl) srcEl.value = 'all';
+  const prioElR = document.getElementById('coll-prio-filter'); if (prioElR) prioElR.value = 'all';
   const mn = document.getElementById('price-min-filter'), mx = document.getElementById('price-max-filter');
   if (mn) mn.value = ''; if (mx) mx.value = '';
   updateRarityButtons(ctx);
@@ -2719,6 +2766,7 @@ function buildPresetFromState(ctx) {
   return {
     query: st.query, rarities: [...st.rarities], type: st.type, artist: st.artist,
     set: st.set, series: st.series, tag: st.tag, sort: st.sort, priceMin: st.priceMin, priceMax: st.priceMax,
+    source: st.source, prio: st.prio,
     collTab: ctx === 'collection' ? st.collTab : null,
   };
 }
@@ -2784,11 +2832,15 @@ function applyPreset(ctx, p) {
   const sortEl = document.getElementById(ctx === 'collection' ? 'coll-sort' : 'sort');
   if (sortEl) sortEl.value = st.sort;
   if (ctx === 'collection') {
+    // Presets enregistrés avant ces filtres : pas de champ → 'all'.
+    st.source = setSel('coll-source-filter', p.source || 'all');
+    st.prio   = setSel('coll-prio-filter',   p.prio   || 'all');
     const mn = document.getElementById('price-min-filter'), mx = document.getElementById('price-max-filter');
     if (mn) mn.value = st.priceMin;
     if (mx) mx.value = st.priceMax;
     updateCollStat();
   }
+  updateAdvCount(ctx);
   refresh(ctx);
 }
 
@@ -2860,6 +2912,8 @@ function wireFilters(ctx) {
   }
 
   if (isColl) {
+    const prioEl = document.getElementById('coll-prio-filter');
+    if (prioEl) { prioEl.value = st.prio; prioEl.addEventListener('change', e => { st.prio = e.target.value; apply(); }); }
     const minEl = document.getElementById('price-min-filter');
     const maxEl = document.getElementById('price-max-filter');
     if (minEl) minEl.addEventListener('input', e => { st.priceMin = e.target.value.trim(); apply(); });
@@ -2913,6 +2967,11 @@ function updateCollStat() {
   // « Passer en collection » : onglet À obtenir + mode Sélection.
   const recvBtn = document.getElementById('btn-receive');
   if (recvBtn) recvBtn.style.display = (S.collection.collTab === 'wanted' && selectionMode) ? '' : 'none';
+  // « Priorité » (action en masse) : mêmes conditions que « Passer en collection ».
+  const prioBtn = document.getElementById('btn-prio');
+  if (prioBtn) prioBtn.style.display = (S.collection.collTab === 'wanted' && selectionMode) ? '' : 'none';
+  // Le champ de filtre Priorité n'est montré que sur « À obtenir » (CSS).
+  document.documentElement.classList.toggle('coll-wanted', S.collection.collTab === 'wanted');
   applyPricesVisible();
 }
 
@@ -3614,9 +3673,9 @@ async function openModal(card, list, index) {
         <button class="qty-btn" id="qty-plus" aria-label="Ajouter un exemplaire">+</button>
       </div>
     </div>
-    <div class="modal-prio ${isWanted(card.id, mlang) ? 'visible' : ''}" id="modal-prio">
+    <div class="modal-prio visible" id="modal-prio">
       <span class="modal-prio-label">Priorité</span>
-      <div class="modal-prio-btns" id="modal-prio-btns">${modalPrioBtnsHtml(card.id, mlang)}</div>
+      <div class="modal-prio-btns" id="modal-prio-btns">${modalPrioBtnsHtml(card.id, prioLangOf(card.id, mlang))}</div>
     </div>
     <div class="tags-section">
       <div class="tags-title">Tags</div>
@@ -3761,10 +3820,8 @@ async function openModal(card, list, index) {
     if (stp) stp.classList.toggle('visible', isTrade(id, mlang));
     const mq = document.getElementById('modal-qty');
     if (mq) mq.classList.toggle('visible', owned);
-    const mp = document.getElementById('modal-prio');
-    if (mp) mp.classList.toggle('visible', isWanted(id, mlang));
     const mpb = document.getElementById('modal-prio-btns');
-    if (mpb) mpb.innerHTML = modalPrioBtnsHtml(id, mlang);
+    if (mpb) mpb.innerHTML = modalPrioBtnsHtml(id, prioLangOf(id, mlang));
     const qv = document.getElementById('qty-val');
     if (qv) qv.textContent = qtyOf(id, mlang);
     const hint = document.getElementById('modal-lang-owned');
@@ -3799,10 +3856,15 @@ async function openModal(card, list, index) {
   document.getElementById('modal-prio-btns')?.addEventListener('click', e => {
     const b = e.target.closest('.prio-btn');
     if (!b) return;
-    setPrio(card.id, mlang, parseInt(b.dataset.prio, 10) || 0);
+    const v = parseInt(b.dataset.prio, 10);
+    if (!v) return; // pas de bouton « aucune » : une valeur non lue ne doit rien effacer
+    // Prioriser une carte, c'est la vouloir : on la marque « à obtenir » au besoin.
+    const plang = prioLangOf(card.id, mlang);
+    if (!wantedSet.has(card.id)) setWanted(card.id, plang, true);
+    setPrio(card.id, plang, getPrio(card.id, plang) === v ? 0 : v);
     afterCollectionChange();
     syncModalBtns(card.id);
-    if (currentTab === 'collection') renderCollection();
+    if (currentTab === 'collection') { populateFilters('collection'); renderCollection(); }
   });
   document.getElementById('modal-btn-trade')?.addEventListener('click', () => {
     toggleTrade(card.id, mlang); syncModalBtns(card.id);
@@ -4203,6 +4265,7 @@ function confirmReceive() {
     const r = ensureRec(id, lang);
     r.qty = (r.qty || 0) + 1;
     r.wanted = false;
+    delete r.prio; // la carte est obtenue : sa priorité n'a plus lieu d'être
     const price = inp.value.trim() !== '' ? parseFloat(inp.value) : NaN;
     if (!isNaN(price)) { r.paid = { val: String(price), min: '', max: '' }; total += price; }
     r.acq = { d, src };
@@ -5139,6 +5202,8 @@ document.querySelectorAll('.coll-tab-btn').forEach(btn => {
     st.series   = 'all';
     st.tag      = 'all';
     st.query    = '';
+    st.prio     = 'all'; // n'a de sens que sur « À obtenir » : sinon grille vide sans cause visible
+    const pf = document.getElementById('coll-prio-filter'); if (pf) pf.value = 'all';
     const si = document.getElementById('coll-search'); if (si) si.value = '';
     selectedIds.clear();
     lastClickedId = null;
@@ -5188,7 +5253,7 @@ document.getElementById('btn-prio').addEventListener('click', e => {
     ev.stopPropagation();
     const v = parseInt(it.dataset.prio, 10) || 0;
     const n = selectedIds.size;
-    selectedIds.forEach(id => setPrio(id, langsWith(id, 'wanted')[0] || currentLang, v));
+    selectedIds.forEach(id => setPrio(id, prioLangOf(id), v));
     afterCollectionChange();
     menu.remove();
     renderCollection();

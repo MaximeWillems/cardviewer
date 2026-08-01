@@ -2684,6 +2684,9 @@
   /* Filtre prix : visible uniquement quand les prix sont affichés */
   .price-field { display: none; }
   .prices-on .price-field { display: flex; }
+  /* Filtre priorité : seulement sur le sous-onglet « À obtenir » */
+  .prio-field { display: none; }
+  .coll-wanted .prio-field { display: flex; }
   .adv-footer {
     display: flex;
     justify-content: space-between;
