@@ -1452,6 +1452,16 @@
     background: rgba(0,0,0,0.5);
     pointer-events: none;
   }
+  /* Priorité (onglet « À obtenir ») : coin libre — pas de drapeau de langue ni
+     de badge d'acquisition sur une carte non possédée. */
+  .card-prio {
+    position: absolute;
+    top: 6px; right: 6px; z-index: 2;
+    font-size: 13px; line-height: 1;
+    padding: 3px 5px; border-radius: 6px;
+    background: rgba(0,0,0,0.55);
+    pointer-events: none;
+  }
   .card-qty {
     position: absolute;
     bottom: 72px;
@@ -2851,6 +2861,34 @@
 
   .price-trend-up   { color: var(--accent); }
   .price-trend-down { color: var(--accent2); }
+
+  /* ── Priorité des cartes « À obtenir » ─────────────────────────────── */
+  .modal-prio { display: none; align-items: center; justify-content: space-between; gap: 10px; margin: 12px 0 0; flex-wrap: wrap; }
+  .modal-prio.visible { display: flex; }
+  .modal-prio-label { font-size: 13px; color: var(--muted); font-weight: 600; }
+  .modal-prio-btns { display: flex; gap: 5px; flex-wrap: wrap; }
+  .prio-btn {
+    padding: 5px 9px; border-radius: 7px; cursor: pointer;
+    border: 1px solid var(--border); background: var(--surface2); color: var(--text);
+    font-size: 12px; font-weight: 600; line-height: 1;
+  }
+  .prio-btn:hover { border-color: rgba(var(--accent-rgb),0.5); }
+  .prio-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+  /* Menu de priorité en masse, ancré au bouton de la barre d'outils */
+  #btn-prio { position: relative; }
+  .prio-menu {
+    position: absolute; top: calc(100% + 6px); left: 0; z-index: 60;
+    display: flex; flex-direction: column; gap: 3px; padding: 5px;
+    background: var(--surface); border: 1px solid var(--border); border-radius: 9px;
+    box-shadow: 0 12px 28px -10px rgba(0,0,0,0.45); min-width: 148px;
+  }
+  .prio-menu-item {
+    padding: 7px 10px; border-radius: 6px; border: none; background: none;
+    color: var(--text); font-size: 13px; font-weight: 600; text-align: left; cursor: pointer;
+    white-space: nowrap;
+  }
+  .prio-menu-item:hover { background: var(--surface2); }
 
   /* ── Célébration à la réception (plaques de défi façon Smash) ──────── */
   .achv-overlay {

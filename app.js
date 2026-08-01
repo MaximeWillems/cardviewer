@@ -395,7 +395,7 @@ function hasPriceData(p) { return !!(p && (p.val || p.min || p.max)); }
 function pruneRec(id, lang) {
   const r = collRec(id, lang);
   if (!r) return;
-  if (!r.qty && !r.wanted && !r.trade && !hasPriceData(r.paid) && !hasPriceData(r.target) && !hasPriceData(r.sell)) {
+  if (!r.qty && !r.wanted && !r.trade && !r.prio && !hasPriceData(r.paid) && !hasPriceData(r.target) && !hasPriceData(r.sell)) {
     delete collection[id][lang];
     if (collection[id] && Object.keys(collection[id]).length === 0) delete collection[id];
   }
@@ -551,6 +551,36 @@ function acqBucket(dateStr) {
   if (diff <= 7)  return '7 derniers jours';
   if (diff <= 30) return '30 derniers jours';
   return 'Plus ancien';
+}
+
+/* ── Priorité des cartes « À obtenir » ────────────────────────────────────
+   La tier list classe par ENVIE ; la priorité arbitre envie × prix (une carte
+   sublime à 300 € n'est pas prioritaire). Stockée dans l'enregistrement de
+   collection → sauvegardée, exportée et synchronisée sans code en plus.
+   ──────────────────────────────────────────────────────────────────────── */
+const PRIO_LEVELS = [
+  { v: 1, icon: '🔥', label: 'Chase',    hint: 'Je la cherche activement' },
+  { v: 2, icon: '⭐', label: 'Priorité', hint: "À prendre si l'occasion se présente" },
+  { v: 3, icon: '💤', label: 'Un jour',  hint: 'Magnifique mais pas pressé' },
+];
+const PRIO_BY_V = Object.fromEntries(PRIO_LEVELS.map(p => [p.v, p]));
+function getPrio(id, lang) { return (collRec(id, lang) || {}).prio || 0; }
+function setPrio(id, lang, v) {
+  const r = ensureRec(id, lang);
+  if (v) r.prio = v; else delete r.prio;
+  pruneRec(id, lang);
+}
+// Priorité affichée pour une carte : celle de la langue où elle est « à obtenir ».
+function prioOf(id) { return getPrio(id, langsWith(id, 'wanted')[0] || currentLang); }
+function prioBadgeHtml(id) {
+  const p = PRIO_BY_V[prioOf(id)];
+  return p ? `<div class="card-prio" title="${escapeHtml(p.label + ' — ' + p.hint)}">${p.icon}</div>` : '';
+}
+function modalPrioBtnsHtml(id, lang) {
+  const cur = getPrio(id, lang);
+  return PRIO_LEVELS.map(p =>
+    `<button class="prio-btn${cur === p.v ? ' active' : ''}" data-prio="${p.v}" title="${escapeHtml(p.hint)}">${p.icon} ${escapeHtml(p.label)}</button>`
+  ).join('') + `<button class="prio-btn${cur ? '' : ' active'}" data-prio="0" title="Sans priorité">—</button>`;
 }
 
 function getBestPrice(cardId) {
@@ -845,6 +875,10 @@ function sortByConfig(cards, sort, artistCounts = new Map()) {
       case 'rarity':       return collator.compare(a.rarity || '', b.rarity || '') || getDexNumber(a) - getDexNumber(b) || collator.compare(a.name || '', b.name || '');
       case 'artist-count': return (artistCounts.get(b.illustrator) || 0) - (artistCounts.get(a.illustrator) || 0) || collator.compare(a.illustrator || '', b.illustrator || '') || getDexNumber(a) - getDexNumber(b);
       case 'artist-name':  return collator.compare(a.illustrator || '', b.illustrator || '') || getDexNumber(a) - getDexNumber(b);
+      case 'prio': {       // 🔥 Chase d'abord ; non classées en dernier
+        const pa = prioOf(a.id) || 99, pb = prioOf(b.id) || 99;
+        return pa - pb || collator.compare(a.name || '', b.name || '');
+      }
       case 'acq-date': {   // récentes d'abord ; sans date en dernier
         const da = getAcqDate(a), db = getAcqDate(b);
         if (da !== db) return (db || '') < (da || '') ? -1 : 1;
@@ -860,7 +894,7 @@ function sortByConfig(cards, sort, artistCounts = new Map()) {
 }
 
 function shouldShowSections(sort) {
-  return ['pokedex', 'name-asc', 'name-desc', 'set', 'set-release', 'rarity', 'artist-count', 'artist-name', 'acq-date'].includes(sort);
+  return ['pokedex', 'name-asc', 'name-desc', 'set', 'set-release', 'rarity', 'artist-count', 'artist-name', 'acq-date', 'prio'].includes(sort);
 }
 
 function priceBucket(v, noneLabel) {
@@ -887,14 +921,24 @@ function getSectionKey(card, sort) {
   if (sort === 'price-asc'  || sort === 'price-desc')  return priceBucket(getUserPriceValue(card), 'Sans prix saisi');
   if (sort === 'market-asc' || sort === 'market-desc') return priceBucket(getMarketPriceValue(card), 'Prix non consulté');
   if (sort === 'acq-date') return acqBucket(getAcqDate(card));
+  if (sort === 'prio') {
+    const p = PRIO_BY_V[prioOf(card.id)];
+    return p ? `${p.icon} ${p.label}` : 'Non classées';
+  }
   return '';
 }
 
 function getSectionLabel(key, sort, list) {
   if (!key) return null;
-  const count = list.filter(card => getSectionKey(card, sort) === key).length;
+  const cards = list.filter(card => getSectionKey(card, sort) === key);
+  const count = cards.length;
   const suffix = `${count} carte${count > 1 ? 's' : ''}`;
   if (sort === 'pokedex') return { title: `Pokédex ${key}`, count: suffix };
+  // Priorité : le budget du groupe est l'info qui sert à décider.
+  if (sort === 'prio') {
+    const total = cards.reduce((s, c) => s + (getBestPrice(c.id) || 0), 0);
+    return { title: key, count: total > 0 ? `${suffix} · ${fmtEur(total)}` : suffix };
+  }
   return { title: key, count: suffix };
 }
 
@@ -1073,6 +1117,7 @@ function buildCardEl(c, ctx, idx) {
     ${langFlagsHtml(c.id)}
     ${qtyBadgeHtml(c.id)}
     ${ctx === 'collection' ? '' : acqBadgeHtml(c.id)}
+    ${ctx === 'collection' && S.collection.collTab === 'wanted' ? prioBadgeHtml(c.id) : ''}
     <div class="card-body">
       ${getBadge(c.rarity, c.rarityKind)}
       <div class="card-price-tag">
@@ -2433,7 +2478,7 @@ function renderFilterControls(ctx) {
       </div>
       <select id="${sortId}" class="sort-select" aria-label="Trier les cartes">
         ${SORT_FILTERS_HTML}
-        ${isColl ? '<optgroup label="── Ma collection ──"><option value="acq-date">Récemment ajoutées</option></optgroup>' : ''}
+        ${isColl ? '<optgroup label="── Ma collection ──"><option value="prio">Par priorité</option><option value="acq-date">Récemment ajoutées</option></optgroup>' : ''}
       </select>
       <button type="button" class="filters-toggle" id="${prefix}filters-toggle" aria-expanded="false" title="Afficher / masquer les filtres">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="6" x2="20" y2="6"/><line x1="7" y1="12" x2="17" y2="12"/><line x1="10" y1="18" x2="14" y2="18"/></svg>
@@ -3569,6 +3614,10 @@ async function openModal(card, list, index) {
         <button class="qty-btn" id="qty-plus" aria-label="Ajouter un exemplaire">+</button>
       </div>
     </div>
+    <div class="modal-prio ${isWanted(card.id, mlang) ? 'visible' : ''}" id="modal-prio">
+      <span class="modal-prio-label">Priorité</span>
+      <div class="modal-prio-btns" id="modal-prio-btns">${modalPrioBtnsHtml(card.id, mlang)}</div>
+    </div>
     <div class="tags-section">
       <div class="tags-title">Tags</div>
       <div class="tags-list" id="modal-tags"></div>
@@ -3712,6 +3761,10 @@ async function openModal(card, list, index) {
     if (stp) stp.classList.toggle('visible', isTrade(id, mlang));
     const mq = document.getElementById('modal-qty');
     if (mq) mq.classList.toggle('visible', owned);
+    const mp = document.getElementById('modal-prio');
+    if (mp) mp.classList.toggle('visible', isWanted(id, mlang));
+    const mpb = document.getElementById('modal-prio-btns');
+    if (mpb) mpb.innerHTML = modalPrioBtnsHtml(id, mlang);
     const qv = document.getElementById('qty-val');
     if (qv) qv.textContent = qtyOf(id, mlang);
     const hint = document.getElementById('modal-lang-owned');
@@ -3742,6 +3795,14 @@ async function openModal(card, list, index) {
     toggleWanted(card.id, mlang); syncModalBtns(card.id);
     if (currentTab === 'collection') { populateFilters('collection'); renderCollection(); }
     if (currentTab === 'echange' && lastFriendData) renderEchangeResults(lastFriendData);
+  });
+  document.getElementById('modal-prio-btns')?.addEventListener('click', e => {
+    const b = e.target.closest('.prio-btn');
+    if (!b) return;
+    setPrio(card.id, mlang, parseInt(b.dataset.prio, 10) || 0);
+    afterCollectionChange();
+    syncModalBtns(card.id);
+    if (currentTab === 'collection') renderCollection();
   });
   document.getElementById('modal-btn-trade')?.addEventListener('click', () => {
     toggleTrade(card.id, mlang); syncModalBtns(card.id);
@@ -5099,6 +5160,7 @@ function setSelectionMode(on) {
   document.getElementById('btn-select-all').style.display   = on ? '' : 'none';
   document.getElementById('btn-deselect-all').style.display = on ? '' : 'none';
   document.getElementById('btn-receive').style.display = (on && S.collection.collTab === 'wanted') ? '' : 'none';
+  document.getElementById('btn-prio').style.display    = (on && S.collection.collTab === 'wanted') ? '' : 'none';
   document.querySelectorAll('#coll-grid .card').forEach(el => {
     el.classList.toggle('selectable', on);
     el.classList.remove('selected');
@@ -5107,6 +5169,34 @@ function setSelectionMode(on) {
 }
 document.getElementById('btn-select-mode').addEventListener('click', () => setSelectionMode(!selectionMode));
 document.getElementById('btn-share-sell').addEventListener('click', shareSellList);
+// Priorité en masse : petit menu ancré au bouton (même principe que le menu tier).
+document.getElementById('btn-prio').addEventListener('click', e => {
+  e.stopPropagation();
+  const btn = e.currentTarget;
+  const open = btn.querySelector('.prio-menu');
+  document.querySelectorAll('.prio-menu').forEach(m => m.remove());
+  if (open) return;
+  if (!selectedIds.size) { showToast('Sélectionne au moins une carte', 'info'); return; }
+  const menu = document.createElement('div');
+  menu.className = 'prio-menu';
+  menu.innerHTML = PRIO_LEVELS.map(p => `<button class="prio-menu-item" data-prio="${p.v}">${p.icon} ${escapeHtml(p.label)}</button>`).join('')
+    + '<button class="prio-menu-item" data-prio="0">— Retirer</button>';
+  btn.appendChild(menu);
+  menu.addEventListener('click', ev => {
+    const it = ev.target.closest('.prio-menu-item');
+    if (!it) return;
+    ev.stopPropagation();
+    const v = parseInt(it.dataset.prio, 10) || 0;
+    const n = selectedIds.size;
+    selectedIds.forEach(id => setPrio(id, langsWith(id, 'wanted')[0] || currentLang, v));
+    afterCollectionChange();
+    menu.remove();
+    renderCollection();
+    const lbl = PRIO_BY_V[v] ? `${PRIO_BY_V[v].icon} ${PRIO_BY_V[v].label}` : 'sans priorité';
+    showToast(`${n} carte${n > 1 ? 's' : ''} → ${lbl}`);
+  });
+});
+document.addEventListener('click', () => document.querySelectorAll('.prio-menu').forEach(m => m.remove()));
 document.getElementById('btn-dup-only').addEventListener('click', () => {
   S.collection.dupOnly = !S.collection.dupOnly;
   updateCollStat(); renderCollection(); updateTotalsBar();
