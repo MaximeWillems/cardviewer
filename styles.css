@@ -521,6 +521,8 @@
   .badge-alt     { background: var(--ball-hyper);  box-shadow: inset 0 -2px 0 var(--ball-hyper-2); border: 1px solid rgba(var(--fg-rgb),0.28); } /* Hyper Ball */
   .badge-special { background: var(--ball-hyper);  box-shadow: inset 0 -2px 0 var(--ball-hyper-2); border: 1px solid rgba(var(--fg-rgb),0.28); } /* Hyper Ball */
   .badge-sir     { background: var(--ball-master); box-shadow: inset 0 -2px 0 var(--ball-master-2); } /* Master Ball */
+  /* Sous-sets galerie (Trainer / Galarian Gallery) : teinte cuivrée distincte */
+  .badge-gallery { background: #a9763f; box-shadow: inset 0 -2px 0 #7d5528; }
 
   .skeleton {
     background: var(--surface);

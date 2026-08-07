@@ -16,12 +16,12 @@ const PAGE_SIZE = 24;
 
 // Cache des cartes dans IndexedDB (gros volume → pas le plafond ~5 Mo du
 // localStorage). Bump CACHE_VERSION si la logique de récupération change.
-const CACHE_VERSION = 4;
+const CACHE_VERSION = 5; // 5 : ajout des sous-sets galerie (Trainer / Galarian)
 const CACHE_TTL = 7 * 24 * 3600 * 1000; // 7 jours
 
 // Types de rareté filtrables (dimension des pastilles). 'promo' n'a pas de
 // libellé API : les promos sont récupérées par set, pas par rareté.
-const RARITY_KINDS = ['ir', 'sir', 'alt', 'special', 'promo'];
+const RARITY_KINDS = ['ir', 'sir', 'alt', 'special', 'promo', 'gallery'];
 
 // Libellés de rareté à récupérer via l'API, par langue. Chaque libellé est
 // classé dans un type (kind). Ajouter une rareté ici suffit à la faire
@@ -76,6 +76,11 @@ const RARITY_LABELS_BY_LANG = {
 // IDs de sets promos connus dans TCGdex (svp = Scarlet & Violet Promos,
 // mep = Méga-Évolution Promos, etc.)
 const PROMO_SET_IDS = ['svp', 'swshp', 'smp', 'xyp', 'bwp', 'mep'];
+// Sous-sets « galerie » de Sword & Shield (Trainer Gallery / Galarian Gallery,
+// adossés à Brilliant Stars, Astral Radiance, Lost Origin, Crown Zenith).
+// Ils sont ingérés PAR SET : la majorité de leurs cartes ont la rareté « Rare »,
+// absente de RARITY_LABELS, donc le fetch par rareté les laissait de côté.
+const GALLERY_SET_IDS = ['swsh9.5tg', 'swsh10.5tg', 'swsh11.5tg', 'swsh12.5gg'];
 
 const RARITY_FILTERS = [
   { kind: 'all', label: 'Toutes' },
@@ -84,6 +89,7 @@ const RARITY_FILTERS = [
   { kind: 'alt', label: 'Alt Art' },
   { kind: 'special', label: '◆ Spéciale' },
   { kind: 'promo', label: '★ Promo' },
+  { kind: 'gallery', label: '🖼 Galerie' },
 ];
 
 // Filtres de rareté disponibles dans la vue Master Set
@@ -95,6 +101,7 @@ const MASTER_RARITY_FILTERS = [
   { kind: 'alt',     label: 'Alt Art' },
   { kind: 'special', label: '◆ Spéciale' },
   { kind: 'promo',   label: '★ Promo' },
+  { kind: 'gallery', label: '🖼 Galerie' },
 ];
 
 const SORT_FILTERS_HTML = `
@@ -129,6 +136,7 @@ const LS_TAGS = 'illusdex_tags';
 const LS_COLLECTION = 'illusdex_collection';
 const LS_CARDSNAP = 'illusdex_cardsnap';
 const LS_BINDER = 'illusdex_binder';
+const LS_TIERLIST = 'illusdex_tierlist';
 
 /* ── Collection par (carte × langue) ──────────────────────────────────────
    Source de vérité unique :
@@ -391,6 +399,7 @@ const S = {
 };
 S.collection.collTab = 'owned'; // 'owned' | 'wanted' | 'trade'
 coerceAsianSort(); // si on démarre déjà sur le catalogue asiatique
+coercePrioSort();  // on démarre sur « En collection » : le tri priorité n'y a pas de sens
 
 /* ── Références DOM (assignées dans init) ─────────────────────────────── */
 let grid, countEl, loadMoreBtn, errorMsg, sourceLabel, modalOverlay,
@@ -828,6 +837,15 @@ function coerceAsianSort() {
   if (currentRegion !== 'asian') return;
   ['explore', 'collection'].forEach(ctx => { if (S[ctx].sort === 'pokedex') S[ctx].sort = 'set'; });
 }
+// Le tri par priorité n'a de sens que sur « À obtenir » : ailleurs, tout tomberait
+// dans « Non classées ». Comme le tri est mémorisé (prefs.collSort), on le ramène
+// au tri par défaut dès qu'on n'est plus sur cet onglet.
+function coercePrioSort() {
+  if (S.collection.sort !== 'prio' || S.collection.collTab === 'wanted') return;
+  S.collection.sort = defaultSort();
+  const el = document.getElementById('coll-sort');
+  if (el) el.value = S.collection.sort;
+}
 
 function getDexNumber(card) {
   return Array.isArray(card.dexId) && card.dexId.length ? Math.min(...card.dexId) : Number.MAX_SAFE_INTEGER;
@@ -1085,6 +1103,7 @@ function ownedLangsHint(id) {
 
 function getBadge(rarity, rarityKind) {
   if (rarityKind === 'promo') return '<span class="card-badge badge-promo">PROMO</span>';
+  if (rarityKind === 'gallery') return `<span class="card-badge badge-gallery">${rarity === 'Galarian Gallery' ? 'GG' : 'TG'}</span>`;
   if (!rarity) return '';
   const r = rarity.toLowerCase();
   if (r.includes('special illustration') || r.includes('illustration spéciale') || r.includes('sar') || r.includes('sir'))
@@ -2112,15 +2131,29 @@ function renderBinderPicker(query) {
    sauvegarde) ; l'objectif est l'export PNG.
    ════════════════════════════════════════════════════════════════════════ */
 const TIER_LABELS = ['S', 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J'];
-let tierlist = {
-  tiers: [
-    { label: 'S', color: '#c0392b', cards: [] },
-    { label: 'A', color: '#e67e22', cards: [] },
-    { label: 'B', color: '#f1c40f', cards: [] },
-    { label: 'C', color: '#2ecc71', cards: [] },
-    { label: 'D', color: '#2980b9', cards: [] },
-  ],
-};
+const DEFAULT_TIERS = [
+  { label: 'S', color: '#c0392b', cards: [] },
+  { label: 'A', color: '#e67e22', cards: [] },
+  { label: 'B', color: '#f1c40f', cards: [] },
+  { label: 'C', color: '#2ecc71', cards: [] },
+  { label: 'D', color: '#2980b9', cards: [] },
+];
+// Reprend une tier list venue du stockage / d'un import en se méfiant du contenu
+// (fichier édité à la main, ancienne version) : sans rangée valide → défaut.
+function normalizeTierlist(raw) {
+  const tiers = (raw && Array.isArray(raw.tiers) ? raw.tiers : [])
+    .filter(t => t && typeof t === 'object')
+    .map((t, i) => ({
+      label: typeof t.label === 'string' ? t.label : (TIER_LABELS[i] || '?'),
+      color: typeof t.color === 'string' ? t.color : '#607d8b',
+      cards: (Array.isArray(t.cards) ? t.cards : [])
+        .filter(c => c && typeof c === 'object' && c.id)
+        .map(c => ({ id: String(c.id), lang: c.lang || currentLang })),
+    }));
+  return { tiers: tiers.length ? tiers : DEFAULT_TIERS.map(t => ({ ...t, cards: [] })) };
+}
+let tierlist = normalizeTierlist(JSON.parse(localStorage.getItem(LS_TIERLIST) || 'null'));
+function saveTierlist() { localStorage.setItem(LS_TIERLIST, JSON.stringify(tierlist)); scheduleSyncPush(); }
 let tierPickTarget = -1;
 let tierPickerSrc = 'owned';
 
@@ -2148,6 +2181,7 @@ function renderTierlist() {
   closeTierMenus();
   root.innerHTML = '';
   tierlist.tiers.forEach((tier, i) => root.appendChild(buildTierRow(tier, i)));
+  saveTierlist(); // toutes les mutations (rangées, cartes, couleurs, ordre) passent ici
 }
 
 function buildTierRow(tier, index) {
@@ -2897,8 +2931,12 @@ function wireFilters(ctx) {
   const tagEl = document.getElementById(prefix + 'tag-filter');
   if (tagEl) tagEl.addEventListener('change', e => { st.tag = e.target.value; apply(); });
 
-  const sourceEl = document.getElementById('coll-source-filter');
-  if (sourceEl) { sourceEl.value = st.source; sourceEl.addEventListener('change', e => { st.source = e.target.value; apply(); }); }
+  // Le champ n'existe qu'en collection : sans ce garde, wireFilters('explore') s'y
+  // abonne aussi et modifie S.explore.source → Explorer filtré sans filtre visible.
+  if (isColl) {
+    const sourceEl = document.getElementById('coll-source-filter');
+    if (sourceEl) { sourceEl.value = st.source; sourceEl.addEventListener('change', e => { st.source = e.target.value; apply(); }); }
+  }
 
   const sortEl = document.getElementById(isColl ? 'coll-sort' : 'sort');
   if (sortEl) {
@@ -3211,6 +3249,31 @@ function enrichSeries(cards, data) {
   });
 }
 
+// Première occurrence gagnante (l'ordre d'assemblage fixe la priorité).
+function dedupeCardsById(cards) {
+  const seen = new Set();
+  return cards.filter(c => (c && c.id && !seen.has(c.id)) ? (seen.add(c.id), true) : false);
+}
+
+// Sous-sets galerie : ingestion par set (voir GALLERY_SET_IDS). Aucune de ces
+// cartes n'a d'image chez TCGdex → applyAltImages les sert via pokemontcg.io
+// (table PTCG_SET_REMAP : swsh9.5tg → swsh9tg, swsh12.5gg → swsh12pt5gg…).
+async function fetchGalleryCards() {
+  if (currentRegion === 'asian') return []; // ids internationaux uniquement
+  const out = [];
+  await Promise.all(GALLERY_SET_IDS.map(async (setId) => {
+    try {
+      const res = await fetch(`${API}/sets/${setId}`);
+      if (!res.ok) return;
+      const setData = await res.json();
+      const setMeta = { id: setData.id, name: setData.name, serie: setData.serie || null };
+      const label = setId.endsWith('gg') ? 'Galarian Gallery' : 'Trainer Gallery';
+      (setData.cards || []).forEach(ref => out.push({ ...ref, set: setMeta, rarity: label, rarityKind: 'gallery' }));
+    } catch (e) {}
+  }));
+  return out;
+}
+
 async function fetchPromoCards() {
   // PROMO_SET_IDS sont des sets internationaux (svp, swshp…) absents du catalogue
   // asiatique — on saute (les cartes illustrées JP arrivent via le fetch rareté).
@@ -3295,12 +3358,16 @@ async function fetchCards({ force = false } = {}) {
     } else {
       // Briefs rapides (image + nom + rareté) → affichage quasi immédiat (~0,6 s),
       // puis hydratation progressive en arrière-plan (dexId → tri Pokédex, prix…).
-      const [rarityResults, promoCards, seriesMap] = await Promise.all([
+      const [rarityResults, promoCards, galleryCards, seriesMap] = await Promise.all([
         Promise.all(RARITY_LABELS.map(r => fetchCardsByRarity(r).catch(() => []))),
         fetchPromoCards().catch(() => []),
+        fetchGalleryCards().catch(() => []),
         fetchSeriesMap().catch(() => null),
       ]);
-      allCards = [...rarityResults.flat(), ...promoCards];
+      // Galerie en tête : une partie de ces cartes remonte aussi par le fetch
+      // rareté (Ultra Rare / Secret Rare) — on garde la version « galerie » pour
+      // que tout le sous-set porte le même kind, et on dédoublonne sur l'id.
+      allCards = dedupeCardsById([...galleryCards, ...rarityResults.flat(), ...promoCards]);
       if (allCards.length === 0) throw new Error('empty');
       allCards.forEach(c => { if (!c.set) c.set = { id: String(c.id).split('-')[0] }; });
       enrichSeries(allCards, seriesMap);
@@ -4184,6 +4251,7 @@ function buildConfigPayload() {
     // Projections « toutes langues » conservées pour relecture par d'anciennes versions.
     owned: [...ownedSet], wanted: [...wantedSet], trade: [...tradeSet],
     prefs: prefsOut, masters: startedMasters, presets: filterPresets, tags: tagsMap,
+    tierlist,
   }, null, 2);
 }
 
@@ -4800,6 +4868,12 @@ function applyImportedConfig(text, opts = {}) {
   if (Array.isArray(data.masters)) { startedMasters = data.masters.map(m => (m && m.lang) ? m : { ...m, lang: 'fr' }); saveMasters(); }
   if (Array.isArray(data.presets)) { filterPresets = data.presets; savePresetsLS(); populatePresetSelect('explore'); populatePresetSelect('collection'); }
   if (data.tags && typeof data.tags === 'object' && !Array.isArray(data.tags)) { tagsMap = data.tags; saveTags(); refreshTagFilters(); }
+  if (data.tierlist && typeof data.tierlist === 'object') {
+    tierlist = normalizeTierlist(data.tierlist);
+    // Écriture directe : la vue n'est re-rendue que si elle est affichée.
+    localStorage.setItem(LS_TIERLIST, JSON.stringify(tierlist));
+    if (currentTab === 'tierlist') renderTierlist();
+  }
   if (data.prefs && typeof data.prefs === 'object') {
     const keepKey = prefs.syncKey, keepTs = prefs.syncAppliedTs; // la sync est propre à l'appareil
     prefs = { ...defaultPrefs, ...data.prefs, syncKey: keepKey, syncAppliedTs: keepTs };
@@ -4816,6 +4890,7 @@ function applyImportedConfig(text, opts = {}) {
     pricesVisible = prefs.pricesVisible !== false;
     S.explore.sort    = prefs.sort || 'pokedex';
     S.collection.sort = prefs.collSort || 'pokedex';
+    coercePrioSort();
   }
 
   if (!silent) { closeConfig(); showToast('✓ Configuration importée'); }
@@ -4994,6 +5069,7 @@ function applyCatalogChange() {
     S.explore.sort    = prefs.sort || 'pokedex';
     S.collection.sort = prefs.collSort || 'pokedex';
   }
+  coercePrioSort();
   const se = document.getElementById('sort'); if (se) se.value = S.explore.sort;
   const cse = document.getElementById('coll-sort'); if (cse) cse.value = S.collection.sort;
   allCards = [];
@@ -5205,6 +5281,7 @@ document.querySelectorAll('.coll-tab-btn').forEach(btn => {
     st.prio     = 'all'; // n'a de sens que sur « À obtenir » : sinon grille vide sans cause visible
     const pf = document.getElementById('coll-prio-filter'); if (pf) pf.value = 'all';
     const si = document.getElementById('coll-search'); if (si) si.value = '';
+    coercePrioSort();
     selectedIds.clear();
     lastClickedId = null;
     updateRarityButtons('collection');
