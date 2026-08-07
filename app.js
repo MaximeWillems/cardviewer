@@ -16,7 +16,7 @@ const PAGE_SIZE = 24;
 
 // Cache des cartes dans IndexedDB (gros volume → pas le plafond ~5 Mo du
 // localStorage). Bump CACHE_VERSION si la logique de récupération change.
-const CACHE_VERSION = 5; // 5 : ajout des sous-sets galerie (Trainer / Galarian)
+const CACHE_VERSION = 6; // 5 : sous-sets galerie · 6 : cartes JP sans visuel TCGdex conservées
 const CACHE_TTL = 7 * 24 * 3600 * 1000; // 7 jours
 
 // Types de rareté filtrables (dimension des pastilles). 'promo' n'a pas de
@@ -881,6 +881,15 @@ function limitlessBase(setId, localId) {
   const S = setId.toUpperCase();
   return `https://limitlesstcg.nyc3.cdn.digitaloceanspaces.com/tpci/${S}/${S}_${m[1].padStart(3, '0')}_R`;
 }
+// Limitless côté japonais : préfixe « tpc » (Pokémon Company Japan) et non « tpci »,
+// et surtout le numéro n'est PAS complété par des zéros (SV11B_56, pas SV11B_056)
+// alors que TCGdex les stocke padés. Couvre les sets JP dont TCGdex n'a aucun visuel
+// (ブラックボルト SV11B par exemple : 174 cartes, 0 image).
+function limitlessJpBase(setId, localId) {
+  const m = String(localId ?? '').match(/^0*(\d{1,3})$/);
+  if (!m) return null;
+  return `https://limitlesstcg.nyc3.cdn.digitaloceanspaces.com/tpc/${setId}/${setId}_${m[1]}_R_JP`;
+}
 // Limitless propose EN/FR/DE/ES/IT/PT (mêmes codes que l'appli, en majuscules).
 const LIMITLESS_LANGS = new Set(['EN', 'FR', 'DE', 'ES', 'IT', 'PT']);
 function limitlessLang() {
@@ -892,13 +901,18 @@ function limitlessLang() {
 // sinon pokemontcg.io. Recalcule à chaque fois (pas de garde) : les caches avec
 // une ancienne URL 404 se réparent tout seuls au chargement.
 function applyAltImages(cards) {
-  if (currentRegion === 'asian') return; // ids JP non mappables
   cards.forEach(c => {
     if (c.image) return;
-    const i = String(c.id).indexOf('-'); if (i < 0) return;
-    const setId = String(c.id).slice(0, i);
+    const i = String(c.id).lastIndexOf('-'); if (i < 0) return;
+    const setId = String(c.id).slice(0, i), localId = c.localId ?? String(c.id).slice(i + 1);
+    // Japonais : pokemontcg.io ne connaît pas ces ids → Limitless (préfixe tpc).
+    if (cardRegionOf(c) === 'asian') {
+      const jb = limitlessJpBase(setId, localId);
+      if (jb) { c.altImage = jb; c.altSrc = 'limitlessjp'; }
+      return;
+    }
     if (PROMO_SET_IDS.includes(setId)) {
-      const lb = limitlessBase(setId, c.localId ?? String(c.id).slice(i + 1));
+      const lb = limitlessBase(setId, localId);
       if (lb) { c.altImage = lb; c.altSrc = 'limitless'; return; }
     }
     const pb = pokeAltBase(c.id);
@@ -911,6 +925,7 @@ function imgSrc(card, q = 'low') {
   if (!card) return '';
   if (card.image) return card.image + (q === 'highpng' ? '/high.png' : q === 'high' ? '/high.webp' : '/low.webp');
   if (card.altImage) {
+    if (card.altSrc === 'limitlessjp') return `${card.altImage}${q === 'low' ? '_SM' : '_LG'}.png`; // langue déjà dans la base
     if (card.altSrc === 'limitless') return `${card.altImage}_${limitlessLang()}${q === 'low' ? '_SM' : '_LG'}.png`;
     return q === 'low' ? card.altImage + '.png' : card.altImage + '_hires.png';
   }
@@ -3311,7 +3326,9 @@ async function fetchAsianCatalog() {
         if (!r.ok) return [];
         const data = await r.json();
         const setMeta = { id: data.id, name: data.name, serie: data.serie || null, cardCount: data.cardCount || null };
-        return (data.cards || []).filter(c => c.image).map(c => ({ ...c, set: setMeta, region: 'asian' }));
+        // On garde AUSSI les cartes sans image TCGdex : applyAltImages les sert
+        // via Limitless (des sets entiers en sont dépourvus, ex. SV11B).
+        return (data.cards || []).map(c => ({ ...c, set: setMeta, region: 'asian' }));
       } catch (e) { return []; }
     }));
     results.forEach(arr => cards.push(...arr));
@@ -3354,6 +3371,7 @@ async function fetchCards({ force = false } = {}) {
       ]);
       enrichSeries(asianCards, seriesMap);
       asianCards.forEach(c => { c.romaji = toRomaji(c.name); });
+      applyAltImages(asianCards); // repli Limitless pour les cartes sans visuel TCGdex
       allCards = asianCards;
     } else {
       // Briefs rapides (image + nom + rareté) → affichage quasi immédiat (~0,6 s),
