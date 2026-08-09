@@ -910,9 +910,13 @@ function filterCards(cards, st) {
       (c.set?.serie?.name || '').toLowerCase().includes(q)
     )) return false;
     if (min !== null || max !== null) {
-      const price = getBestPrice(c.id);
-      if (min !== null && (price == null || price < min)) return false;
-      if (max !== null && (price == null || price > max)) return false;
+      // Cote marché uniquement : getBestPrice donnait la priorité au prix SAISI,
+      // donc une carte payée 2 € mais cotée 50 € était filtrée sur 2 € — en
+      // contradiction avec la pastille, qui affiche la cote.
+      const price = (c.apiPrice != null && !isNaN(c.apiPrice)) ? Number(c.apiPrice) : null;
+      if (price == null) return false; // sans cote connue, impossible de trancher
+      if (min !== null && price < min) return false;
+      if (max !== null && price > max) return false;
     }
     return true;
   });
@@ -2729,7 +2733,7 @@ function renderFilterControls(ctx) {
         </div>` : ''}
         ${isColl ? `
         <div class="adv-field price-field">
-          <label>Prix (€)</label>
+          <label>Prix marché (€)</label>
           <div class="adv-price">
             <input type="number" id="price-min-filter" class="price-filter" placeholder="min">
             <input type="number" id="price-max-filter" class="price-filter" placeholder="max">
