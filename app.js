@@ -3938,6 +3938,7 @@ async function openModal(card, list, index) {
     </div>
     <div class="price-block" id="price-block">
       <div class="price-loading">Chargement du prix…</div>
+      ${buildCmButton(card)}
     </div>
     <div class="modal-row"><span class="key">Extension</span><span class="val">${escapeHtml(set)}</span></div>
     <div class="modal-row" style="margin-top:2px;">
