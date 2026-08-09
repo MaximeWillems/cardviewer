@@ -3740,14 +3740,12 @@ async function renderCardPrice(card) {
 
   if (trend > 0) { // > 0 et non « != null » : sinon on recopiait 0,00 € partout
     card.apiPrice = trend;
+    // Le PRIX PAYÉ reste strictement manuel : jamais alimenté par la cote (une
+    // carte de booster se laisse vide, sa source suffit). Seul le budget cible,
+    // qui est bien une estimation de ce qu'on accepte de mettre, est pré-rempli.
     const plang = cardLangFor(card);
-    for (const type of ['owned', 'wanted']) {
-      if ((type === 'owned' && isOwned(card.id, plang)) || (type === 'wanted' && isWanted(card.id, plang))) {
-        const existing = getPriceData(card.id, type, plang);
-        if (!existing.val) {
-          setPriceData(card.id, type, { val: trend.toFixed(2) }, plang);
-        }
-      }
+    if (isWanted(card.id, plang) && !getPriceData(card.id, 'wanted', plang).val) {
+      setPriceData(card.id, 'wanted', { val: trend.toFixed(2) }, plang);
     }
     refreshAfterPriceChange();
   }
@@ -4397,7 +4395,7 @@ function renderReceiveRows() {
         <div class="receive-sub">${escapeHtml(c.set?.name || '')}${c.localId ? ' · N°' + escapeHtml(String(c.localId)) : ''}</div>
       </div>
       <span class="receive-price">
-        <input type="number" min="0" step="0.01" class="receive-price-input" data-id="${escapeHtml(id)}" placeholder="${market || 'prix'}" value="${market}">
+        <input type="number" min="0" step="0.01" class="receive-price-input" data-id="${escapeHtml(id)}" placeholder="${market || 'prix'}" value="">
         <span class="receive-eur">€</span>
       </span>
     </div>`;
