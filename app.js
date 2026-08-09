@@ -278,6 +278,33 @@ function cleanOrphanPrios() {
 }
 cleanOrphanPrios();
 
+// Purge des prix à 0 : un bug recopiait la « tendance » à 0,00 € dans les prix
+// saisis (trend-holo valant 0 l'emportait sur le vrai prix). Ces zéros bloquent
+// désormais l'affichage de la cote réelle → on les retire une fois pour toutes.
+function cleanZeroPrices() {
+  let n = 0;
+  for (const id of Object.keys(collection)) {
+    for (const l of Object.keys(collection[id] || {})) {
+      const r = collection[id][l];
+      if (!r) continue;
+      for (const k of ['paid', 'target', 'sell']) {
+        const p = r[k];
+        if (!p || !hasPriceData(p)) continue;
+        const clean = normalizePriceData(p);
+        if (clean.val === (p.val || '') && clean.min === (p.min || '') && clean.max === (p.max || '')) continue;
+        if (!hasPriceData(clean)) delete r[k]; else r[k] = clean;
+        n++;
+      }
+      pruneRec(id, l);
+    }
+  }
+  if (n) {
+    rebuildProjections(); saveCollection();
+    setTimeout(() => showToast(`${n} prix à 0 € supprimé${n > 1 ? 's' : ''} (ancien bug)`, 'info'), 1200);
+  }
+}
+cleanZeroPrices();
+
 /* ── Tags personnalisés par carte ─────────────────────────────────────── */
 function getTags(id) { return tagsMap[id] || []; }
 function addTag(id, tag) {
@@ -515,9 +542,19 @@ function setWanted(id, lang, val) {
 
 // type : 'owned' (prix payé) · 'wanted' (budget cible) · 'trade' (prix de vente)
 function priceKeyOf(type) { return type === 'owned' ? 'paid' : type === 'wanted' ? 'target' : 'sell'; }
+// Un prix nul n'a pas de sens pour une carte : une carte obtenue gratuitement se
+// note par sa source (📦 Booster, 🎁 Cadeau), pas par un prix de 0 €. On traite
+// donc 0 comme « pas de prix » — sinon il bloquerait l'affichage de la cote.
+function normalizePriceData(d) {
+  const keep = v => {
+    const n = parseFloat(String(v ?? '').replace(',', '.'));
+    return (!isNaN(n) && n > 0) ? String(v).trim() : '';
+  };
+  return { val: keep(d && d.val), min: keep(d && d.min), max: keep(d && d.max) };
+}
 function setPriceData(cardId, type, data, lang = currentLang) {
   const r = ensureRec(cardId, lang);
-  r[priceKeyOf(type)] = data;
+  r[priceKeyOf(type)] = normalizePriceData(data);
   pruneRec(cardId, lang);
   saveCollection();
   const gridCard = document.querySelector(`.card[data-id="${cardId}"]`);
@@ -4385,7 +4422,7 @@ function confirmReceive() {
     r.wanted = false;
     delete r.prio; // la carte est obtenue : sa priorité n'a plus lieu d'être
     const price = inp.value.trim() !== '' ? parseFloat(inp.value) : NaN;
-    if (!isNaN(price)) { r.paid = { val: String(price), min: '', max: '' }; total += price; }
+    if (!isNaN(price) && price > 0) { r.paid = { val: String(price), min: '', max: '' }; total += price; }
     r.acq = { d, src };
     snapshotById(id);
   });
