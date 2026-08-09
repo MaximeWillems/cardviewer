@@ -180,7 +180,7 @@ function snapshotCard(c) {
     id: c.id, image: c.image, altImage: c.altImage, altSrc: c.altSrc, name: c.name, nameEn: c.nameEn, romaji: c.romaji,
     localId: c.localId, rarity: c.rarity, rarityKind: c.rarityKind,
     types: c.types, dexId: c.dexId, illustrator: c.illustrator,
-    apiPrice: c.apiPrice, region: c.region,
+    apiPrice: c.apiPrice, apiPriceAt: c.apiPriceAt, region: c.region,
     set: c.set ? { id: c.set.id, name: c.set.name, order: c.set.order,
                    serie: c.set.serie ? { name: c.set.serie.name } : null } : null,
   };
@@ -665,7 +665,9 @@ function getBestPrice(cardId) {
     if (d.val && !isNaN(parseFloat(d.val))) return parseFloat(d.val);
     if (d.min && !isNaN(parseFloat(d.min))) return parseFloat(d.min);
   }
-  const card = allCards.find(c => c.id === cardId);
+  // lookupCard et non allCards : une carte d'une AUTRE région (une JP alors qu'on
+  // affiche l'international) ne vit que dans les instantanés.
+  const card = lookupCard(cardId);
   return card?.apiPrice ?? null;
 }
 // Valeurs utilisées pour le tri : une carte sans prix vaut 0 (elle se range
@@ -708,6 +710,44 @@ function marketPriceOf(pricing) {
 // Renseigne c.apiPrice depuis le détail déjà téléchargé (hydratation / cache).
 // N'écrit JAMAIS dans les prix saisis par l'utilisateur : le prix marché et les
 // prix perso restent deux choses distinctes.
+/* ── Cote des cartes japonaises de la collection ──────────────────────────
+   Le catalogue JP est ingéré en briefs (id/nom seulement, pas de pricing) et
+   pèse ~16 000 cartes : l'hydrater entièrement est hors de question. On ne
+   récupère donc la cote que pour les cartes qui comptent — celles en collection
+   ou à obtenir. Le résultat est gardé dans les instantanés (donc persisté), avec
+   une péremption pour que le prix ne se fige pas indéfiniment.
+   ──────────────────────────────────────────────────────────────────────── */
+const JP_PRICE_TTL = 7 * 24 * 3600 * 1000;
+async function hydrateCollectionJpPrices() {
+  const queue = [...new Set([...ownedSet, ...wantedSet, ...tradeSet])].filter(id => {
+    const c = lookupCard(id);
+    if (!c || cardRegionOf(c) !== 'asian') return false;
+    return c.apiPrice == null || !(c.apiPriceAt > Date.now() - JP_PRICE_TTL);
+  });
+  if (!queue.length) return;
+  let done = 0;
+  const worker = async () => {
+    while (queue.length) {
+      const id = queue.shift();
+      try {
+        const res = await fetch(`${API_BASE}/ja/cards/${encodeURIComponent(id)}`);
+        if (!res.ok) continue;
+        const p = marketPriceOf((await res.json()).pricing);
+        if (p == null) continue;
+        const at = Date.now();
+        const live = allCards.find(c => c.id === id);
+        if (live) { live.apiPrice = p; live.apiPriceAt = at; }
+        if (cardSnapshots[id]) { cardSnapshots[id].apiPrice = p; cardSnapshots[id].apiPriceAt = at; }
+        done++;
+      } catch (e) {}
+    }
+  };
+  await Promise.all(Array.from({ length: 6 }, worker));
+  if (!done) return;
+  saveCardSnapshots();
+  if (currentTab === 'collection') { renderCollection(); updateTotalsBar(); }
+}
+
 function applyMarketPrices(cards) {
   cards.forEach(c => {
     if (c.apiPrice != null) return;
@@ -5696,6 +5736,8 @@ fetchCards().then(async () => {
   // Synchro auto : récupère la dernière version de la clé perso, puis active le push auto.
   if (prefs.syncKey) { try { await syncPullKey(); } catch (e) {} }
   syncReady = true;
+  // Après la synchro : la collection est à jour, on cote ses cartes japonaises.
+  hydrateCollectionJpPrices();
 });
 
 updateCollStat();
