@@ -646,6 +646,39 @@ function getMarketPriceValue(card) {
   return 0;
 }
 
+/* ── Cote Cardmarket (prix marché) ────────────────────────────────────────
+   PIÈGE : « trend-holo » vaut souvent 0 quand la carte n'a pas de variante
+   holo. Un test `!= null` retient donc 0 et écrase le vrai prix — c'était le
+   cas sur la quasi-totalité des Illustration rare, d'où des « 0,00 € ».
+   On ne retient une valeur holo que si elle est réellement > 0.
+   ──────────────────────────────────────────────────────────────────────── */
+function cmVariantOf(cm) {
+  const holo = cm['trend-holo'] > 0 || cm['avg30-holo'] > 0 || cm['avg-holo'] > 0;
+  return holo
+    ? { trend: cm['trend-holo'], low: cm['low-holo'], avg: cm['avg-holo'], avg30: cm['avg30-holo'], avg7: cm['avg7-holo'], avg1: cm['avg1-holo'] }
+    : { trend: cm.trend, low: cm.low, avg: cm.avg, avg30: cm.avg30, avg7: cm.avg7, avg1: cm.avg1 };
+}
+// Valeur marché exploitable, ou null. Repli tendance → moyennes → prix bas.
+function marketPriceOf(pricing) {
+  const cm = pricing && pricing.cardmarket;
+  if (!cm) return null;
+  const v = cmVariantOf(cm);
+  for (const k of ['trend', 'avg', 'avg30', 'avg7', 'avg1', 'low']) {
+    if (typeof v[k] === 'number' && v[k] > 0) return v[k];
+  }
+  return null;
+}
+// Renseigne c.apiPrice depuis le détail déjà téléchargé (hydratation / cache).
+// N'écrit JAMAIS dans les prix saisis par l'utilisateur : le prix marché et les
+// prix perso restent deux choses distinctes.
+function applyMarketPrices(cards) {
+  cards.forEach(c => {
+    if (c.apiPrice != null) return;
+    const p = marketPriceOf(c.pricing);
+    if (p != null) c.apiPrice = p;
+  });
+}
+
 /* ════════════════════════════════════════════════════════════════════════
    MOTEUR DE FILTRAGE (unifié)
    ════════════════════════════════════════════════════════════════════════ */
@@ -3201,6 +3234,8 @@ async function hydrateProgressive(cards, seriesMap) {
           const d = await res.json();
           const rarity = c.rarity, rarityKind = c.rarityKind; // on garde la rareté du fetch
           Object.assign(c, d, { rarity, rarityKind, detailsLoaded: true });
+          const mp = marketPriceOf(d.pricing); // le détail contient déjà la cote
+          if (mp != null) c.apiPrice = mp;
         } else c.detailsLoaded = true;
       } catch (e) { c.detailsLoaded = true; }
       if (performance.now() - lastPaint > 900) { lastPaint = performance.now(); repaint(); }
@@ -3348,7 +3383,8 @@ async function fetchCards({ force = false } = {}) {
     if (cached && Array.isArray(cached.cards) && cached.cards.length &&
         (Date.now() - cached.savedAt) < CACHE_TTL) {
       allCards = cached.cards;
-      applyAltImages(allCards); // repli image promos même depuis un ancien cache
+      applyAltImages(allCards);   // repli image promos même depuis un ancien cache
+      applyMarketPrices(allCards); // cotes déjà en cache : prix dispo dès l'ouverture
       snapshotCollectionCards();
       countEl.textContent = allCards.length;
       populateFilters('explore');
@@ -3613,14 +3649,10 @@ async function renderCardPrice(card) {
     ? new Date(cm.updated).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' })
     : '';
 
-  const hasHolo = cm['trend-holo'] != null;
-  const trend  = hasHolo ? cm['trend-holo']  : cm.trend;
-  const low    = hasHolo ? cm['low-holo']    : cm.low;
-  const avg30  = hasHolo ? cm['avg30-holo']  : cm.avg30;
-  const avg7   = hasHolo ? cm['avg7-holo']   : cm.avg7;
-  const avg1   = hasHolo ? cm['avg1-holo']   : cm.avg1;
+  const v = cmVariantOf(cm);
+  const trend = v.trend, low = v.low, avg30 = v.avg30, avg7 = v.avg7, avg1 = v.avg1;
 
-  if (trend != null && !isNaN(trend)) {
+  if (trend > 0) { // > 0 et non « != null » : sinon on recopiait 0,00 € partout
     card.apiPrice = trend;
     const plang = cardLangFor(card);
     for (const type of ['owned', 'wanted']) {
