@@ -836,9 +836,12 @@
     display: none;
     line-height: 1.4;
   }
-  .card.owned  .card-price-pill.owned-price,
+  /* Le prix marché s'affiche sur TOUTE carte (pas seulement celles en collection) */
+  .card .card-price-pill.market-price,
   .card.wanted .card-price-pill.wanted-price,
   .card.trade  .card-price-pill.sell-price { display: var(--prices-display, inline-block); }
+  /* Pas de pastille vide quand la cote est inconnue */
+  .card-price-pill:empty { display: none !important; }
 
   /* Trade badge on card */
   .card.trade::after {
@@ -855,7 +858,7 @@
     font-family: 'Syne', sans-serif;
     font-weight: 700;
   }
-  .card-price-pill.owned-price  { color: var(--accent); background: rgba(var(--accent-rgb),0.12); }
+  .card-price-pill.market-price { color: var(--text); background: rgba(var(--fg-rgb),0.10); }
   .card-price-pill.wanted-price { color: var(--accent2);       background: rgba(var(--accent2-rgb),0.12); }
   .card-price-pill.sell-price   { color: var(--slate); background: rgba(var(--slate-rgb),0.16); }
 

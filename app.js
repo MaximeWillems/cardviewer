@@ -578,11 +578,17 @@ function getPriceLabel(cardId, type, lang = currentLang) {
   const d = getPriceData(cardId, type, lang);
   return d.val ? fmtEur(parseFloat(d.val)) : '';
 }
+// Cote affichée sur la vignette. Volontairement le prix marché et non le prix
+// payé : ce dernier n'apprend rien en parcourant sa collection.
+function marketPriceLabel(cardOrId) {
+  const c = typeof cardOrId === 'string' ? lookupCard(cardOrId) : cardOrId;
+  return (c && c.apiPrice != null) ? fmtEur(c.apiPrice) : '';
+}
 function updateCardPricePill(el, cardId) {
-  const ownedPill  = el.querySelector('.owned-price');
+  const marketPill = el.querySelector('.market-price');
   const wantedPill = el.querySelector('.wanted-price');
   const sellPill   = el.querySelector('.sell-price');
-  if (ownedPill)  ownedPill.textContent  = getPriceLabel(cardId, 'owned',  priceLangOf(cardId, 'owned'));
+  if (marketPill) marketPill.textContent = marketPriceLabel(cardId);
   if (wantedPill) wantedPill.textContent = getPriceLabel(cardId, 'wanted', priceLangOf(cardId, 'wanted'));
   if (sellPill)   sellPill.textContent   = getPriceLabel(cardId, 'trade',  tradeLangOf(cardId));
 }
@@ -1279,7 +1285,7 @@ function buildCardEl(c, ctx, idx) {
   const isWanted   = wantedSet.has(c.id);
   const isTrade    = tradeSet.has(c.id);
   const isSelected = ctx === 'collection' && selectedIds.has(c.id);
-  const ownedLabel  = getPriceLabel(c.id, 'owned',  priceLangOf(c.id, 'owned'));
+  const marketLabel = marketPriceLabel(c); // remplace le prix payé : la cote parle plus
   const wantedLabel = getPriceLabel(c.id, 'wanted', priceLangOf(c.id, 'wanted'));
   const sellLabel   = getPriceLabel(c.id, 'trade',  tradeLangOf(c.id));
 
@@ -1302,7 +1308,7 @@ function buildCardEl(c, ctx, idx) {
     <div class="card-body">
       ${getBadge(c.rarity, c.rarityKind)}
       <div class="card-price-tag">
-        <span class="card-price-pill owned-price">${ownedLabel}</span>
+        <span class="card-price-pill market-price">${marketLabel}</span>
         <span class="card-price-pill wanted-price">${wantedLabel}</span>
         <span class="card-price-pill sell-price">${sellLabel}</span>
       </div>
@@ -3691,32 +3697,31 @@ async function renderCardPrice(card) {
   const el = document.getElementById('price-block');
   if (!el) return;
 
-  let pricing = card.pricing;
   // Endpoint choisi selon la RÉGION de la carte (et pas du catalogue affiché) :
   // une carte JP ouverte depuis la collection inter-régions reste interrogée en /ja.
   const base = cardRegionOf(card) === 'asian' ? API_BASE + '/ja' : API_BASE + '/en';
 
-  if (cardRegionOf(card) === 'asian') {
-    if (!pricing) {
-      try {
-        const res = await fetch(`${base}/cards/${encodeURIComponent(card.id)}`);
-        if (res.ok) pricing = (await res.json()).pricing;
-      } catch (e) {}
-    }
-  } else if (!card.nameEn) {
+  // La cote déjà en mémoire (hydratation / cache) s'affiche IMMÉDIATEMENT. Avant,
+  // l'affichage attendait une requête vers /en qui ne sert qu'à récupérer le nom
+  // anglais du lien Cardmarket : en français nameEn est toujours absent, donc
+  // chaque ouverture de fiche restait bloquée sur « Chargement du prix… ».
+  if (card.pricing) paintCardPrice(card, card.pricing, el);
+
+  if (!card.pricing || !card.nameEn) {
     try {
       const res = await fetch(`${base}/cards/${encodeURIComponent(card.id)}`);
-      if (res.ok) { const data = await res.json(); card.nameEn = data.name || card.name; if (!pricing) pricing = data.pricing; }
+      if (res.ok) {
+        const data = await res.json();
+        if (!card.nameEn) card.nameEn = data.name || card.name;
+        if (!card.pricing && data.pricing) card.pricing = data.pricing;
+      }
     } catch (e) {}
-  } else if (!pricing) {
-    try {
-      const res = await fetch(`${base}/cards/${encodeURIComponent(card.id)}`);
-      if (res.ok) { const data = await res.json(); pricing = data.pricing; }
-    } catch (e) {}
+    if (!el.isConnected) return;
+    paintCardPrice(card, card.pricing, el);
   }
+}
 
-  if (!el.isConnected) return;
-
+function paintCardPrice(card, pricing, el) {
   const cm = pricing?.cardmarket;
   const mrv0 = document.getElementById('market-row-val');
   if (!cm) {
