@@ -278,32 +278,40 @@ function cleanOrphanPrios() {
 }
 cleanOrphanPrios();
 
-// Purge des prix à 0 : un bug recopiait la « tendance » à 0,00 € dans les prix
-// saisis (trend-holo valant 0 l'emportait sur le vrai prix). Ces zéros bloquent
-// désormais l'affichage de la cote réelle → on les retire une fois pour toutes.
-function cleanZeroPrices() {
-  let n = 0;
+/* Reprise des prix enregistrés, en une passe :
+   - min/max sont supprimés (une fourchette n'apportait rien) ; si aucune valeur
+     fixe n'était saisie, on promeut la borne pour ne rien perdre ;
+   - les prix à 0 partent : un ancien bug recopiait la « tendance » à 0,00 €
+     (trend-holo valant 0 l'emportait), et ces zéros bloquent l'affichage de la
+     vraie cote, le remplissage auto n'agissant que sur les champs vides. */
+function migratePriceFields() {
+  let zeros = 0, ranges = 0;
   for (const id of Object.keys(collection)) {
     for (const l of Object.keys(collection[id] || {})) {
       const r = collection[id][l];
       if (!r) continue;
       for (const k of ['paid', 'target', 'sell']) {
         const p = r[k];
-        if (!p || !hasPriceData(p)) continue;
-        const clean = normalizePriceData(p);
-        if (clean.val === (p.val || '') && clean.min === (p.min || '') && clean.max === (p.max || '')) continue;
-        if (!hasPriceData(clean)) delete r[k]; else r[k] = clean;
-        n++;
+        if (!p) continue;
+        const hadRange = p.min !== undefined || p.max !== undefined;
+        const merged = { val: p.val || p.min || p.max || '' };
+        if (hadRange) ranges++;
+        const clean = normalizePriceData(merged);
+        if (!hasPriceData(clean)) {
+          if (hasPriceData({ val: merged.val })) zeros++; // il y avait bien une valeur, mais nulle
+          delete r[k];
+        } else {
+          r[k] = clean;
+        }
       }
       pruneRec(id, l);
     }
   }
-  if (n) {
-    rebuildProjections(); saveCollection();
-    setTimeout(() => showToast(`${n} prix à 0 € supprimé${n > 1 ? 's' : ''} (ancien bug)`, 'info'), 1200);
-  }
+  if (!zeros && !ranges) return;
+  rebuildProjections(); saveCollection();
+  if (zeros) setTimeout(() => showToast(`${zeros} prix à 0 € supprimé${zeros > 1 ? 's' : ''} (ancien bug)`, 'info'), 1200);
 }
-cleanZeroPrices();
+migratePriceFields();
 
 /* ── Tags personnalisés par carte ─────────────────────────────────────── */
 function getTags(id) { return tagsMap[id] || []; }
@@ -441,7 +449,7 @@ function ensureRec(id, lang) {
   const byLang = (collection[id] || (collection[id] = {}));
   return (byLang[lang] || (byLang[lang] = { qty: 0, wanted: false, trade: false, paid: {}, target: {}, sell: {} }));
 }
-function hasPriceData(p) { return !!(p && (p.val || p.min || p.max)); }
+function hasPriceData(p) { return !!(p && p.val); }
 // Supprime un enregistrement (id,langue) devenu vide pour ne pas laisser de scories.
 function pruneRec(id, lang) {
   const r = collRec(id, lang);
@@ -550,7 +558,7 @@ function normalizePriceData(d) {
     const n = parseFloat(String(v ?? '').replace(',', '.'));
     return (!isNaN(n) && n > 0) ? String(v).trim() : '';
   };
-  return { val: keep(d && d.val), min: keep(d && d.min), max: keep(d && d.max) };
+  return { val: keep(d && d.val) };
 }
 function setPriceData(cardId, type, data, lang = currentLang) {
   const r = ensureRec(cardId, lang);
@@ -564,15 +572,11 @@ function setPriceData(cardId, type, data, lang = currentLang) {
 function getPriceData(cardId, type, lang = currentLang) {
   const r = collRec(cardId, lang);
   const p = r ? r[priceKeyOf(type)] : null;
-  return { val: (p && p.val) || '', min: (p && p.min) || '', max: (p && p.max) || '' };
+  return { val: (p && p.val) || '' };
 }
 function getPriceLabel(cardId, type, lang = currentLang) {
   const d = getPriceData(cardId, type, lang);
-  if (d.val) return fmtEur(parseFloat(d.val));
-  if (d.min && d.max) return `${fmtEur(parseFloat(d.min))}–${fmtEur(parseFloat(d.max))}`;
-  if (d.min) return `≥${fmtEur(parseFloat(d.min))}`;
-  if (d.max) return `≤${fmtEur(parseFloat(d.max))}`;
-  return '';
+  return d.val ? fmtEur(parseFloat(d.val)) : '';
 }
 function updateCardPricePill(el, cardId) {
   const ownedPill  = el.querySelector('.owned-price');
@@ -663,7 +667,6 @@ function getBestPrice(cardId) {
   for (const type of ['owned', 'wanted']) {
     const d = getPriceData(cardId, type, priceLangOf(cardId, type)); // langue de possession
     if (d.val && !isNaN(parseFloat(d.val))) return parseFloat(d.val);
-    if (d.min && !isNaN(parseFloat(d.min))) return parseFloat(d.min);
   }
   // lookupCard et non allCards : une carte d'une AUTRE région (une JP alors qu'on
   // affiche l'international) ne vit que dans les instantanés.
@@ -676,7 +679,6 @@ function getUserPriceValue(card) {
   for (const type of ['owned', 'wanted']) {
     const d = getPriceData(card.id, type, priceLangOf(card.id, type)); // langue de possession
     if (d.val && !isNaN(parseFloat(d.val))) return parseFloat(d.val);
-    if (d.min && !isNaN(parseFloat(d.min))) return parseFloat(d.min);
   }
   return 0;
 }
@@ -3191,7 +3193,7 @@ function computeSellTotal(cards) {
   let sum = 0;
   cards.forEach(c => {
     const d = getPriceData(c.id, 'trade', tradeLangOf(c.id));
-    const v = d.val ? parseFloat(d.val) : (d.min ? parseFloat(d.min) : (c.apiPrice != null ? c.apiPrice : null));
+    const v = d.val ? parseFloat(d.val) : (c.apiPrice != null ? c.apiPrice : null);
     if (v != null && !isNaN(v)) sum += v;
   });
   return sum;
@@ -3716,7 +3718,9 @@ async function renderCardPrice(card) {
   if (!el.isConnected) return;
 
   const cm = pricing?.cardmarket;
+  const mrv0 = document.getElementById('market-row-val');
   if (!cm) {
+    if (mrv0 && card.apiPrice == null) mrv0.textContent = '—'; // sinon « … » resterait indéfiniment
     el.innerHTML = '<div class="price-na">Prix non encore disponible</div>';
     el.innerHTML += buildCmButton(card);
     return;
@@ -3729,14 +3733,19 @@ async function renderCardPrice(card) {
   const v = cmVariantOf(cm);
   const trend = v.trend, low = v.low, avg30 = v.avg30, avg7 = v.avg7, avg1 = v.avg1;
 
+  // Un seul point de vérité pour la ligne « Prix du marché » : la valeur retenue,
+  // sinon un tiret — le « … » de chargement ne doit jamais rester affiché.
+  const shown = trend > 0 ? trend : marketPriceOf(pricing);
+  if (mrv0) mrv0.textContent = shown > 0 ? fmtEur(shown) : (card.apiPrice != null ? fmtEur(card.apiPrice) : '—');
+
   if (trend > 0) { // > 0 et non « != null » : sinon on recopiait 0,00 € partout
     card.apiPrice = trend;
     const plang = cardLangFor(card);
     for (const type of ['owned', 'wanted']) {
       if ((type === 'owned' && isOwned(card.id, plang)) || (type === 'wanted' && isWanted(card.id, plang))) {
         const existing = getPriceData(card.id, type, plang);
-        if (!existing.val && !existing.min && !existing.max) {
-          setPriceData(card.id, type, { val: trend.toFixed(2), min: '', max: '' }, plang);
+        if (!existing.val) {
+          setPriceData(card.id, type, { val: trend.toFixed(2) }, plang);
         }
       }
     }
@@ -3880,23 +3889,21 @@ async function openModal(card, list, index) {
         <datalist id="tag-suggestions"></datalist>
       </div>
     </div>
+    <div class="market-row">
+      <span class="market-row-label">Prix du marché</span>
+      <span class="market-row-val" id="market-row-val">${card.apiPrice != null ? fmtEur(card.apiPrice) : '…'}</span>
+      <span class="market-row-note">mis à jour automatiquement</span>
+    </div>
     <div class="price-input-section ${isOwned(card.id, mlang) ? 'visible' : ''}" id="price-section-owned">
-      <div class="price-input-title">Prix payé / estimé</div>
+      <div class="price-input-title">Prix payé</div>
       <div class="price-input-wrap">
         <div class="price-input-group">
-          <div class="price-input-label">Valeur fixe (€)</div>
+          <div class="price-input-label">Montant (€)</div>
           <input class="price-input" id="pi-owned-val" type="number" min="0" step="0.01" placeholder="ex: 12.50" value="${escapeHtml(oPrices.val)}">
-        </div>
-        <div class="price-input-group">
-          <div class="price-input-label">Min (€)</div>
-          <input class="price-input" id="pi-owned-min" type="number" min="0" step="0.01" placeholder="min" value="${escapeHtml(oPrices.min)}">
-        </div>
-        <div class="price-input-group">
-          <div class="price-input-label">Max (€)</div>
-          <input class="price-input" id="pi-owned-max" type="number" min="0" step="0.01" placeholder="max" value="${escapeHtml(oPrices.max)}">
         </div>
         <button class="price-input-save" id="pi-owned-save">OK</button>
       </div>
+      <div class="price-input-hint">Vide pour une carte non achetée (booster, cadeau) — la source le précise.</div>
       <div class="acq-edit">
         <div class="acq-edit-field">
           <div class="price-input-label">Acquise le</div>
@@ -3915,16 +3922,8 @@ async function openModal(card, list, index) {
       <div class="price-input-title">Budget cible</div>
       <div class="price-input-wrap">
         <div class="price-input-group">
-          <div class="price-input-label">Valeur fixe (€)</div>
+          <div class="price-input-label">Montant (€)</div>
           <input class="price-input" id="pi-wanted-val" type="number" min="0" step="0.01" placeholder="ex: 8.00" value="${escapeHtml(wPrices.val)}">
-        </div>
-        <div class="price-input-group">
-          <div class="price-input-label">Min (€)</div>
-          <input class="price-input" id="pi-wanted-min" type="number" min="0" step="0.01" placeholder="min" value="${escapeHtml(wPrices.min)}">
-        </div>
-        <div class="price-input-group">
-          <div class="price-input-label">Max (€)</div>
-          <input class="price-input" id="pi-wanted-max" type="number" min="0" step="0.01" placeholder="max" value="${escapeHtml(wPrices.max)}">
         </div>
         <button class="price-input-save" id="pi-wanted-save">OK</button>
       </div>
@@ -3933,16 +3932,8 @@ async function openModal(card, list, index) {
       <div class="price-input-title">Prix de vente</div>
       <div class="price-input-wrap">
         <div class="price-input-group">
-          <div class="price-input-label">Valeur fixe (€)</div>
+          <div class="price-input-label">Montant (€)</div>
           <input class="price-input" id="pi-trade-val" type="number" min="0" step="0.01" placeholder="ex: 5.00" value="${escapeHtml(tPrices.val)}">
-        </div>
-        <div class="price-input-group">
-          <div class="price-input-label">Min (€)</div>
-          <input class="price-input" id="pi-trade-min" type="number" min="0" step="0.01" placeholder="min" value="${escapeHtml(tPrices.min)}">
-        </div>
-        <div class="price-input-group">
-          <div class="price-input-label">Max (€)</div>
-          <input class="price-input" id="pi-trade-max" type="number" min="0" step="0.01" placeholder="max" value="${escapeHtml(tPrices.max)}">
         </div>
         <button class="price-input-save" id="pi-trade-save">OK</button>
       </div>
@@ -4075,11 +4066,7 @@ async function openModal(card, list, index) {
   document.getElementById('qty-plus')?.addEventListener('click', () => onQty(1));
 
   document.getElementById('pi-owned-save')?.addEventListener('click', () => {
-    setPriceData(card.id, 'owned', {
-      val: document.getElementById('pi-owned-val').value,
-      min: document.getElementById('pi-owned-min').value,
-      max: document.getElementById('pi-owned-max').value,
-    }, mlang);
+    setPriceData(card.id, 'owned', { val: document.getElementById('pi-owned-val').value }, mlang);
     showToast('✦ Prix collection sauvegardé');
   });
   const saveAcq = () => {
@@ -4093,19 +4080,11 @@ async function openModal(card, list, index) {
   document.getElementById('acq-date')?.addEventListener('change', saveAcq);
   document.getElementById('acq-source')?.addEventListener('change', saveAcq);
   document.getElementById('pi-wanted-save')?.addEventListener('click', () => {
-    setPriceData(card.id, 'wanted', {
-      val: document.getElementById('pi-wanted-val').value,
-      min: document.getElementById('pi-wanted-min').value,
-      max: document.getElementById('pi-wanted-max').value,
-    }, mlang);
+    setPriceData(card.id, 'wanted', { val: document.getElementById('pi-wanted-val').value }, mlang);
     showToast('⊕ Budget cible sauvegardé');
   });
   document.getElementById('pi-trade-save')?.addEventListener('click', () => {
-    setPriceData(card.id, 'trade', {
-      val: document.getElementById('pi-trade-val').value,
-      min: document.getElementById('pi-trade-min').value,
-      max: document.getElementById('pi-trade-max').value,
-    }, mlang);
+    setPriceData(card.id, 'trade', { val: document.getElementById('pi-trade-val').value }, mlang);
     showToast('⇄ Prix de vente sauvegardé');
   });
 
@@ -4462,7 +4441,7 @@ function confirmReceive() {
     r.wanted = false;
     delete r.prio; // la carte est obtenue : sa priorité n'a plus lieu d'être
     const price = inp.value.trim() !== '' ? parseFloat(inp.value) : NaN;
-    if (!isNaN(price) && price > 0) { r.paid = { val: String(price), min: '', max: '' }; total += price; }
+    if (!isNaN(price) && price > 0) { r.paid = { val: String(price) }; total += price; }
     r.acq = { d, src };
     snapshotById(id);
   });
@@ -4895,7 +4874,7 @@ function shareSellList() {
   const lines = cards.map(c => {
     const lang = tradeLangOf(c.id);
     const d = getPriceData(c.id, 'trade', lang);
-    const v = d.val ? parseFloat(d.val) : (d.min ? parseFloat(d.min) : (c.apiPrice != null ? c.apiPrice : null));
+    const v = d.val ? parseFloat(d.val) : (c.apiPrice != null ? c.apiPrice : null);
     if (v != null && !isNaN(v)) total += v;
     const priceTxt = getPriceLabel(c.id, 'trade', lang) || (c.apiPrice != null ? `~${fmtEur(c.apiPrice)}` : 'à définir');
     return `• ${c.name || '—'} ${LANG_FLAGS[lang] || ''} — ${c.set?.name || ''}${c.localId ? ' #' + c.localId : ''} — ${priceTxt}`;
