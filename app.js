@@ -702,12 +702,16 @@ function cmVariantOf(cm) {
     ? { trend: cm['trend-holo'], low: cm['low-holo'], avg: cm['avg-holo'], avg30: cm['avg30-holo'], avg7: cm['avg7-holo'], avg1: cm['avg1-holo'] }
     : { trend: cm.trend, low: cm.low, avg: cm.avg, avg30: cm.avg30, avg7: cm.avg7, avg1: cm.avg1 };
 }
-// Valeur marché exploitable, ou null. Repli tendance → moyennes → prix bas.
+// Valeur marché exploitable, ou null.
+// On retient « low » en priorité : c'est le « De : » de Cardmarket, l'offre la
+// moins chère du moment, plus proche de ce qu'on paie réellement que la tendance
+// (médiane mesurée : low ≈ 45 % du trend). Attention, ce prix n'est filtré ni par
+// langue ni par état — un exemplaire abîmé peut le tirer vers le bas.
 function marketPriceOf(pricing) {
   const cm = pricing && pricing.cardmarket;
   if (!cm) return null;
   const v = cmVariantOf(cm);
-  for (const k of ['trend', 'avg', 'avg30', 'avg7', 'avg1', 'low']) {
+  for (const k of ['low', 'trend', 'avg', 'avg30', 'avg7', 'avg1']) {
     if (typeof v[k] === 'number' && v[k] > 0) return v[k];
   }
   return null;
@@ -755,7 +759,9 @@ async function hydrateCollectionJpPrices() {
 
 function applyMarketPrices(cards) {
   cards.forEach(c => {
-    if (c.apiPrice != null) return;
+    // Recalcul systématique quand la cote brute est disponible : la règle de
+    // choix peut changer (on est passé de la tendance à l'offre la plus basse)
+    // et un cache vieux de plusieurs jours doit s'aligner sans tout retélécharger.
     const p = marketPriceOf(c.pricing);
     if (p != null) c.apiPrice = p;
   });
@@ -3740,19 +3746,20 @@ function paintCardPrice(card, pricing, el) {
   const v = cmVariantOf(cm);
   const trend = v.trend, low = v.low, avg30 = v.avg30, avg7 = v.avg7, avg1 = v.avg1;
 
-  // Un seul point de vérité pour la ligne « Prix du marché » : la valeur retenue,
-  // sinon un tiret — le « … » de chargement ne doit jamais rester affiché.
-  const shown = trend > 0 ? trend : marketPriceOf(pricing);
+  // Une seule source pour le prix marché de l'appli (ligne, pastille, filtre,
+  // tri) : marketPriceOf, qui privilégie l'offre la plus basse. Le « … » de
+  // chargement ne doit jamais rester affiché → tiret si rien n'est exploitable.
+  const shown = marketPriceOf(pricing);
   if (mrv0) mrv0.textContent = shown > 0 ? fmtEur(shown) : (card.apiPrice != null ? fmtEur(card.apiPrice) : '—');
 
-  if (trend > 0) { // > 0 et non « != null » : sinon on recopiait 0,00 € partout
-    card.apiPrice = trend;
+  if (shown > 0) {
+    card.apiPrice = shown;
     // Le PRIX PAYÉ reste strictement manuel : jamais alimenté par la cote (une
     // carte de booster se laisse vide, sa source suffit). Seul le budget cible,
     // qui est bien une estimation de ce qu'on accepte de mettre, est pré-rempli.
     const plang = cardLangFor(card);
     if (isWanted(card.id, plang) && !getPriceData(card.id, 'wanted', plang).val) {
-      setPriceData(card.id, 'wanted', { val: trend.toFixed(2) }, plang);
+      setPriceData(card.id, 'wanted', { val: shown.toFixed(2) }, plang);
     }
     refreshAfterPriceChange();
   }
@@ -3897,7 +3904,7 @@ async function openModal(card, list, index) {
     <div class="market-row">
       <span class="market-row-label">Prix du marché</span>
       <span class="market-row-val" id="market-row-val">${card.apiPrice != null ? fmtEur(card.apiPrice) : '…'}</span>
-      <span class="market-row-note">mis à jour automatiquement</span>
+      <span class="market-row-note">offre la plus basse sur Cardmarket, toutes langues et tous états</span>
     </div>
     <div class="price-input-section ${isOwned(card.id, mlang) ? 'visible' : ''}" id="price-section-owned">
       <div class="price-input-title">Prix payé</div>
