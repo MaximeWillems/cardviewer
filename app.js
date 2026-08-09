@@ -113,14 +113,18 @@ const SORT_FILTERS_HTML = `
   <option value="rarity">Rareté</option>
   <option value="artist-count">Artiste (volume)</option>
   <option value="artist-name">Artiste A → Z</option>
-  <optgroup label="── Prix saisis ──">
+  <optgroup label="── Prix marché ──">
     <option value="price-asc">Prix ↑</option>
     <option value="price-desc">Prix ↓</option>
-  </optgroup>
-  <optgroup label="── Prix marché ──">
-    <option value="market-asc">Marché ↑</option>
-    <option value="market-desc">Marché ↓</option>
   </optgroup>`;
+
+// Les deux tris prix (saisi / marché) ont fusionné en un seul, sur la cote.
+// Convertit les valeurs enregistrées avant la fusion (prefs et filtres sauvegardés).
+function normalizeSort(s) {
+  if (s === 'market-asc') return 'price-asc';
+  if (s === 'market-desc') return 'price-desc';
+  return s;
+}
 
 /* ── Persistance (localStorage) ───────────────────────────────────────── */
 // Anciennes clés — désormais en LECTURE SEULE, servent à migrer une fois vers
@@ -425,7 +429,7 @@ function makeFilterState(sort) {
   return {
     query: '', rarities: new Set(rarityKinds()), type: 'all', artist: 'all',
     set: 'all', series: 'all', tag: 'all', lang: 'all', source: 'all', prio: 'all', dupOnly: false,
-    sort: sort || 'pokedex', priceMin: '', priceMax: '', artistCounts: new Map(),
+    sort: normalizeSort(sort) || 'pokedex', priceMin: '', priceMax: '', artistCounts: new Map(),
   };
 }
 const S = {
@@ -681,13 +685,6 @@ function getBestPrice(cardId) {
 }
 // Valeurs utilisées pour le tri : une carte sans prix vaut 0 (elle se range
 // donc tout en bas d'un tri décroissant et tout en haut d'un tri croissant).
-function getUserPriceValue(card) {
-  for (const type of ['owned', 'wanted']) {
-    const d = getPriceData(card.id, type, priceLangOf(card.id, type)); // langue de possession
-    if (d.val && !isNaN(parseFloat(d.val))) return parseFloat(d.val);
-  }
-  return 0;
-}
 function getMarketPriceValue(card) {
   if (card.apiPrice != null && !isNaN(card.apiPrice)) return card.apiPrice;
   return 0;
@@ -1074,9 +1071,11 @@ function sortByConfig(cards, sort, artistCounts = new Map()) {
         if (da !== db) return (db || '') < (da || '') ? -1 : 1;
         return collator.compare(a.name || '', b.name || '');
       }
-      case 'price-asc':    return getUserPriceValue(a) - getUserPriceValue(b) || collator.compare(a.name || '', b.name || '');
-      case 'price-desc':   return getUserPriceValue(b) - getUserPriceValue(a) || collator.compare(a.name || '', b.name || '');
+      // Un seul tri prix, sur la cote du marché (les anciens 'market-*' restent
+      // acceptés : un filtre enregistré peut encore les contenir).
+      case 'price-asc':
       case 'market-asc':   return getMarketPriceValue(a) - getMarketPriceValue(b) || collator.compare(a.name || '', b.name || '');
+      case 'price-desc':
       case 'market-desc':  return getMarketPriceValue(b) - getMarketPriceValue(a) || collator.compare(a.name || '', b.name || '');
       default:             return getDexNumber(a) - getDexNumber(b) || collator.compare(a.name || '', b.name || '') || collator.compare(a.id || '', b.id || '');
     }
@@ -1108,8 +1107,7 @@ function getSectionKey(card, sort) {
     const first = (card.name || '#').trim().charAt(0).toUpperCase();
     return first.match(/[A-ZÀ-ÖØ-Ý]/) ? first : '#';
   }
-  if (sort === 'price-asc'  || sort === 'price-desc')  return priceBucket(getUserPriceValue(card), 'Sans prix saisi');
-  if (sort === 'market-asc' || sort === 'market-desc') return priceBucket(getMarketPriceValue(card), 'Prix non consulté');
+  if (['price-asc', 'price-desc', 'market-asc', 'market-desc'].includes(sort)) return priceBucket(getMarketPriceValue(card), 'Sans cote');
   if (sort === 'acq-date') return acqBucket(getAcqDate(card));
   if (sort === 'prio') {
     const p = PRIO_BY_V[prioOf(card.id)];
@@ -2981,7 +2979,7 @@ function applyPreset(ctx, p) {
     selectedIds.clear(); lastClickedId = null;
   }
   st.query    = p.query || '';
-  st.sort     = p.sort || 'pokedex';
+  st.sort     = normalizeSort(p.sort) || 'pokedex';
   st.priceMin = p.priceMin || '';
   st.priceMax = p.priceMax || '';
   st.rarities = new Set((p.rarities && p.rarities.length) ? p.rarities : rarityKinds());
@@ -5002,8 +5000,8 @@ function applyImportedConfig(text, opts = {}) {
       currentRegion = 'international'; currentLang = REGIONS.international.langs[0];
     }
     pricesVisible = prefs.pricesVisible !== false;
-    S.explore.sort    = prefs.sort || 'pokedex';
-    S.collection.sort = prefs.collSort || 'pokedex';
+    S.explore.sort    = normalizeSort(prefs.sort) || 'pokedex';
+    S.collection.sort = normalizeSort(prefs.collSort) || 'pokedex';
     coercePrioSort();
   }
 
@@ -5180,8 +5178,8 @@ function applyCatalogChange() {
   if (currentRegion === 'asian') {
     coerceAsianSort();       // JP : pas de Pokédex → tri par extension
   } else {                   // retour international : on restaure le tri préféré
-    S.explore.sort    = prefs.sort || 'pokedex';
-    S.collection.sort = prefs.collSort || 'pokedex';
+    S.explore.sort    = normalizeSort(prefs.sort) || 'pokedex';
+    S.collection.sort = normalizeSort(prefs.collSort) || 'pokedex';
   }
   coercePrioSort();
   const se = document.getElementById('sort'); if (se) se.value = S.explore.sort;
