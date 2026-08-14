@@ -4407,21 +4407,22 @@ function buildExportRows(cards) {
     const rarity = c.rarity || '';
     const num    = c.localId || '';
     const illus  = c.illustrator || '';
-    const ownedLabel  = ownedSet.has(c.id)  ? getPriceLabel(c.id, 'owned')  : '';
     const wantedLabel = wantedSet.has(c.id) ? getPriceLabel(c.id, 'wanted') : '';
     const langFlags   = [...new Set([...langsWith(c.id, 'qty'), ...langsWith(c.id, 'wanted'), ...langsWith(c.id, 'trade')])]
                           .map(l => LANG_FLAGS[l] || '').join('');
-    const apiLabel    = c.apiPrice != null ? fmtEur(c.apiPrice) : '';
+    const marketLbl   = marketPriceLabel(c); // cote (corrigée si tu l'as ajustée)
     const statusClass = ownedSet.has(c.id) ? 'owned' : wantedSet.has(c.id) ? 'wanted' : '';
     const badgeHtml   = c.rarityKind === 'sir'    ? '<span class="b sir">SIR</span>'
                       : c.rarityKind === 'ir'     ? '<span class="b ir">IR</span>'
                       : c.rarityKind === 'promo'  ? '<span class="b promo">PROMO</span>'
                       : '<span class="b alt">ALT</span>';
 
+    // La cote d'abord, comme sur les vignettes de l'appli : c'est elle qui parle
+    // à qui regarde l'export. Le budget cible reste utile sur une liste de
+    // recherche ; le prix payé, lui, est une donnée privée — il n'y figure plus.
     const priceHtml = [
-      ownedLabel  ? `<span class="p own">${ownedLabel}</span>`   : '',
+      marketLbl   ? `<span class="p api">${marketLbl}</span>`    : '',
       wantedLabel ? `<span class="p want">${wantedLabel}</span>` : '',
-      (!ownedLabel && !wantedLabel && apiLabel) ? `<span class="p api">${apiLabel}</span>` : '',
     ].filter(Boolean).join('');
 
     return `<div class="card ${statusClass}" data-img="${img}">
@@ -4500,9 +4501,8 @@ function generateExport() {
   .b.promo{background:rgba(200,140,255,.2);color:#c88cff;border:1px solid rgba(200,140,255,.35)}
   .prices{display:flex;gap:4px;flex-wrap:wrap;margin-top:4px}
   .p{font-size:9px;font-weight:700;font-family:'Syne',sans-serif;padding:1px 5px;border-radius:100px}
-  .p.own {background:rgba(200,240,96,.12);color:#c8f060}
   .p.want{background:rgba(96,160,240,.12);color:#60a0f0}
-  .p.api {background:rgba(255,255,255,.06);color:#aaa}
+  .p.api {background:rgba(255,255,255,.10);color:#eee}
   @media print{
     .toolbar{display:none!important}
     body{padding:.5cm}
