@@ -929,11 +929,12 @@
   .market-row-val { font-size: 16px; font-weight: 700; color: var(--text); margin-left: auto; }
   .market-row-note { font-size: 10px; color: var(--muted); width: 100%; }
   .market-fix { display: flex; align-items: center; gap: 7px; width: 100%; margin-top: 2px; }
-  .market-fix span {
+  .market-fix label {
     font-size: 10px; color: var(--muted); font-weight: 600;
     text-transform: uppercase; letter-spacing: 0.05em; white-space: nowrap;
   }
   .market-fix input { max-width: 110px; }
+  .market-fix-take { padding: 5px 9px; font-size: 11px; white-space: nowrap; }
   .price-input-hint { font-size: 10px; color: var(--muted); margin-top: 4px; }
 
   .price-input-title {

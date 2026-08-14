@@ -910,7 +910,14 @@ function agoLabel(ts) {
 }
 // Dit toujours QUEL prix on regarde : cote de ta langue, ou moyenne toutes langues.
 function marketSourceNote(card) {
-  if (correctedMarketOf(card.id) != null) return 'cote corrigée par toi (vider le champ pour revenir à l\'automatique)';
+  const fixed = correctedMarketOf(card.id);
+  if (fixed != null) {
+    // On rappelle TOUJOURS ce que dit l'automatique : sans ça, une correction
+    // dépassée par le marché resterait affichée sans que rien ne l'indique.
+    const auto = card.apiPrice != null ? ` · automatique : ${fmtEur(card.apiPrice)}` : '';
+    const monte = card.apiPrice > fixed ? ' ⚠ le marché est passé au-dessus' : '';
+    return `cote corrigée par toi${auto}${monte} — vider le champ pour revenir à l'automatique`;
+  }
   if (langPriceFresh(card)) {
     const l = (LANG_LABELS[card.cmLang] || card.cmLang || '').toLowerCase();
     return `Cardmarket ${escapeHtml(l)}, Near Mint · synchronisé ${agoLabel(card.cmAt)}`;
@@ -4064,12 +4071,14 @@ async function openModal(card, list, index) {
       <span class="market-row-label">Prix du marché</span>
       <span class="market-row-val" id="market-row-val">${displayMarketValue(card) != null ? fmtEur(displayMarketValue(card)) : '…'}</span>
       <span class="market-row-note" id="market-row-note">${marketSourceNote(card)}</span>
-      <label class="market-fix">
-        <span>Corriger (€)</span>
+      <div class="market-fix">
+        <label for="market-fix-val">Corriger (€)</label>
         <input class="price-input" id="market-fix-val" type="number" min="0" step="0.01"
                placeholder="${card.apiPrice != null ? Number(card.apiPrice).toFixed(2) : 'auto'}"
                value="${escapeHtml(String(correctedMarketOf(card.id) ?? ''))}">
-      </label>
+        <button class="config-btn market-fix-take" id="market-fix-take"
+                title="Recopier la cote automatique dans le champ, pour la figer ou l'ajuster">↧ auto</button>
+      </div>
     </div>
     <div class="price-input-section ${isOwned(card.id, mlang) ? 'visible' : ''}" id="price-section-owned">
       <div class="price-input-title">Prix payé</div>
@@ -4216,14 +4225,25 @@ async function openModal(card, list, index) {
     if (currentTab === 'collection') { populateFilters('collection'); renderCollection(); }
     if (currentTab === 'echange' && lastFriendData) renderEchangeResults(lastFriendData);
   });
-  document.getElementById('market-fix-val')?.addEventListener('change', e => {
-    setCorrectedMarket(card.id, mlang, e.target.value);
+  const onMarketFix = (val) => {
+    setCorrectedMarket(card.id, mlang, val);
     const v = displayMarketValue(card);
     const mrv = document.getElementById('market-row-val');
     if (mrv) mrv.textContent = v != null ? fmtEur(v) : '—';
     const note = document.getElementById('market-row-note');
     if (note) note.textContent = marketSourceNote(card);
     if (currentTab === 'collection') renderCollection();
+  };
+  document.getElementById('market-fix-val')?.addEventListener('change', e => onMarketFix(e.target.value));
+  // « ↧ auto » : reprend la cote automatique du moment comme valeur corrigée —
+  // pratique quand le marché a dépassé une ancienne correction.
+  document.getElementById('market-fix-take')?.addEventListener('click', () => {
+    if (card.apiPrice == null) { showToast('Aucune cote automatique pour cette carte', 'info'); return; }
+    const v = Number(card.apiPrice).toFixed(2);
+    const inp = document.getElementById('market-fix-val');
+    if (inp) inp.value = v;
+    onMarketFix(v);
+    showToast(`Cote reprise : ${fmtEur(Number(v))}`, 'info');
   });
   document.getElementById('modal-prio-btns')?.addEventListener('click', e => {
     const b = e.target.closest('.prio-btn');
