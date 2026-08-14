@@ -1309,8 +1309,12 @@ function getSectionLabel(key, sort, list) {
   if (sort === 'pokedex') return { title: `Pokédex ${key}`, count: suffix };
   // Priorité : le budget du groupe est l'info qui sert à décider.
   if (sort === 'prio') {
-    const total = cards.reduce((s, c) => s + (getBestPrice(c.id) || 0), 0);
-    return { title: key, count: total > 0 ? `${suffix} · ${fmtEur(total)}` : suffix };
+    let total = 0, unknown = 0;
+    cards.forEach(c => { const v = getBestPrice(c.id); if (v != null) total += v; else unknown++; });
+    // On annonce les cartes non chiffrées : un budget muet sur ce qu'il ignore
+    // donne l'illusion d'être complet.
+    const miss = unknown ? ` · ${unknown} sans cote` : '';
+    return { title: key, count: total > 0 ? `${suffix} · ${fmtEur(total)}${miss}` : `${suffix}${miss}` };
   }
   return { title: key, count: suffix };
 }
@@ -3349,17 +3353,20 @@ function updateTotalsBar() {
   if (!countEl) return;
 
   const hidePrice = () => { priceEl.style.display = 'none'; if (sepEl) sepEl.style.display = 'none'; };
-  const showPrice = (sum, cls) => {
-    priceEl.textContent = fmtEur(sum);
-    priceEl.className = 'coll-info-price ' + cls;
+  // unknown : nombre de cartes sans cote, exclues de la somme. Sans ce rappel, le
+  // total paraît exact alors qu'il peut ignorer une partie de la collection.
+  const showPrice = (sum, cls, unknown = 0) => {
+    priceEl.textContent = fmtEur(sum) + (unknown ? ` · ${unknown} sans cote` : '');
+    priceEl.className = 'coll-info-price ' + cls + (unknown ? ' has-unknown' : '');
+    priceEl.title = unknown ? `${unknown} carte${unknown > 1 ? 's' : ''} sans prix connu ne sont pas comptées dans ce total` : '';
     priceEl.style.display = '';
     if (sepEl) sepEl.style.display = '';
   };
 
   if (selectionMode && selectedIds.size > 0) {
-    const { sum, total } = computeTotal(selectedIds);
+    const { sum, total, unknown } = computeTotal(selectedIds);
     countEl.textContent = total;
-    (pricesVisible && sum > 0) ? showPrice(sum, 'green') : hidePrice();
+    (pricesVisible && sum > 0) ? showPrice(sum, 'green', unknown) : hidePrice();
   } else {
     const cards = getCards('collection');
     countEl.textContent = cards.length;
@@ -3372,11 +3379,11 @@ function updateTotalsBar() {
     }
     if (pricesVisible && cards.length > 0) {
       // En « À vendre », le total = somme des PRIX DE VENTE saisis (repli marché).
-      let sum;
+      let sum, unknown = 0;
       if (tab === 'trade') sum = computeSellTotal(cards);
-      else sum = computeTotal(new Set(cards.map(c => c.id))).sum;
+      else ({ sum, unknown } = computeTotal(new Set(cards.map(c => c.id))));
       const cls = tab === 'owned' ? 'green' : tab === 'wanted' ? 'blue' : 'orange';
-      sum > 0 ? showPrice(sum, cls) : hidePrice();
+      sum > 0 ? showPrice(sum, cls, unknown) : hidePrice();
     } else hidePrice();
   }
 }

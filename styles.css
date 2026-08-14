@@ -2603,6 +2603,8 @@
   .coll-info-price.green  { color: var(--accent); }
   .coll-info-price.blue   { color: var(--accent2); }
   .coll-info-price.orange { color: var(--slate); }
+  /* Total partiel : légèrement allégé pour signaler que le chiffre est incomplet. */
+  .coll-info-price.has-unknown { font-weight: 600; font-size: 12px; }
   .coll-info-divider { width: 1px; height: 16px; background: var(--border); }
 
   /* ── Collection controls ────────────────────── */
