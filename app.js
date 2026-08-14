@@ -171,14 +171,29 @@ let cardSnapshots  = JSON.parse(localStorage.getItem(LS_CARDSNAP) || '{}');
 function saveCardSnapshots() { localStorage.setItem(LS_CARDSNAP, JSON.stringify(cardSnapshots)); }
 
 // Classeur : pages de 9 emplacements (3×3). slot = { id, lang } ou null.
-let binder = JSON.parse(localStorage.getItem(LS_BINDER) || 'null');
-if (!binder || !Array.isArray(binder.slots)) binder = { pages: 5, slots: new Array(45).fill(null) };
-// Couleur de fond par page (migration depuis l'ancien fond global binder.bg).
-if (!Array.isArray(binder.pageBgs)) binder.pageBgs = new Array(binder.pages).fill(binder.bg || null);
-while (binder.pageBgs.length < binder.pages) binder.pageBgs.push(null);
+// Reprend un classeur venu du stockage ou d'un import en se méfiant du contenu
+// (fichier édité à la main, ancienne version) : structure invalide → classeur neuf.
+function normalizeBinder(raw) {
+  const b = (raw && typeof raw === 'object') ? raw : {};
+  const pages = Math.max(1, Math.min(200, parseInt(b.pages, 10) || 5));
+  const slots = new Array(pages * 9).fill(null);
+  if (Array.isArray(b.slots)) {
+    b.slots.slice(0, slots.length).forEach((s, i) => {
+      // Pas de repli sur currentLang ici : cette fonction tourne à l'init, avant
+      // que currentLang existe. La langue est conservée telle quelle.
+      if (s && typeof s === 'object' && s.id) slots[i] = { id: String(s.id), lang: s.lang };
+    });
+  }
+  const pageBgs = new Array(pages).fill(null);
+  const src = Array.isArray(b.pageBgs) ? b.pageBgs : [];
+  for (let i = 0; i < pages; i++) pageBgs[i] = typeof src[i] === 'string' ? src[i] : (typeof b.bg === 'string' ? b.bg : null);
+  return { pages, slots, pageBgs };
+}
+let binder = normalizeBinder(JSON.parse(localStorage.getItem(LS_BINDER) || 'null'));
 let binderSpread = 0, binderOpen = false; // double-page courante + classeur ouvert ?
 let binderEditMode = false; // false = visualisation, true = édition (poches +, palette, ×)
-function saveBinder() { localStorage.setItem(LS_BINDER, JSON.stringify(binder)); }
+// scheduleSyncPush : le classeur suit désormais les appareils, comme la tier list.
+function saveBinder() { localStorage.setItem(LS_BINDER, JSON.stringify(binder)); scheduleSyncPush(); }
 function snapshotCard(c) {
   return {
     id: c.id, image: c.image, altImage: c.altImage, altSrc: c.altSrc, name: c.name, nameEn: c.nameEn, romaji: c.romaji,
@@ -4564,7 +4579,7 @@ function buildConfigPayload() {
     // Projections « toutes langues » conservées pour relecture par d'anciennes versions.
     owned: [...ownedSet], wanted: [...wantedSet], trade: [...tradeSet],
     prefs: prefsOut, masters: startedMasters, presets: filterPresets, tags: tagsMap,
-    tierlist,
+    tierlist, binder,
   }, null, 2);
 }
 
@@ -5186,6 +5201,12 @@ function applyImportedConfig(text, opts = {}) {
     // Écriture directe : la vue n'est re-rendue que si elle est affichée.
     localStorage.setItem(LS_TIERLIST, JSON.stringify(tierlist));
     if (currentTab === 'tierlist') renderTierlist();
+  }
+  if (data.binder && typeof data.binder === 'object') {
+    binder = normalizeBinder(data.binder);
+    localStorage.setItem(LS_BINDER, JSON.stringify(binder));
+    if (binderSpread >= binderSpreadCount()) binderSpread = 0; // le nouveau classeur peut être plus court
+    if (currentTab === 'binder') renderBinder();
   }
   if (data.prefs && typeof data.prefs === 'object') {
     const keepKey = prefs.syncKey, keepTs = prefs.syncAppliedTs; // la sync est propre à l'appareil
