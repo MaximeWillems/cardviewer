@@ -185,6 +185,9 @@ function snapshotCard(c) {
     localId: c.localId, rarity: c.rarity, rarityKind: c.rarityKind,
     types: c.types, dexId: c.dexId, illustrator: c.illustrator,
     apiPrice: c.apiPrice, apiPriceAt: c.apiPriceAt, region: c.region,
+    // Cote par langue : cmId sert à l'interroger, cmLang évite d'afficher un
+    // prix français quand on navigue en anglais, cmAt porte la date de synchro.
+    cmId: c.cmId, cmPrice: c.cmPrice, cmLang: c.cmLang, cmAt: c.cmAt,
     set: c.set ? { id: c.set.id, name: c.set.name, order: c.set.order,
                    serie: c.set.serie ? { name: c.set.serie.name } : null } : null,
   };
@@ -244,6 +247,7 @@ const defaultPrefs = {
   // Stocké comme { "set:sv03.5": [...kinds], "artist:Mitsuhiro Arita": [...kinds] }
   masterExcludes: {},
   syncKey: '',        // clé perso de synchro auto entre appareils (vide = désactivé)
+  priceKey: '',       // jeton attendu par la route /price du Worker (vide = cotes par langue désactivées)
   syncAppliedTs: 0,   // horodatage de la dernière version synchronisée reflétée localement
   binderSound: false,  // bruitages du classeur (zip / feuilletage) — coupés par défaut
 };
@@ -702,16 +706,17 @@ function cmVariantOf(cm) {
     ? { trend: cm['trend-holo'], low: cm['low-holo'], avg: cm['avg-holo'], avg30: cm['avg30-holo'], avg7: cm['avg7-holo'], avg1: cm['avg1-holo'] }
     : { trend: cm.trend, low: cm.low, avg: cm.avg, avg30: cm.avg30, avg7: cm.avg7, avg1: cm.avg1 };
 }
-// Valeur marché exploitable, ou null.
-// On retient « low » en priorité : c'est le « De : » de Cardmarket, l'offre la
-// moins chère du moment, plus proche de ce qu'on paie réellement que la tendance
-// (médiane mesurée : low ≈ 45 % du trend). Attention, ce prix n'est filtré ni par
-// langue ni par état — un exemplaire abîmé peut le tirer vers le bas.
+// Valeur marché exploitable, ou null. On retient la TENDANCE en priorité.
+// « low » a été essayé (le « De : » de Cardmarket) puis écarté : ce n'est pas le
+// même chiffre que celui affiché sur le site, car l'API ne filtre ni par langue
+// ni par état — un exemplaire abîmé le tire vers le bas. Mesuré : low ≈ 45 % du
+// trend en médiane, et 148 € contre 200 € affichés sur une carte de référence.
+// Il ne sert donc qu'en dernier recours, faute de mieux.
 function marketPriceOf(pricing) {
   const cm = pricing && pricing.cardmarket;
   if (!cm) return null;
   const v = cmVariantOf(cm);
-  for (const k of ['low', 'trend', 'avg', 'avg30', 'avg7', 'avg1']) {
+  for (const k of ['trend', 'avg7', 'avg30', 'avg', 'avg1', 'low']) {
     if (typeof v[k] === 'number' && v[k] > 0) return v[k];
   }
   return null;
@@ -757,6 +762,85 @@ async function hydrateCollectionJpPrices() {
   if (currentTab === 'collection') { renderCollection(); updateTotalsBar(); }
 }
 
+/* ── File de synchro des cotes par langue ─────────────────────────────────
+   Le quota est petit (100/jour en gratuit) : on ne peut pas tout rafraîchir à
+   chaque fois. Deux critères, dans cet ordre :
+     1. le RANG — ma collection d'abord, puis les « à obtenir » par priorité ;
+     2. l'ANCIENNETÉ — à rang égal, la cote la plus vieille passe devant, et une
+        carte jamais synchronisée compte comme infiniment ancienne.
+   Résultat : les cartes qui comptent sont cotées en premier, puis le système
+   tourne tout seul en rotation.
+   ──────────────────────────────────────────────────────────────────────── */
+const PRICE_SYNC_BATCH = 40; // aligné sur la limite de sous-requêtes du Worker
+function priceRankOf(id) {
+  if (ownedSet.has(id)) return 1;               // ma collection
+  if (wantedSet.has(id)) return 1 + (prioOf(id) || 4); // 🔥2 · ⭐3 · 💤4 · sans priorité 5
+  return 9;                                     // reste du catalogue
+}
+function buildPriceQueue(limit = PRICE_SYNC_BATCH) {
+  const now = Date.now();
+  const seen = new Set();
+  const out = [];
+  for (const id of [...ownedSet, ...wantedSet, ...tradeSet]) {
+    if (seen.has(id)) continue;
+    seen.add(id);
+    const c = lookupCard(id);
+    if (!c || !c.cmId) continue;                       // sans idProduct, rien à demander
+    if (langPriceFresh(c) && c.cmAt > now - LANG_PRICE_TTL) continue; // déjà à jour
+    out.push({ id, cmId: c.cmId, lang: priceLangOfCard(c), rank: priceRankOf(id), at: c.cmAt || 0 });
+  }
+  out.sort((a, b) => a.rank - b.rank || a.at - b.at);
+  return out.slice(0, limit);
+}
+
+let lastPriceQuota = null; // dernier quota restant annoncé par le Worker
+async function syncLangPrices() {
+  if (!prefs.priceKey) return; // pas de jeton = fonctionnalité inactive, on reste sur la cote TCGdex
+  const queue = buildPriceQueue();
+  if (!queue.length) return;
+
+  // La file mélange international et japonais : un lot par langue, sinon on
+  // demanderait une cote française pour une carte japonaise.
+  const byLang = new Map();
+  queue.forEach(q => { if (!byLang.has(q.lang)) byLang.set(q.lang, []); byLang.get(q.lang).push(q); });
+
+  const at = Date.now();
+  let n = 0;
+  for (const [lang, group] of byLang) {
+    let data;
+    try {
+      const res = await fetch(`${syncBase()}/price`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        // key : la route /price dépense un quota facturable, le Worker la refuse
+        // sans ce jeton (réglé dans les préférences, jamais dans le code).
+        body: JSON.stringify({ ids: group.map(q => q.cmId), lang, key: prefs.priceKey || '' }),
+      });
+      if (!res.ok) continue;
+      data = await res.json();
+    } catch (e) { continue; }
+    if (!data || !data.prices) continue;
+    if (typeof data.quotaLeft === 'number') lastPriceQuota = data.quotaLeft;
+
+    group.forEach(q => {
+      const v = parseFloat(data.prices[q.cmId]);
+      if (!(v > 0)) return;
+      const live = allCards.find(c => c.id === q.id);
+      const snap = cardSnapshots[q.id];
+      [live, snap].forEach(c => {
+        if (!c) return;
+        c.cmPrice = v; c.cmLang = lang; c.cmAt = at;
+        applyLangPrice(c);
+      });
+      n++;
+    });
+  }
+  if (!n) return;
+  saveCardSnapshots();
+  if (currentTab === 'collection') { renderCollection(); updateTotalsBar(); }
+  else if (currentTab === 'explore') applyFilters();
+}
+
 function applyMarketPrices(cards) {
   cards.forEach(c => {
     // Recalcul systématique quand la cote brute est disponible : la règle de
@@ -764,7 +848,47 @@ function applyMarketPrices(cards) {
     // et un cache vieux de plusieurs jours doit s'aligner sans tout retélécharger.
     const p = marketPriceOf(c.pricing);
     if (p != null) c.apiPrice = p;
+    const pid = c.pricing?.cardmarket?.idProduct;
+    if (pid) c.cmId = pid; // clé de requête pour la cote par langue
+    applyLangPrice(c);
   });
+}
+
+/* ── Cote par langue (service tiers, via le Worker) ────────────────────────
+   La cote TCGdex est une moyenne TOUTES LANGUES : une carte française peut
+   valoir sensiblement plus ou moins. Quand on dispose d'un prix pour la langue
+   affichée, il prend la main ; sinon on reste sur la cote publique, qui garantit
+   que l'appli fonctionne même si le service tiers est absent ou en panne.
+   ──────────────────────────────────────────────────────────────────────── */
+const LANG_PRICE_TTL = 7 * 24 * 3600 * 1000;
+// Langue de cote pour une carte : les cartes JP ont leurs propres produits.
+function priceLangOfCard(card) { return cardRegionOf(card) === 'asian' ? 'ja' : (currentLang || 'fr'); }
+function langPriceFresh(card) {
+  return !!(card && card.cmPrice > 0 && card.cmLang === priceLangOfCard(card));
+}
+// Fait redescendre la cote par langue dans apiPrice, d'où partent la pastille,
+// le filtre et le tri — un seul point de bascule, le reste ne change pas.
+// « il y a 3 jours » — pour que la date de synchro soit lisible d'un coup d'œil.
+function agoLabel(ts) {
+  if (!ts) return '';
+  const d = Math.floor((Date.now() - ts) / 86400000);
+  if (d <= 0) return "aujourd'hui";
+  if (d === 1) return 'hier';
+  return `il y a ${d} jours`;
+}
+// Dit toujours QUEL prix on regarde : cote de ta langue, ou moyenne toutes langues.
+function marketSourceNote(card) {
+  if (langPriceFresh(card)) {
+    const l = (LANG_LABELS[card.cmLang] || card.cmLang || '').toLowerCase();
+    return `Cardmarket ${escapeHtml(l)}, Near Mint · synchronisé ${agoLabel(card.cmAt)}`;
+  }
+  return 'tendance Cardmarket, toutes langues confondues';
+}
+function applyLangPrice(card) {
+  if (!card) return;
+  if (langPriceFresh(card)) { card.apiPrice = card.cmPrice; return; }
+  const p = marketPriceOf(card.pricing);
+  if (p != null) card.apiPrice = p;
 }
 
 /* ════════════════════════════════════════════════════════════════════════
@@ -3329,6 +3453,9 @@ async function hydrateProgressive(cards, seriesMap) {
           Object.assign(c, d, { rarity, rarityKind, detailsLoaded: true });
           const mp = marketPriceOf(d.pricing); // le détail contient déjà la cote
           if (mp != null) c.apiPrice = mp;
+          const pid = d.pricing?.cardmarket?.idProduct;
+          if (pid) c.cmId = pid;
+          applyLangPrice(c); // une cote par langue déjà connue reprend la main
         } else c.detailsLoaded = true;
       } catch (e) { c.detailsLoaded = true; }
       if (performance.now() - lastPaint > 900) { lastPaint = performance.now(); repaint(); }
@@ -3746,11 +3873,13 @@ function paintCardPrice(card, pricing, el) {
   const v = cmVariantOf(cm);
   const trend = v.trend, low = v.low, avg30 = v.avg30, avg7 = v.avg7, avg1 = v.avg1;
 
-  // Une seule source pour le prix marché de l'appli (ligne, pastille, filtre,
-  // tri) : marketPriceOf, qui privilégie l'offre la plus basse. Le « … » de
-  // chargement ne doit jamais rester affiché → tiret si rien n'est exploitable.
-  const shown = marketPriceOf(pricing);
+  // Une cote pour LA LANGUE affichée prime toujours sur la moyenne toutes
+  // langues — sinon on écraserait ici le travail de syncLangPrices.
+  const pid = cm.idProduct; if (pid) card.cmId = pid;
+  const shown = langPriceFresh(card) ? card.cmPrice : marketPriceOf(pricing);
   if (mrv0) mrv0.textContent = shown > 0 ? fmtEur(shown) : (card.apiPrice != null ? fmtEur(card.apiPrice) : '—');
+  const note = document.getElementById('market-row-note');
+  if (note) note.textContent = marketSourceNote(card);
 
   if (shown > 0) {
     card.apiPrice = shown;
@@ -3904,7 +4033,7 @@ async function openModal(card, list, index) {
     <div class="market-row">
       <span class="market-row-label">Prix du marché</span>
       <span class="market-row-val" id="market-row-val">${card.apiPrice != null ? fmtEur(card.apiPrice) : '…'}</span>
-      <span class="market-row-note">offre la plus basse sur Cardmarket, toutes langues et tous états</span>
+      <span class="market-row-note" id="market-row-note">${marketSourceNote(card)}</span>
     </div>
     <div class="price-input-section ${isOwned(card.id, mlang) ? 'visible' : ''}" id="price-section-owned">
       <div class="price-input-title">Prix payé</div>
@@ -4377,7 +4506,7 @@ function buildConfigPayload() {
 function openConfig()  { document.getElementById('config-overlay').classList.add('open'); }
 function closeConfig() { document.getElementById('config-overlay').classList.remove('open'); }
 
-function openSettings()  { document.getElementById('settings-overlay').classList.add('open'); }
+function openSettings()  { updatePriceSyncState(); document.getElementById('settings-overlay').classList.add('open'); }
 function closeSettings() { document.getElementById('settings-overlay').classList.remove('open'); }
 
 /* ── Réception : faire passer des cartes « À obtenir » → « Collection » ──────
@@ -5541,6 +5670,31 @@ document.getElementById('settings-close').addEventListener('click', closeSetting
 document.getElementById('settings-overlay').addEventListener('click', e => { if (e.target === e.currentTarget) closeSettings(); });
 
 // 12) Import / export de la collection (JSON).
+// État de la cotation par langue : combien de cartes sont à jour, combien
+// attendent, et ce qu'il reste de quota — de quoi juger si le palier gratuit suffit.
+function updatePriceSyncState() {
+  const el = document.getElementById('price-sync-state');
+  if (!el) return;
+  const ids = new Set([...ownedSet, ...wantedSet, ...tradeSet]);
+  let fresh = 0, waiting = 0, noId = 0;
+  ids.forEach(id => {
+    const c = lookupCard(id);
+    if (!c) return;
+    if (!c.cmId) { noId++; return; }
+    if (langPriceFresh(c) && c.cmAt > Date.now() - LANG_PRICE_TTL) fresh++; else waiting++;
+  });
+  const quota = lastPriceQuota != null ? ` · quota restant : ${lastPriceQuota}` : '';
+  const sansId = noId ? ` · ${noId} sans référence Cardmarket` : '';
+  el.textContent = `${fresh} à jour · ${waiting} en attente${sansId}${quota}`;
+}
+document.getElementById('btn-price-sync').addEventListener('click', async (e) => {
+  const btn = e.currentTarget;
+  btn.disabled = true; btn.textContent = '⟳ …';
+  await syncLangPrices();
+  updatePriceSyncState();
+  btn.disabled = false; btn.textContent = '⟳ Mettre à jour';
+  showToast('Cotes mises à jour', 'info');
+});
 document.getElementById('btn-config').addEventListener('click', () => {
   closeSettings();
   document.getElementById('config-text').value = buildConfigPayload();
@@ -5728,8 +5882,10 @@ fetchCards().then(async () => {
   // Synchro auto : récupère la dernière version de la clé perso, puis active le push auto.
   if (prefs.syncKey) { try { await syncPullKey(); } catch (e) {} }
   syncReady = true;
-  // Après la synchro : la collection est à jour, on cote ses cartes japonaises.
-  hydrateCollectionJpPrices();
+  // Après la synchro : la collection est à jour, on cote ses cartes japonaises,
+  // puis on rafraîchit les cotes par langue (collection d'abord, voir la file).
+  await hydrateCollectionJpPrices();
+  syncLangPrices();
 });
 
 updateCollStat();
