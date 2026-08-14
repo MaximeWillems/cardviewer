@@ -447,7 +447,7 @@ function rarityKinds() { return RARITY_KINDS; }
 function makeFilterState(sort) {
   return {
     query: '', rarities: new Set(rarityKinds()), type: 'all', artist: 'all',
-    set: 'all', series: 'all', tag: 'all', lang: 'all', source: 'all', prio: 'all', dupOnly: false,
+    set: 'all', series: 'all', tag: 'all', lang: 'all', source: 'all', prio: 'all', mktFix: 'all', dupOnly: false,
     sort: normalizeSort(sort) || 'pokedex', priceMin: '', priceMax: '', artistCounts: new Map(),
   };
 }
@@ -644,7 +644,12 @@ function updateCardPricePill(el, cardId) {
   const marketPill = el.querySelector('.market-price');
   const wantedPill = el.querySelector('.wanted-price');
   const sellPill   = el.querySelector('.sell-price');
-  if (marketPill) marketPill.textContent = marketPriceLabel(cardId);
+  if (marketPill) {
+    marketPill.textContent = marketPriceLabel(cardId);
+    const fixed = correctedMarketOf(cardId) != null;
+    marketPill.classList.toggle('fixed', fixed);
+    marketPill.title = fixed ? 'Cote corrigée par toi' : '';
+  }
   if (wantedPill) wantedPill.textContent = getPriceLabel(cardId, 'wanted', priceLangOf(cardId, 'wanted'));
   if (sellPill)   sellPill.textContent   = getPriceLabel(cardId, 'trade',  tradeLangOf(cardId));
 }
@@ -1079,6 +1084,10 @@ function filterCards(cards, st) {
       if (st.source === '__none') { if (a && a.src) return false; }
       else if (!a || a.src !== st.source) return false;
     }
+    if (st.mktFix && st.mktFix !== 'all') {
+      const fixed = correctedMarketOf(c.id) != null;
+      if ((st.mktFix === 'fixed') !== fixed) return false;
+    }
     if (st.prio && st.prio !== 'all') {
       const p = prioOf(c.id);
       if (st.prio === '__none') { if (p) return false; }
@@ -1499,7 +1508,7 @@ function buildCardEl(c, ctx, idx) {
     <div class="card-body">
       ${getBadge(c.rarity, c.rarityKind)}
       <div class="card-price-tag">
-        <span class="card-price-pill market-price">${marketLabel}</span>
+        <span class="card-price-pill market-price${correctedMarketOf(c.id) != null ? ' fixed' : ''}"${correctedMarketOf(c.id) != null ? ' title="Cote corrigée par toi"' : ''}>${marketLabel}</span>
         <span class="card-price-pill wanted-price">${wantedLabel}</span>
         <span class="card-price-pill sell-price">${sellLabel}</span>
       </div>
@@ -2910,6 +2919,15 @@ function renderFilterControls(ctx) {
           </select>
         </div>` : ''}
         ${isColl ? `
+        <div class="adv-field">
+          <label>Cote</label>
+          <select id="coll-mktfix-filter" aria-label="Filtrer selon la cote">
+            <option value="all">Toutes les cotes</option>
+            <option value="fixed"${st.mktFix === 'fixed' ? ' selected' : ''}>✎ Corrigée par moi</option>
+            <option value="auto"${st.mktFix === 'auto' ? ' selected' : ''}>Automatique</option>
+          </select>
+        </div>` : ''}
+        ${isColl ? `
         <div class="adv-field prio-field">
           <label>Priorité</label>
           <select id="coll-prio-filter" aria-label="Filtrer par priorité">
@@ -2949,6 +2967,7 @@ function updateAdvCount(ctx) {
   if (st.tag !== 'all') n++;
   if (st.source && st.source !== 'all') n++;
   if (st.prio && st.prio !== 'all') n++;
+  if (st.mktFix && st.mktFix !== 'all') n++;
   if (st.priceMin !== '' || st.priceMax !== '') n++;
   const badge = document.getElementById((ctx === 'collection' ? 'coll-' : '') + 'filters-count');
   if (badge) { badge.textContent = n || ''; badge.style.display = n ? '' : 'none'; }
@@ -2961,7 +2980,7 @@ function resetFilters(ctx) {
   const prefix = ctx === 'collection' ? 'coll-' : '';
   st.query = ''; st.rarities = new Set(rarityKinds());
   st.type = 'all'; st.artist = 'all'; st.set = 'all'; st.series = 'all'; st.tag = 'all'; st.source = 'all';
-  st.prio = 'all';
+  st.prio = 'all'; st.mktFix = 'all';
   st.priceMin = ''; st.priceMax = '';
   const s = document.getElementById(ctx === 'collection' ? 'coll-search' : 'search'); if (s) s.value = '';
   ['type-filter', 'artist-filter', 'set-filter', 'series-filter', 'tag-filter'].forEach(id => {
@@ -2969,6 +2988,7 @@ function resetFilters(ctx) {
   });
   const srcEl = document.getElementById('coll-source-filter'); if (srcEl) srcEl.value = 'all';
   const prioElR = document.getElementById('coll-prio-filter'); if (prioElR) prioElR.value = 'all';
+  const mfElR = document.getElementById('coll-mktfix-filter'); if (mfElR) mfElR.value = 'all';
   const mn = document.getElementById('price-min-filter'), mx = document.getElementById('price-max-filter');
   if (mn) mn.value = ''; if (mx) mx.value = '';
   updateRarityButtons(ctx);
@@ -3124,7 +3144,7 @@ function buildPresetFromState(ctx) {
   return {
     query: st.query, rarities: [...st.rarities], type: st.type, artist: st.artist,
     set: st.set, series: st.series, tag: st.tag, sort: st.sort, priceMin: st.priceMin, priceMax: st.priceMax,
-    source: st.source, prio: st.prio,
+    source: st.source, prio: st.prio, mktFix: st.mktFix,
     collTab: ctx === 'collection' ? st.collTab : null,
   };
 }
@@ -3193,6 +3213,7 @@ function applyPreset(ctx, p) {
     // Presets enregistrés avant ces filtres : pas de champ → 'all'.
     st.source = setSel('coll-source-filter', p.source || 'all');
     st.prio   = setSel('coll-prio-filter',   p.prio   || 'all');
+    st.mktFix = setSel('coll-mktfix-filter', p.mktFix || 'all');
     const mn = document.getElementById('price-min-filter'), mx = document.getElementById('price-max-filter');
     if (mn) mn.value = st.priceMin;
     if (mx) mx.value = st.priceMax;
@@ -3274,6 +3295,8 @@ function wireFilters(ctx) {
   }
 
   if (isColl) {
+    const mfEl = document.getElementById('coll-mktfix-filter');
+    if (mfEl) { mfEl.value = st.mktFix; mfEl.addEventListener('change', e => { st.mktFix = e.target.value; apply(); }); }
     const prioEl = document.getElementById('coll-prio-filter');
     if (prioEl) { prioEl.value = st.prio; prioEl.addEventListener('change', e => { st.prio = e.target.value; apply(); }); }
     const minEl = document.getElementById('price-min-filter');

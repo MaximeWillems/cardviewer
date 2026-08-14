@@ -859,6 +859,12 @@
     font-weight: 700;
   }
   .card-price-pill.market-price { color: var(--text); background: rgba(var(--fg-rgb),0.10); }
+  /* Cote corrigée à la main : un liseré et un ✎ suffisent, la vignette est déjà chargée */
+  .card-price-pill.market-price.fixed {
+    background: rgba(var(--accent2-rgb),0.16);
+    box-shadow: inset 0 0 0 1px rgba(var(--accent2-rgb),0.45);
+  }
+  .card-price-pill.market-price.fixed::before { content: '✎ '; opacity: 0.75; }
   .card-price-pill.wanted-price { color: var(--accent2);       background: rgba(var(--accent2-rgb),0.12); }
   .card-price-pill.sell-price   { color: var(--slate); background: rgba(var(--slate-rgb),0.16); }
 
