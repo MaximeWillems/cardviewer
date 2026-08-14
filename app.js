@@ -462,7 +462,7 @@ function hasPriceData(p) { return !!(p && p.val); }
 function pruneRec(id, lang) {
   const r = collRec(id, lang);
   if (!r) return;
-  if (!r.qty && !r.wanted && !r.trade && !r.prio && !hasPriceData(r.paid) && !hasPriceData(r.target) && !hasPriceData(r.sell)) {
+  if (!r.qty && !r.wanted && !r.trade && !r.prio && !r.mkt && !hasPriceData(r.paid) && !hasPriceData(r.target) && !hasPriceData(r.sell)) {
     delete collection[id][lang];
     if (collection[id] && Object.keys(collection[id]).length === 0) delete collection[id];
   }
@@ -586,11 +586,44 @@ function getPriceLabel(cardId, type, lang = currentLang) {
   const d = getPriceData(cardId, type, lang);
   return d.val ? fmtEur(parseFloat(d.val)) : '';
 }
+/* ── Cote corrigée à la main ───────────────────────────────────────────────
+   Les cotes publiques sont des moyennes TOUTES LANGUES : sur une carte chère,
+   l'écart avec le marché français atteint 30 %. Pour la poignée de cartes où
+   ça pèse, une valeur saisie prend le pas sur l'automatique. Elle vit dans la
+   collection (donc sauvegardée, exportée, synchronisée) et reste distincte du
+   prix payé, qui garde son sens comptable.
+   ──────────────────────────────────────────────────────────────────────── */
+function correctedMarketOf(id) {
+  const byLang = collection[id];
+  if (!byLang) return null;
+  for (const l of Object.keys(byLang)) {
+    const v = parseFloat(String((byLang[l] || {}).mkt || '').replace(',', '.'));
+    if (v > 0) return v;
+  }
+  return null;
+}
+function setCorrectedMarket(id, lang, val) {
+  const v = parseFloat(String(val || '').replace(',', '.'));
+  const r = ensureRec(id, lang);
+  if (v > 0) r.mkt = String(v); else delete r.mkt;
+  pruneRec(id, lang);
+  saveCollection();
+  refreshAfterPriceChange();
+}
+// Valeur marché affichée : correction manuelle d'abord, sinon la cote automatique.
+function displayMarketValue(card) {
+  if (!card) return null;
+  const fixed = correctedMarketOf(card.id);
+  if (fixed != null) return fixed;
+  return (card.apiPrice != null && !isNaN(card.apiPrice)) ? card.apiPrice : null;
+}
+
 // Cote affichée sur la vignette. Volontairement le prix marché et non le prix
 // payé : ce dernier n'apprend rien en parcourant sa collection.
 function marketPriceLabel(cardOrId) {
   const c = typeof cardOrId === 'string' ? lookupCard(cardOrId) : cardOrId;
-  return (c && c.apiPrice != null) ? fmtEur(c.apiPrice) : '';
+  const v = displayMarketValue(c);
+  return v != null ? fmtEur(v) : '';
 }
 function updateCardPricePill(el, cardId) {
   const marketPill = el.querySelector('.market-price');
@@ -684,14 +717,13 @@ function getBestPrice(cardId) {
   }
   // lookupCard et non allCards : une carte d'une AUTRE région (une JP alors qu'on
   // affiche l'international) ne vit que dans les instantanés.
-  const card = lookupCard(cardId);
-  return card?.apiPrice ?? null;
+  return displayMarketValue(lookupCard(cardId));
 }
 // Valeurs utilisées pour le tri : une carte sans prix vaut 0 (elle se range
 // donc tout en bas d'un tri décroissant et tout en haut d'un tri croissant).
 function getMarketPriceValue(card) {
-  if (card.apiPrice != null && !isNaN(card.apiPrice)) return card.apiPrice;
-  return 0;
+  const v = displayMarketValue(card); // correction manuelle prioritaire
+  return v != null ? v : 0;
 }
 
 /* ── Cote Cardmarket (prix marché) ────────────────────────────────────────
@@ -878,6 +910,7 @@ function agoLabel(ts) {
 }
 // Dit toujours QUEL prix on regarde : cote de ta langue, ou moyenne toutes langues.
 function marketSourceNote(card) {
+  if (correctedMarketOf(card.id) != null) return 'cote corrigée par toi (vider le champ pour revenir à l\'automatique)';
   if (langPriceFresh(card)) {
     const l = (LANG_LABELS[card.cmLang] || card.cmLang || '').toLowerCase();
     return `Cardmarket ${escapeHtml(l)}, Near Mint · synchronisé ${agoLabel(card.cmAt)}`;
@@ -1040,7 +1073,7 @@ function filterCards(cards, st) {
       // Cote marché uniquement : getBestPrice donnait la priorité au prix SAISI,
       // donc une carte payée 2 € mais cotée 50 € était filtrée sur 2 € — en
       // contradiction avec la pastille, qui affiche la cote.
-      const price = (c.apiPrice != null && !isNaN(c.apiPrice)) ? Number(c.apiPrice) : null;
+      const price = displayMarketValue(c);
       if (price == null) return false; // sans cote connue, impossible de trancher
       if (min !== null && price < min) return false;
       if (max !== null && price > max) return false;
@@ -3692,14 +3725,6 @@ function loadNextPage() {
 /* ════════════════════════════════════════════════════════════════════════
    PRIX CARDMARKET (modale)
    ════════════════════════════════════════════════════════════════════════ */
-function trendArrow(trend, avg30) {
-  if (trend == null || avg30 == null) return '';
-  const diff = ((trend - avg30) / avg30) * 100;
-  if (Math.abs(diff) < 2) return '';
-  return diff > 0
-    ? `<span class="price-trend-up"> ▲ ${diff.toFixed(1)}%</span>`
-    : `<span class="price-trend-down"> ▼ ${Math.abs(diff).toFixed(1)}%</span>`;
-}
 
 // Map TCGdex set id → { code: code Cardmarket, slug: slug d'URL Cardmarket }
 const CM_SETS = {
@@ -3877,7 +3902,12 @@ function paintCardPrice(card, pricing, el) {
   // langues — sinon on écraserait ici le travail de syncLangPrices.
   const pid = cm.idProduct; if (pid) card.cmId = pid;
   const shown = langPriceFresh(card) ? card.cmPrice : marketPriceOf(pricing);
-  if (mrv0) mrv0.textContent = shown > 0 ? fmtEur(shown) : (card.apiPrice != null ? fmtEur(card.apiPrice) : '—');
+  // Une cote corrigée à la main l'emporte sur tout : ne pas l'écraser ici.
+  const fixed = correctedMarketOf(card.id);
+  if (mrv0) {
+    const v = fixed != null ? fixed : (shown > 0 ? shown : card.apiPrice);
+    mrv0.textContent = v != null ? fmtEur(v) : '—';
+  }
   const note = document.getElementById('market-row-note');
   if (note) note.textContent = marketSourceNote(card);
 
@@ -3901,7 +3931,7 @@ function paintCardPrice(card, pricing, el) {
     <div class="price-main">
       <div class="price-tile highlight">
         <div class="price-tile-label">Tendance</div>
-        <div class="price-tile-value">${fmtEur(trend)}${trendArrow(trend, avg30)}</div>
+        <div class="price-tile-value">${fmtEur(trend)}</div>
       </div>
       <div class="price-tile">
         <div class="price-tile-label">Prix bas</div>
@@ -4032,8 +4062,14 @@ async function openModal(card, list, index) {
     </div>
     <div class="market-row">
       <span class="market-row-label">Prix du marché</span>
-      <span class="market-row-val" id="market-row-val">${card.apiPrice != null ? fmtEur(card.apiPrice) : '…'}</span>
+      <span class="market-row-val" id="market-row-val">${displayMarketValue(card) != null ? fmtEur(displayMarketValue(card)) : '…'}</span>
       <span class="market-row-note" id="market-row-note">${marketSourceNote(card)}</span>
+      <label class="market-fix">
+        <span>Corriger (€)</span>
+        <input class="price-input" id="market-fix-val" type="number" min="0" step="0.01"
+               placeholder="${card.apiPrice != null ? Number(card.apiPrice).toFixed(2) : 'auto'}"
+               value="${escapeHtml(String(correctedMarketOf(card.id) ?? ''))}">
+      </label>
     </div>
     <div class="price-input-section ${isOwned(card.id, mlang) ? 'visible' : ''}" id="price-section-owned">
       <div class="price-input-title">Prix payé</div>
@@ -4179,6 +4215,15 @@ async function openModal(card, list, index) {
     toggleWanted(card.id, mlang); syncModalBtns(card.id);
     if (currentTab === 'collection') { populateFilters('collection'); renderCollection(); }
     if (currentTab === 'echange' && lastFriendData) renderEchangeResults(lastFriendData);
+  });
+  document.getElementById('market-fix-val')?.addEventListener('change', e => {
+    setCorrectedMarket(card.id, mlang, e.target.value);
+    const v = displayMarketValue(card);
+    const mrv = document.getElementById('market-row-val');
+    if (mrv) mrv.textContent = v != null ? fmtEur(v) : '—';
+    const note = document.getElementById('market-row-note');
+    if (note) note.textContent = marketSourceNote(card);
+    if (currentTab === 'collection') renderCollection();
   });
   document.getElementById('modal-prio-btns')?.addEventListener('click', e => {
     const b = e.target.closest('.prio-btn');

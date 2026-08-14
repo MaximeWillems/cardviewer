@@ -928,6 +928,12 @@
   }
   .market-row-val { font-size: 16px; font-weight: 700; color: var(--text); margin-left: auto; }
   .market-row-note { font-size: 10px; color: var(--muted); width: 100%; }
+  .market-fix { display: flex; align-items: center; gap: 7px; width: 100%; margin-top: 2px; }
+  .market-fix span {
+    font-size: 10px; color: var(--muted); font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.05em; white-space: nowrap;
+  }
+  .market-fix input { max-width: 110px; }
   .price-input-hint { font-size: 10px; color: var(--muted); margin-top: 4px; }
 
   .price-input-title {
@@ -1072,8 +1078,6 @@
     padding: 10px 0 4px;
     font-style: italic;
   }
-  .price-trend-up   { color: #7af07a; }
-  .price-trend-down { color: #f07a7a; }
   /* ── fin Prix ──────────────────────────────────────── */
 
   .btn-cardmarket {
@@ -2881,8 +2885,6 @@
 
   .master-bar-fill { background: var(--accent); }
 
-  .price-trend-up   { color: var(--accent); }
-  .price-trend-down { color: var(--accent2); }
 
   /* ── Priorité des cartes « À obtenir » ─────────────────────────────── */
   .modal-prio { display: none; align-items: center; justify-content: space-between; gap: 10px; margin: 12px 0 0; flex-wrap: wrap; }
