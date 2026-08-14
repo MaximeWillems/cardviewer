@@ -3393,7 +3393,7 @@ function computeSellTotal(cards) {
   let sum = 0;
   cards.forEach(c => {
     const d = getPriceData(c.id, 'trade', tradeLangOf(c.id));
-    const v = d.val ? parseFloat(d.val) : (c.apiPrice != null ? c.apiPrice : null);
+    const v = d.val ? parseFloat(d.val) : displayMarketValue(c);
     if (v != null && !isNaN(v)) sum += v;
   });
   return sum;
@@ -4618,7 +4618,8 @@ function renderReceiveRows() {
   list.innerHTML = [...selectedIds].map(id => {
     const c = lookupCard(id) || { id, name: id };
     const img = imgSrc(c);
-    const market = c.apiPrice != null ? Number(c.apiPrice).toFixed(2) : '';
+    const mv = displayMarketValue(c);
+    const market = mv != null ? Number(mv).toFixed(2) : '';
     return `<div class="receive-row">
       ${img ? `<img class="receive-thumb" src="${escapeHtml(img)}" alt="" loading="lazy" onerror="this.style.visibility='hidden'">` : '<div class="receive-thumb noimg">?</div>'}
       <div class="receive-info">
@@ -4644,7 +4645,8 @@ function updateReceiveTotal() {
 function fillReceiveMarket() {
   document.querySelectorAll('#receive-list .receive-price-input').forEach(inp => {
     const c = lookupCard(inp.dataset.id);
-    if (c && c.apiPrice != null) inp.value = Number(c.apiPrice).toFixed(2);
+    const mv = displayMarketValue(c);
+    if (mv != null) inp.value = Number(mv).toFixed(2);
   });
   updateReceiveTotal();
 }
@@ -5103,9 +5105,10 @@ function shareSellList() {
   const lines = cards.map(c => {
     const lang = tradeLangOf(c.id);
     const d = getPriceData(c.id, 'trade', lang);
-    const v = d.val ? parseFloat(d.val) : (c.apiPrice != null ? c.apiPrice : null);
+    const v = d.val ? parseFloat(d.val) : displayMarketValue(c);
     if (v != null && !isNaN(v)) total += v;
-    const priceTxt = getPriceLabel(c.id, 'trade', lang) || (c.apiPrice != null ? `~${fmtEur(c.apiPrice)}` : 'à définir');
+    const mvTxt = displayMarketValue(c);
+    const priceTxt = getPriceLabel(c.id, 'trade', lang) || (mvTxt != null ? `~${fmtEur(mvTxt)}` : 'à définir');
     return `• ${c.name || '—'} ${LANG_FLAGS[lang] || ''} — ${c.set?.name || ''}${c.localId ? ' #' + c.localId : ''} — ${priceTxt}`;
   });
   const text = `Cartes à vendre (${cards.length}) — total ~${fmtEur(total)}\n\n${lines.join('\n')}`;
@@ -5126,7 +5129,10 @@ function computeStats() {
       uniqueIds.add(id); units += r.qty;
       const c = byId.get(id);
       const paid = r.paid && r.paid.val ? parseFloat(r.paid.val) : NaN;
-      const mk   = c && c.apiPrice != null ? Number(c.apiPrice) : NaN;
+      // displayMarketValue et non c.apiPrice : sinon une cote corrigée à la main
+      // serait ignorée ici, et la valeur marché comme la plus-value seraient fausses.
+      const mkv  = displayMarketValue(c);
+      const mk   = mkv != null ? Number(mkv) : NaN;
       if (!isNaN(paid)) { spent += paid * r.qty; spentCards += r.qty; }
       if (!isNaN(mk))   market += mk * r.qty;
       const mo = r.acq && r.acq.d ? r.acq.d.slice(0, 7) : null;
