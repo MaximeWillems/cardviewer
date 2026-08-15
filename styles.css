@@ -2923,6 +2923,26 @@
   }
   .prio-menu-item:hover { background: var(--surface2); }
 
+  /* ── Les cartes rejoignent la collection ───────────────────────────── */
+  .fly-card {
+    position: fixed; z-index: 1300; pointer-events: none;
+    object-fit: cover; border-radius: 6px;
+    box-shadow: 0 12px 26px -8px rgba(0,0,0,0.55);
+    transition: transform .85s cubic-bezier(.34,.01,.2,1), opacity .85s ease-in;
+    will-change: transform, opacity;
+  }
+  /* L'onglet encaisse l'arrivée : sans ça, les cartes disparaissent dans le vide. */
+  .nav-tab.nav-hit, .sub-tab.nav-hit { animation: navHit .32s ease-out; }
+  @keyframes navHit {
+    0%   { transform: none; }
+    40%  { transform: scale(1.16); }
+    100% { transform: none; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .fly-card { display: none; }
+    .nav-tab.nav-hit, .sub-tab.nav-hit { animation: none; }
+  }
+
   /* ── Célébration à la réception (plaques de défi façon Smash) ──────── */
   .achv-overlay {
     position: fixed; inset: 0; z-index: 1200;

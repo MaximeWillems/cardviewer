@@ -4699,12 +4699,86 @@ function confirmReceive() {
     r.acq = { d, src };
     snapshotById(id);
   });
+  // Positions des vignettes capturées AVANT la fermeture : une fois la modale
+  // retirée du flux, leurs coordonnées n'existent plus.
+  const flight = captureReceiveFlight();
   afterCollectionChange();
   closeReceiveModal();
   setSelectionMode(false);
   populateFilters('collection'); renderCollection(); updateTotalsBar();
   showToast(`✦ ${inputs.length} carte${inputs.length > 1 ? 's' : ''} ajoutée${inputs.length > 1 ? 's' : ''}${total > 0 ? ' — ' + fmtEur(total) : ''}`);
-  showReceiveAchievements(beforeMasters, beforeBinder, receivedIds);
+  // Les cartes rejoignent la collection, puis la plaque annonce ce qu'elles ont complété.
+  flyReceivedCards(flight, () => showReceiveAchievements(beforeMasters, beforeBinder, receivedIds));
+}
+
+/* ── Les cartes rejoignent la collection ──────────────────────────────────
+   Au moment de valider, les vignettes du récapitulatif s'envolent vers « Ma
+   Collection » — ou vers « Classeur » pour celles qui y ont une poche, puisque
+   c'est là qu'elles vont réellement se ranger.
+   ──────────────────────────────────────────────────────────────────────── */
+const FLY_MAX = 14; // au-delà, l'écran devient un essaim illisible
+function captureReceiveFlight() {
+  const inBinder = new Set(binder.slots.filter(Boolean).map(s => s.id));
+  const out = [];
+  document.querySelectorAll('#receive-list .receive-row').forEach(row => {
+    if (out.length >= FLY_MAX) return;
+    const img = row.querySelector('.receive-thumb');
+    const inp = row.querySelector('.receive-price-input');
+    // Le repli sans visuel est un <div> (pas de src) ; une image en échec est
+    // masquée par son onerror : ni l'un ni l'autre ne doit s'envoler.
+    if (!img || !inp) return;
+    if (!(img.currentSrc || img.src) || img.style.visibility === 'hidden') return;
+    const r = img.getBoundingClientRect();
+    // Lignes défilées hors de la liste : on ne les fait pas voler de nulle part.
+    if (r.width < 4 || r.bottom < 0 || r.top > window.innerHeight) return;
+    out.push({ src: img.currentSrc || img.src, x: r.left, y: r.top, w: r.width, h: r.height,
+               toBinder: inBinder.has(inp.dataset.id) });
+  });
+  return out;
+}
+
+function flyReceivedCards(items, done) {
+  const finish = () => { if (done) done(); };
+  if (!items.length || reducedMotion()) return finish();
+  const navColl = document.querySelector('.nav-tab[data-section="collection"]');
+  const navBind = document.querySelector('.sub-tab[data-view="binder"]');
+  const centerOf = el => { const r = el.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2, el }; };
+  const visible = el => el && el.getBoundingClientRect().width > 0;
+
+  let pending = 0, ended = false;
+  const maybeDone = () => { if (pending === 0 && !ended) { ended = true; finish(); } };
+
+  items.forEach((it, i) => {
+    const dest = (it.toBinder && visible(navBind)) ? navBind : navColl;
+    if (!visible(dest)) return;
+    const t = centerOf(dest);
+    pending++;
+    const el = document.createElement('img');
+    el.className = 'fly-card';
+    el.src = it.src;
+    el.style.cssText = `left:${it.x}px;top:${it.y}px;width:${it.w}px;height:${it.h}px;`;
+    document.body.appendChild(el);
+
+    const dx = t.x - (it.x + it.w / 2), dy = t.y - (it.y + it.h / 2);
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      el.style.transitionDelay = `${i * 70}ms`;
+      el.style.transform = `translate(${dx}px, ${dy}px) scale(0.14) rotate(${(i % 2 ? 1 : -1) * 14}deg)`;
+      el.style.opacity = '0.1';
+    }));
+
+    let cleaned = false;
+    const cleanup = () => {
+      if (cleaned) return; // transitionend ET le filet de sécurité peuvent tomber ensemble
+      cleaned = true;
+      el.remove();
+      t.el.classList.add('nav-hit');
+      setTimeout(() => t.el.classList.remove('nav-hit'), 320);
+      pending--; maybeDone();
+    };
+    el.addEventListener('transitionend', cleanup, { once: true });
+    setTimeout(cleanup, 1600 + i * 70); // si la transition ne démarre pas (onglet en arrière-plan)
+  });
+  maybeDone(); // aucune destination visible : on enchaîne directement
 }
 
 /* ── Célébration à la réception : progression Master Set + poches du classeur ──
